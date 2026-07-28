@@ -75,6 +75,21 @@ fn scan_root() -> Result<String, String> {
 struct PtyOutput {
     id: String,
     data: String,
+    /// Lets a reattaching view discard what its replay already covered.
+    seq: u64,
+}
+
+/// What `pty_open` gives back.
+///
+/// On a fresh shell `replay` is empty. On reattach it is the retained output,
+/// so a new view repaints instead of showing an empty-but-working terminal.
+#[derive(Clone, serde::Serialize)]
+struct PtyOpened {
+    /// Base64 of the retained output.
+    replay: String,
+    /// Everything at or below this number is already in `replay` and must not
+    /// be written again.
+    through_seq: u64,
 }
 
 /// Start a shell for a project, or reattach to the one already running.
@@ -90,17 +105,25 @@ fn pty_open(
     cwd: String,
     cols: u16,
     rows: u16,
-) -> Result<(), String> {
+) -> Result<PtyOpened, String> {
     use base64::Engine as _;
     use tauri::Emitter as _;
 
+    let b64 = base64::engine::general_purpose::STANDARD;
+
     let Some(mut reader) = terminals.spawn(&id, std::path::Path::new(&cwd), cols, rows)? else {
-        // Already running — the UI reattaches to the existing scrollback.
-        return Ok(());
+        // Already running. Hand back what the shell has printed so a fresh view
+        // repaints rather than showing an empty terminal that nonetheless works.
+        let (bytes, through_seq) = terminals.snapshot(&id).unwrap_or_default();
+        return Ok(PtyOpened {
+            replay: b64.encode(bytes),
+            through_seq,
+        });
     };
 
     let terminals = (*terminals).clone();
     std::thread::spawn(move || {
+        let b64 = base64::engine::general_purpose::STANDARD;
         let mut buf = vec![0u8; pty::read_buffer_size()];
         loop {
             match reader.read(&mut buf) {
@@ -109,13 +132,20 @@ fn pty_open(
                 // a dead one.
                 Ok(0) | Err(_) => break,
                 Ok(n) => {
-                    let data = base64::engine::general_purpose::STANDARD.encode(&buf[..n]);
+                    // Retain before emitting, so a snapshot taken concurrently
+                    // either contains this chunk or the listener receives it —
+                    // and `seq` resolves the case where both happen.
+                    let Some(seq) = terminals.record(&id, &buf[..n]) else {
+                        break; // Session gone.
+                    };
+                    let data = b64.encode(&buf[..n]);
                     if app
                         .emit(
                             "pty://output",
                             PtyOutput {
                                 id: id.clone(),
                                 data,
+                                seq,
                             },
                         )
                         .is_err()
@@ -130,7 +160,11 @@ fn pty_open(
         terminals.kill(&id);
     });
 
-    Ok(())
+    // A shell that has just started has printed nothing yet.
+    Ok(PtyOpened {
+        replay: String::new(),
+        through_seq: 0,
+    })
 }
 
 /// Keystrokes, verbatim.

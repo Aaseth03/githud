@@ -124,6 +124,12 @@ src-tauri/src/
   buffer while the PTY survives in Rust, so the symptom is the worst kind — a
   terminal that looks wiped but still works. **The chat transcript at M3 has
   exactly this property.** Encoded by `isTabVisible` and its tests.
+- **A view can always be repainted from the session.** The shell outlives any
+  one view of it, so `pty_open` returns retained output on reattach and the
+  terminal writes it before live chunks. Every emitted chunk carries a `seq`,
+  and the view drops anything at or below what its replay covered — output can
+  arrive between the snapshot and the write, and without that number it would
+  be written twice. Hiding tabs is the first defence; this is the floor.
 - **PTY bytes stay bytes.** Output crosses the IPC boundary base64-encoded
   because a read can split a UTF-8 character or an escape sequence in half, and
   `from_utf8_lossy` would corrupt exactly the sequences a TUI needs.

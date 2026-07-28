@@ -84,12 +84,29 @@ export function Terminal({ id, cwd, visible }: Props) {
 
     const unlisteners: Array<() => void> = [];
 
+    // Reattaching to a live shell means output can arrive before the replay
+    // has been applied. Queue it until then, and afterwards drop anything the
+    // replay already covered — `seq` makes that exact rather than a guess.
+    let replayApplied = false;
+    let throughSeq = -1;
+    const pending: Array<{ seq: number; data: string }> = [];
+
+    const writeChunk = (seq: number, data: string) => {
+      if (seq <= throughSeq) return;
+      throughSeq = seq;
+      term.write(fromBase64(data));
+    };
+
     void (async () => {
-      const outputSub = await listen<{ id: string; data: string }>(
+      const outputSub = await listen<{ id: string; data: string; seq: number }>(
         "pty://output",
         (e) => {
           if (e.payload.id !== id) return;
-          term.write(fromBase64(e.payload.data));
+          if (!replayApplied) {
+            pending.push({ seq: e.payload.seq, data: e.payload.data });
+            return;
+          }
+          writeChunk(e.payload.seq, e.payload.data);
         },
       );
       const closedSub = await listen<string>("pty://closed", (e) => {
@@ -104,14 +121,24 @@ export function Terminal({ id, cwd, visible }: Props) {
       unlisteners.push(outputSub, closedSub);
 
       try {
-        await invoke("pty_open", {
-          id,
-          cwd,
-          cols: term.cols,
-          rows: term.rows,
-        });
+        const opened = await invoke<{ replay: string; through_seq: number }>(
+          "pty_open",
+          { id, cwd, cols: term.cols, rows: term.rows },
+        );
+        if (disposed) return;
+
+        if (opened.replay) {
+          // Repaint what the shell already printed. Without this a fresh view
+          // of a live session is blank but fully working — the most confusing
+          // failure this component can have.
+          term.write(fromBase64(opened.replay));
+        }
+        throughSeq = opened.through_seq;
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        replayApplied = true;
+        for (const chunk of pending.splice(0)) writeChunk(chunk.seq, chunk.data);
       }
     })();
 

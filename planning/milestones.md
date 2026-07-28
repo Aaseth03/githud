@@ -29,7 +29,7 @@ constraining record, quoted the Layer 0 canary verbatim, and flagged the
 - [x] Private remote created and pushed — `Aaseth03/githud`
 
 ### M1 — Shell, scan, tabs
-**Status:** in-progress
+**Status:** done
 **Validation:** all five repos in `~/github` appear, including the vault at depth
 2; clicking an already-open project twice does not open two tabs. **Both halves
 are mechanical, not visual** — `cargo test --test real_root -- --ignored` proves
@@ -78,6 +78,11 @@ rather than a binary is the fix; `htop` is fine if you want it
 - [x] Session lifecycle — reattach rather than double-spawn, release on tab
       close, kill all on app exit. Verified: shells die with the app, none
       orphaned
+- [x] Switching tabs keeps every open tab mounted, so a terminal is never
+      wiped by leaving it
+- [x] Reattach replays retained output, so a fresh view of a live shell
+      repaints instead of appearing blank. Verified against a real remount:
+      identical output, one shell, no respawn
 - [x] Seen rendering the real shell with its prompt, git branch and colours
 - [x] Confirmed by hand to look and feel like a terminal window
 - [ ] A full-screen TUI (`top`) drawn and reflowing on resize — **needs a human**

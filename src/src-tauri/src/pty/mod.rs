@@ -8,7 +8,7 @@
 //! The agent's PATH shim (M4) is deliberately **not** applied here. This is the
 //! user's shell (D7).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::io::{Read, Write};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -21,14 +21,61 @@ use portable_pty::{CommandBuilder, NativePtySystem, PtySize, PtySystem};
 /// makes typing feel laggy. 8 KiB is one comfortable screen of dense output.
 const READ_BUF: usize = 8 * 1024;
 
+/// How much recent output to retain per session, for repainting a fresh view.
+///
+/// The shell outlives any one view of it, so a new xterm attaching to a live
+/// session starts empty and looks wiped even though everything works. 256 KiB
+/// is several screens including a full-screen TUI redraw, and is bounded per
+/// session.
+const SCROLLBACK_CAP: usize = 256 * 1024;
+
 /// A live shell, keyed by the project it belongs to.
 struct Session {
     writer: Box<dyn Write + Send>,
     master: Box<dyn portable_pty::MasterPty + Send>,
     child: Box<dyn portable_pty::Child + Send + Sync>,
+    /// Recent output, oldest first, as whole chunks exactly as read.
+    scrollback: VecDeque<(u64, Vec<u8>)>,
+    scrollback_bytes: usize,
+    /// Monotonic chunk counter.
+    ///
+    /// This is what makes reattach exact rather than approximate. Output can
+    /// arrive between taking a snapshot and the view applying it; without a
+    /// sequence number those chunks are written twice.
+    next_seq: u64,
 }
 
 impl Session {
+    /// Retain a chunk and return the sequence number assigned to it.
+    fn record(&mut self, data: &[u8]) -> u64 {
+        let seq = self.next_seq;
+        self.next_seq = self.next_seq.wrapping_add(1);
+
+        self.scrollback.push_back((seq, data.to_vec()));
+        self.scrollback_bytes += data.len();
+
+        // Drop whole chunks, never split one. Cutting mid-escape-sequence
+        // would corrupt the replay worse than losing a little history does.
+        while self.scrollback_bytes > SCROLLBACK_CAP && self.scrollback.len() > 1 {
+            if let Some((_, dropped)) = self.scrollback.pop_front() {
+                self.scrollback_bytes -= dropped.len();
+            }
+        }
+
+        seq
+    }
+
+    /// Everything retained, and the highest sequence number it covers.
+    fn snapshot(&self) -> (Vec<u8>, u64) {
+        let mut out = Vec::with_capacity(self.scrollback_bytes);
+        let mut through = 0;
+        for (seq, chunk) in &self.scrollback {
+            out.extend_from_slice(chunk);
+            through = *seq;
+        }
+        (out, through)
+    }
+
     fn resize(&self, cols: u16, rows: u16) -> Result<(), String> {
         self.master
             .resize(PtySize {
@@ -124,10 +171,28 @@ impl Terminals {
                 writer,
                 master: pair.master,
                 child,
+                scrollback: VecDeque::new(),
+                scrollback_bytes: 0,
+                next_seq: 0,
             },
         );
 
         Ok(Some(reader))
+    }
+
+    /// Retain a chunk of output and return its sequence number.
+    ///
+    /// Returns `None` if the session is gone, which tells the reader thread to
+    /// stop.
+    pub fn record(&self, id: &str, data: &[u8]) -> Option<u64> {
+        self.lock().get_mut(id).map(|s| s.record(data))
+    }
+
+    /// Recent output for repainting a fresh view, with the sequence number it
+    /// covers through. Anything at or below that number has already been
+    /// replayed and must not be written again.
+    pub fn snapshot(&self, id: &str) -> Option<(Vec<u8>, u64)> {
+        self.lock().get(id).map(|s| s.snapshot())
     }
 
     pub fn write(&self, id: &str, bytes: &[u8]) -> Result<(), String> {
@@ -309,6 +374,121 @@ mod tests {
             Err(e) => assert!(e.contains("not a directory"), "{e}"),
             Ok(_) => panic!("spawning in a missing directory must fail"),
         }
+    }
+
+    #[test]
+    fn recorded_output_replays_with_the_sequence_it_covers() {
+        let dir = temp_dir("replay");
+        let terminals = Terminals::new();
+        terminals.spawn("proj", &dir, 80, 24).unwrap();
+
+        let a = terminals.record("proj", b"first ").unwrap();
+        let b = terminals.record("proj", b"second").unwrap();
+        let (bytes, through) = terminals.snapshot("proj").unwrap();
+
+        assert_eq!(bytes, b"first second");
+        assert!(b > a, "sequence numbers must advance");
+        assert_eq!(through, b, "snapshot covers through the newest chunk");
+
+        terminals.kill_all();
+    }
+
+    #[test]
+    fn a_fresh_session_replays_nothing() {
+        let dir = temp_dir("replay-empty");
+        let terminals = Terminals::new();
+        terminals.spawn("proj", &dir, 80, 24).unwrap();
+
+        let (bytes, through) = terminals.snapshot("proj").unwrap();
+
+        assert!(bytes.is_empty());
+        assert_eq!(through, 0);
+
+        terminals.kill_all();
+    }
+
+    #[test]
+    fn scrollback_is_bounded_and_drops_whole_chunks() {
+        // Splitting a chunk could cut an escape sequence in half, which would
+        // corrupt the replay worse than losing old history does.
+        let dir = temp_dir("replay-cap");
+        let terminals = Terminals::new();
+        terminals.spawn("proj", &dir, 80, 24).unwrap();
+
+        let chunk = vec![b'x'; 64 * 1024];
+        for _ in 0..12 {
+            terminals.record("proj", &chunk).unwrap();
+        }
+
+        let (bytes, _) = terminals.snapshot("proj").unwrap();
+
+        assert!(
+            bytes.len() <= SCROLLBACK_CAP,
+            "retained {} bytes, cap is {SCROLLBACK_CAP}",
+            bytes.len()
+        );
+        assert_eq!(
+            bytes.len() % chunk.len(),
+            0,
+            "only whole chunks may be dropped"
+        );
+
+        terminals.kill_all();
+    }
+
+    #[test]
+    fn one_oversized_chunk_is_kept_rather_than_leaving_nothing() {
+        let dir = temp_dir("replay-huge");
+        let terminals = Terminals::new();
+        terminals.spawn("proj", &dir, 80, 24).unwrap();
+
+        terminals
+            .record("proj", &vec![b'y'; SCROLLBACK_CAP * 2])
+            .unwrap();
+
+        let (bytes, _) = terminals.snapshot("proj").unwrap();
+
+        assert!(!bytes.is_empty(), "never trim down to nothing");
+
+        terminals.kill_all();
+    }
+
+    #[test]
+    fn recording_against_a_dead_session_reports_it_rather_than_panicking() {
+        // The reader thread uses this to know when to stop.
+        assert!(Terminals::new().record("ghost", b"x").is_none());
+        assert!(Terminals::new().snapshot("ghost").is_none());
+    }
+
+    #[test]
+    fn scrollback_dies_with_the_session() {
+        let dir = temp_dir("replay-kill");
+        let terminals = Terminals::new();
+        terminals.spawn("proj", &dir, 80, 24).unwrap();
+        terminals.record("proj", b"history").unwrap();
+
+        terminals.kill("proj");
+
+        assert!(
+            terminals.snapshot("proj").is_none(),
+            "a killed session leaves no history to replay into a new shell"
+        );
+    }
+
+    #[test]
+    fn sessions_keep_separate_scrollback() {
+        let dir = temp_dir("replay-split");
+        let terminals = Terminals::new();
+        terminals.spawn("a", &dir, 80, 24).unwrap();
+        terminals.spawn("b", &dir, 80, 24).unwrap();
+
+        terminals.record("a", b"aaa").unwrap();
+        terminals.record("b", b"bbb").unwrap();
+
+        assert_eq!(terminals.snapshot("a").unwrap().0, b"aaa");
+        assert_eq!(terminals.snapshot("b").unwrap().0, b"bbb");
+
+        terminals.kill_all();
     }
 
     #[test]
