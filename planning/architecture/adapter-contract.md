@@ -41,16 +41,80 @@ trait AgentSession {
   prefixed for the spawned agent, never for the user's terminal. See
   `guardrails.md`.
 
-## Verify before implementing
+## The Claude Code protocol — verified 2026-07-28
 
-Claude's exact streaming flags are **not** to be treated as known. Confirm
-against `claude --help` at M3. Two prior burns, recorded in the vault at
-`AIOS/Memory/Topics/claude-cli-invocation`:
+The plan said not to treat these flags as known. They were probed against
+`claude 2.1.220` rather than assumed, and this section records what was actually
+observed. Re-probe when the CLI major version changes.
 
-- `--tools` is variadic, so the prompt must come *before* it.
-- A prompt starting with `-` is parsed as an option.
+### Invocation
 
-Exit code alone never proves a write happened; check mtime too.
+```
+claude --print \
+       --output-format stream-json \
+       --input-format  stream-json \
+       --verbose \
+       --model <id>
+```
+
+`--input-format stream-json` is the one that matters: it makes the process a
+**persistent bidirectional session** rather than a one-shot. Verified — with
+stdin held open the process stays alive across turns and retains context
+(asked to remember 41, then to add 1, it answered 42 on the second turn).
+
+`--resume <session-id>` and `--session-id <uuid>` exist for continuation.
+`--permission-mode` takes `acceptEdits | auto | bypassPermissions | manual |
+dontAsk | plan`.
+
+**There is no `--tools` flag on this version.** The old vault note about it
+being variadic no longer applies. Two older burns still worth knowing, from
+`AIOS/Memory/Topics/claude-cli-invocation`: a prompt beginning with `-` is
+parsed as an option, and an exit code alone never proves a write happened.
+
+### Input
+
+One JSON object per line on stdin:
+
+```json
+{"type":"user","message":{"role":"user","content":"..."}}
+```
+
+### Output
+
+One JSON object per line on stdout. Observed types, and where each maps in
+`event-schema.md`:
+
+| Line | Carries | Normalizes to |
+|---|---|---|
+| `system` / `init` | `session_id`, `model`, `cwd`, `tools`, `permissionMode` | `session.started` |
+| `assistant` → `content[].thinking` | reasoning text | `status { thinking }` |
+| `assistant` → `content[].text` | reply text | `assistant.text` |
+| `assistant` → `content[].tool_use` | `id`, `name`, `input` | `tool.call` |
+| `user` → `content[].tool_result` | `tool_use_id`, `is_error`, `content` | `tool.result` |
+| `system` / `thinking_tokens` | running token estimate | progress only |
+| `rate_limit_event` | quota status | informational |
+| `result` | `subtype`, `stop_reason`, `session_id`, `total_cost_usd` | `session.ended` |
+
+**`tool_use.input.file_path` is what makes the status indicator honest** — it
+gives the real path, so the indicator can say `reading src/main.rs` rather than
+inventing a word. That was the specific M3 requirement.
+
+A `result` line ends a *turn*, not the session. The process keeps running and
+accepts the next message.
+
+### Permission mode — deliberately unset at M3
+
+GIT HUD passes **no `--permission-mode`**, so the CLI's own default applies.
+
+D6 removes per-action approval, but it buys that back with the guardrails in
+D7/D16 — and **those do not exist until M4**. Passing `acceptEdits` now would
+grant free file writes with no sandbox underneath, which is the one thing this
+design is built to avoid. Verified 2026-07-28 that the default mode allows
+`Read` with no denials, so the channel is useful in the meantime.
+
+Choosing the mode belongs with M4, next to the bwrap scope that makes it safe.
+`result.permission_denials` reports anything refused, so a denial surfaces
+rather than looking like the agent ignoring you.
 
 ## Tiers
 

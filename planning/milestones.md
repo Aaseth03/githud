@@ -55,7 +55,7 @@ the scan against the real root, and `npm test` proves the tab rules. Green
 - [x] Production CSP verified against a real release build, not just assumed
 
 ### M2 — Embedded terminal
-**Status:** in-progress
+**Status:** done
 **Validation:** run a full-screen TUI in a project tab — `top` is installed;
 `vim` or `watch -n1 date` do just as well — then run `claude` by hand inside it.
 At this point GIT HUD already replaces the terminal. **Not yet run by hand** —
@@ -85,21 +85,48 @@ rather than a binary is the fix; `htop` is fine if you want it
       identical output, one shell, no respawn
 - [x] Seen rendering the real shell with its prompt, git branch and colours
 - [x] Confirmed by hand to look and feel like a terminal window
-- [ ] A full-screen TUI (`top`) drawn and reflowing on resize — **needs a human**
-- [ ] `claude` run by hand inside it — **needs a human**
+- [x] A full-screen TUI (`top`) drawn and reflowing on resize — confirmed by hand
+- [x] `claude` run by hand inside it — confirmed by hand
 
 ### M3 — Agent channel
-**Status:** not-started
+**Status:** in-progress
 **Validation:** a full conversation with file edits; the status indicator names
 the actual file being read; STOP kills mid-stream cleanly.
 
-- [ ] Verify Claude streaming flags against `claude --help` before writing the adapter
-- [ ] Claude Code adapter implementing `AgentAdapter` / `AgentSession`
-- [ ] Event normalization to the schema in `architecture/event-schema.md`
-- [ ] Streaming chat
-- [ ] Status indicator driven by real `tool.call` events
-- [ ] Adapter + model shown in the chat header
-- [ ] STOP
+- [x] **Claude protocol verified, not assumed** — probed against `claude
+      2.1.220` and recorded in `architecture/adapter-contract.md`. There is no
+      `--tools` flag on this version; `--input-format stream-json` is what makes
+      the process a persistent session, confirmed by a two-turn context test
+- [x] Claude Code adapter, one per harness rather than per model (D2)
+- [x] Event normalization — the UI never sees a harness's own JSON
+- [x] A turn ending is not the session ending; guarded by tests on both sides
+- [x] Chat transcript, composer, and Enter-to-send
+- [x] Adapter + model in the chat header, from the real init event
+- [x] Status line driven by real `tool_call` events, naming the actual file
+- [x] STOP — a kill, since this CLI exposes no interrupt control message. Said
+      plainly rather than dressed up as graceful
+- [x] Agent released on tab close and on exit — the M2 leak, not repeated
+- [x] No agent session in a `read-only` project (D18)
+- [x] **Permission mode deliberately unset** until M4 — `acceptEdits` now would
+      grant free writes with no sandbox under them. Reads work on the default
+- [x] Seen holding a real conversation in the app
+- [x] Status line observed naming a real file mid-read — confirmed by hand
+- [x] STOP pressed mid-stream — confirmed by hand, and the bug it exposed fixed:
+      STOP killed the process and left the project unusable ("no agent session
+      for Professor"). Killing is unavoidable, so the next message now restarts
+      with `--resume` and the conversation survives. **Proved** by a live test:
+      told 41 before STOP, it answered 42 after
+- [x] **Denied tools are explained rather than silent.** Writes are refused
+      under the default permission mode, which is deliberate — but nothing said
+      so, which made a chosen posture look like a broken app. The denial now
+      names the tool, carries the harness's reason, and says why
+- [x] Live integration test against the real binary
+      (`cargo test --test agent_live -- --ignored`) — proves the production path
+      end to end, after driving the UI repeatedly failed for reasons unrelated
+      to the channel
+- [ ] A conversation that **edits** a file — blocked until M4 settles the
+      permission mode. This is the milestone's last open item and it is
+      deliberately deferred, not forgotten
 
 ### M4 — Guardrails
 **Status:** not-started

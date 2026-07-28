@@ -4,6 +4,7 @@
 //! knows about a project arrives as a struct from here, never as prose parsed
 //! in the front end (D11).
 
+pub mod agent;
 pub mod overrides;
 pub mod pty;
 pub mod scan;
@@ -197,12 +198,112 @@ fn pty_close(terminals: tauri::State<'_, pty::Terminals>, id: String) {
     terminals.kill(&id);
 }
 
+// ── Channel 2: the agent (D1) ────────────────────────────────────────────────
+//
+// Normalized events only. The UI never sees a harness's own JSON — that is what
+// lets a second adapter change nothing but its own mapping (D2).
+
+#[derive(Clone, serde::Serialize)]
+struct AgentEnvelope {
+    id: String,
+    event: agent::AgentEvent,
+}
+
+/// Start an agent session for a project, or reattach to the running one.
+#[tauri::command]
+fn agent_start(
+    app: tauri::AppHandle,
+    agents: tauri::State<'_, agent::Agents>,
+    id: String,
+    cwd: String,
+    model: Option<String>,
+) -> Result<(), String> {
+    use tauri::Emitter as _;
+
+    let adapter = agent::Adapter::ClaudeCode;
+    let Some(stdout) = agents.start(&id, std::path::Path::new(&cwd), adapter, model.as_deref())?
+    else {
+        return Ok(()); // Already running.
+    };
+
+    let agents = (*agents).clone();
+    let project = id.clone();
+    std::thread::spawn(move || {
+        use std::io::BufRead as _;
+        let reader = std::io::BufReader::new(stdout);
+        for line in reader.lines() {
+            let Ok(line) = line else { break };
+            agent::debug_log(&line);
+            for event in agents.map_line(&id, &project, &line) {
+                // Keep the session id so STOP is recoverable: the next start
+                // resumes this conversation instead of losing it.
+                if let agent::AgentEvent::SessionStarted { session_id, .. } = &event {
+                    agents.remember_session(&id, session_id);
+                }
+                if app
+                    .emit(
+                        "agent://event",
+                        AgentEnvelope {
+                            id: id.clone(),
+                            event,
+                        },
+                    )
+                    .is_err()
+                {
+                    return; // Window gone.
+                }
+            }
+        }
+
+        // stdout closed: the process is finished. This is the session ending,
+        // which a per-turn `result` line deliberately does not do.
+        let _ = app.emit(
+            "agent://event",
+            AgentEnvelope {
+                id: id.clone(),
+                event: agent::AgentEvent::SessionEnded {
+                    reason: "the agent process exited".into(),
+                },
+            },
+        );
+        agents.stop(&id);
+    });
+
+    Ok(())
+}
+
+/// Send one turn. The session stays open afterwards.
+#[tauri::command]
+fn agent_send(
+    agents: tauri::State<'_, agent::Agents>,
+    id: String,
+    text: String,
+) -> Result<(), String> {
+    agents.send(&id, &text)
+}
+
+/// STOP, and release on tab close. Both are a kill — this CLI exposes no
+/// interrupt control message, so the contract's `interrupt()` degrades to it.
+#[tauri::command]
+fn agent_stop(agents: tauri::State<'_, agent::Agents>, id: String) {
+    agents.stop(&id);
+}
+
+/// Is the adapter usable on this machine? Availability is a property of the
+/// machine, not the project.
+#[tauri::command]
+fn agent_available() -> bool {
+    agent::Adapter::ClaudeCode.available()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let terminals = pty::Terminals::new();
+    let agents = agent::Agents::new();
 
     tauri::Builder::default()
         .manage(terminals.clone())
+        .manage(agents.clone())
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -220,6 +321,10 @@ pub fn run() {
             pty_write,
             pty_resize,
             pty_close,
+            agent_start,
+            agent_send,
+            agent_stop,
+            agent_available,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
@@ -228,6 +333,7 @@ pub fn run() {
             // leaves a login shell per project tab orphaned to init.
             if let tauri::RunEvent::ExitRequested { .. } = event {
                 terminals.kill_all();
+                agents.stop_all();
             }
         });
 }
