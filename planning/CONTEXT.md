@@ -35,7 +35,8 @@ planning/
    ├─ 2026-07-28-D12-transcript-retention.md
    ├─ 2026-07-28-D13-mechanical-work-is-scripted.md
    ├─ 2026-07-28-D14-push-to-talk.md
-   └─ 2026-07-28-D15-speak-summaries-only.md
+   ├─ 2026-07-28-D15-speak-summaries-only.md
+   └─ 2026-07-28-D16-bwrap-into-v1.md
 ```
 
 `specs/` is real but currently empty — kept with a `.gitkeep` so the map matches
@@ -51,10 +52,11 @@ disk.
 | `plans/` | Implementation plans (`YYYY-MM-DD-title.plan.md`) | Planning a feature before coding — start from `plans/_TEMPLATE.plan.md` |
 | `specs/` | Feature specs (`feature-name_spec.md`) | Spec'ing a feature in detail |
 
-## Decisions D1–D15
+## Decisions D1–D16
 
-All committed 2026-07-28, out of the design interview. **Do not re-litigate
-them.** Supersede one with a new dated record that names what it replaces.
+D1–D15 were committed 2026-07-28 out of the design interview; D16 followed the
+same day when a D7 assumption was tested and failed. **Do not re-litigate them.**
+Supersede one with a new dated record that names what it replaces.
 
 | # | Decision |
 |---|---|
@@ -64,7 +66,7 @@ them.** Supersede one with a new dated record that names what it replaces.
 | D4 | [No Python, no UV](decisions/2026-07-28-D04-no-python.md) |
 | D5 | [Main tab routes](decisions/2026-07-28-D05-main-tab-routes.md); it does not write code |
 | D6 | [Agent branch isolation](decisions/2026-07-28-D06-agent-branch-isolation.md) — commits freely on its own branch, never shared history |
-| D7 | [Three guardrail layers](decisions/2026-07-28-D07-three-guardrail-layers.md) — shim → bwrap (deferred) → remote protection |
+| D7 | [Three guardrail layers](decisions/2026-07-28-D07-three-guardrail-layers.md) — shim → bwrap → remote protection. **Amended by D16; Layer 3 does not exist** |
 | D8 | [Split store](decisions/2026-07-28-D08-split-store.md) — `config/` synced, state local |
 | D9 | [Central character profiles](decisions/2026-07-28-D09-central-characters.md) |
 | D10 | [Registry is scanned](decisions/2026-07-28-D10-registry-is-scanned.md), not declared |
@@ -73,6 +75,7 @@ them.** Supersede one with a new dated record that names what it replaces.
 | D13 | [Mechanical work is scripted](decisions/2026-07-28-D13-mechanical-work-is-scripted.md), not prompted |
 | D14 | [Push-to-talk only](decisions/2026-07-28-D14-push-to-talk.md), in-app hotkey |
 | D15 | [Speak summaries](decisions/2026-07-28-D15-speak-summaries-only.md), never code or diffs |
+| D16 | [bwrap promoted into v1](decisions/2026-07-28-D16-bwrap-into-v1.md) — it is the floor; the shim is only a guard |
 
 ## Architecture
 

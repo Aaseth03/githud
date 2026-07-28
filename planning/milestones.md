@@ -72,14 +72,16 @@ blocked, every allowed op attempted and passing. Ship on green only.
       the current GitHub plan — **checked 2026-07-28: they are not.** 403,
       "Upgrade to GitHub Pro or make this repository public." Layer 3 does not
       exist right now
-- [ ] **Decide how to replace Layer 3 before writing the shim** — ranked options
-      in `decisions/2026-07-28-D07-three-guardrail-layers.md`; the recommendation
-      is to promote bwrap into v1. This decision gets its own record
-- [ ] PATH shim wrappers for `git`, `gh`, `rm`, `sudo`
+- [x] **Decided how to replace Layer 3** — D16: bwrap is promoted out of
+      "deferred" and into v1, and is the floor
+- [ ] Specify the bwrap scope — project dir read-write, toolchain read-only,
+      `~/.ssh` and `~/.gitconfig` not mounted at all
+- [ ] bwrap sandbox around the agent subprocess — **this is the floor**
+- [ ] PATH shim wrappers for `git`, `gh`, `rm`, `sudo` — a fast, legible guard
+      on top of the floor, not a substitute for it
 - [ ] Shim injected into the agent process environment only, never the terminal
 - [ ] Branch isolation on project open
-- [ ] Remote branch protection configured
-- [ ] Test suite green
+- [ ] Test suite green across **both** layers
 
 ### M5 — Panels and project cards
 **Status:** not-started
@@ -138,6 +140,10 @@ task; a new project is born end to end.
 
 ## Deliberately deferred
 
-bwrap filesystem scoping · per-repo character profiles · global push-to-talk ·
-real viseme lip-sync · PR review inside the app (reviewed on GitHub) · anything
-resembling per-action approval.
+Per-repo character profiles · global push-to-talk · real viseme lip-sync · PR
+review inside the app (reviewed on GitHub) · anything resembling per-action
+approval.
+
+*bwrap filesystem scoping was on this list until 2026-07-28. It moved into v1
+under [D16](decisions/2026-07-28-D16-bwrap-into-v1.md) when Layer 3 turned out
+not to exist.*

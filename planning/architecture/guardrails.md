@@ -28,13 +28,19 @@ inspects `argv` and exits non-zero on a denied op. This works for every harness
 because they all shell out. It is bypassable by absolute path, so it is a guard,
 not a floor — treat it as one.
 
-**Layer 2 — bwrap filesystem scoping.** Deferred until something actually
-escapes. The vault has already proven a bwrap floor works
-(`AIOS/Memory/Topics/write-guardrail-hooks`), so this is a known quantity to
-reach for, not research.
+**Layer 2 — bwrap filesystem scoping. This is the floor.** In v1 as of D16 —
+promoted out of "deferred" when Layer 3 turned out not to exist. The agent
+subprocess runs inside a bubblewrap sandbox with an explicit filesystem scope.
+Unlike the shim it does not care which binary is invoked or by what path: a
+process cannot write outside its bind mounts. `bubblewrap 0.11.0` is already
+installed, and the vault has proven this pattern
+(`AIOS/Memory/Topics/write-guardrail-hooks`), so this is known territory rather
+than research. The scope is specified in the M4 plan — project directory
+read-write, toolchain read-only, `~/.ssh` and `~/.gitconfig` not mounted at all.
 
-**Layer 3 — remote branch protection.** The only layer that cannot be talked
-around locally.
+**Layer 3 — remote branch protection. Currently unavailable.** See the finding
+below. It only ever protected shared history; it was never going to stop local
+destruction.
 
 ## Default-deny
 
@@ -53,15 +59,18 @@ POST /repos/Aaseth03/githud/rulesets
 → 403 "Upgrade to GitHub Pro or make this repository public..."
 ```
 
-**Layer 3 does not currently exist.** The shim is load-bearing, and the shim is
-bypassable by absolute path by design — so at this moment the design has a guard
-where it claims to have a floor.
+**Layer 3 does not currently exist.**
 
-Do not write the M4 shim as though Layer 3 backs it up. The open recommendation
-is to **promote Layer 2 (bwrap) into v1**, since it was only deferred on the
-assumption that Layer 3 was the floor, and optionally to buy Layer 3 back with
-GitHub Pro. Full reasoning and the ranked options:
-`../decisions/2026-07-28-D07-three-guardrail-layers.md`.
+**Resolved by [D16](../decisions/2026-07-28-D16-bwrap-into-v1.md): bwrap is
+promoted into v1 and is now the floor.** The deferral of Layer 2 did not survive
+its own premise — it was only deferred because Layer 3 was assumed to be the
+floor.
+
+Consequences for whoever writes M4: **the shim is a guard, not the floor.** It
+exists to fail fast with a legible error message. Do not write it as though
+anything backs it up except bwrap. GitHub Pro would restore Layer 3 as designed
+and is worth buying, but it is a complement — no remote rule stops a local
+`rm -rf`.
 
 ## Trust model
 
