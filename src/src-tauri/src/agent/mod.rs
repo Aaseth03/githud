@@ -15,6 +15,8 @@ use std::collections::HashMap;
 use std::io::Write;
 use std::path::Path;
 use std::process::{Child, ChildStdout, Command, Stdio};
+
+use crate::guard::{self, shim, Access};
 use std::sync::{Arc, Mutex};
 
 pub use event::{Activity, AgentEvent};
@@ -151,6 +153,7 @@ impl Agents {
         cwd: &Path,
         adapter: Adapter,
         model: Option<&str>,
+        access: Access,
     ) -> Result<Option<ChildStdout>, String> {
         if self.has(id) {
             return Ok(None);
@@ -167,17 +170,42 @@ impl Agents {
             ));
         }
 
+        // A floor that silently is not there is worse than no floor, because
+        // you would act as though it were (D19).
+        if !guard::available() {
+            return Err("`bwrap` is not installed, so the agent sandbox cannot be created. \
+                        GIT HUD will not run an agent without its floor — install \
+                        bubblewrap, or use the Terminal pane."
+                .to_string());
+        }
+
+        let home = dirs::home_dir().ok_or("could not resolve the home directory")?;
+        let data_home = dirs::data_local_dir().ok_or("could not resolve the data directory")?;
+
+        // Regenerated every start, so a stale checkout cannot leave an
+        // out-of-date guard on PATH (D8).
+        shim::install(&data_home).map_err(|e| format!("could not install the shim: {e}"))?;
+        let agent_path = shim::agent_path(&data_home, &std::env::var("PATH").unwrap_or_default());
+
+        // bwrap wraps the harness; the harness never sees outside its scope.
         let resume = self.resumable_session(id);
-        let mut child = Command::new(adapter.binary())
-            .args(adapter.args(model, resume.as_deref()))
+        let mut argv = guard::sandbox(cwd, &home, access);
+        argv.push(adapter.binary().to_string());
+        argv.extend(adapter.args(model, resume.as_deref()));
+
+        let mut child = Command::new("bwrap")
+            .args(&argv)
             .current_dir(cwd)
+            // The shim goes into the *agent's* environment only. The terminal
+            // is the user's and is never touched (D7).
+            .env("PATH", agent_path)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             // Captured, not discarded. A harness that complains on stderr and
             // is never read is a harness that fails silently.
             .stderr(Stdio::piped())
             .spawn()
-            .map_err(|e| format!("could not start {}: {e}", adapter.binary()))?;
+            .map_err(|e| format!("could not start {} in the sandbox: {e}", adapter.binary()))?;
 
         let stdin = child.stdin.take().ok_or("no stdin on the agent process")?;
         let stdout = child.stdout.take().ok_or("no stdout on the agent process")?;
@@ -279,7 +307,7 @@ mod tests {
     #[test]
     fn starting_in_a_missing_directory_errors_rather_than_panicking() {
         let missing = std::env::temp_dir().join("githud-no-such-agent-dir");
-        match Agents::new().start("p", &missing, Adapter::ClaudeCode, None) {
+        match Agents::new().start("p", &missing, Adapter::ClaudeCode, None, Access::ReadWrite) {
             Err(e) => assert!(e.contains("not a directory"), "{e}"),
             Ok(_) => panic!("must not start in a missing directory"),
         }
@@ -303,13 +331,13 @@ mod tests {
         let dir = temp_dir("lifecycle");
         let agents = Agents::new();
 
-        let started = agents.start("proj", &dir, Adapter::ClaudeCode, None);
+        let started = agents.start("proj", &dir, Adapter::ClaudeCode, None, Access::ReadWrite);
         assert!(started.is_ok(), "{started:?}");
         assert_eq!(agents.count(), 1);
         assert!(agents.has("proj"));
 
         // A second start reattaches rather than spawning another process.
-        assert!(agents.start("proj", &dir, Adapter::ClaudeCode, None).unwrap().is_none());
+        assert!(agents.start("proj", &dir, Adapter::ClaudeCode, None, Access::ReadWrite).unwrap().is_none());
         assert_eq!(agents.count(), 1);
 
         agents.stop("proj");
@@ -320,8 +348,8 @@ mod tests {
     fn stop_all_empties_the_registry() {
         let dir = temp_dir("stopall");
         let agents = Agents::new();
-        agents.start("a", &dir, Adapter::ClaudeCode, None).unwrap();
-        agents.start("b", &dir, Adapter::ClaudeCode, None).unwrap();
+        agents.start("a", &dir, Adapter::ClaudeCode, None, Access::ReadWrite).unwrap();
+        agents.start("b", &dir, Adapter::ClaudeCode, None, Access::ReadWrite).unwrap();
         assert_eq!(agents.count(), 2);
 
         agents.stop_all();

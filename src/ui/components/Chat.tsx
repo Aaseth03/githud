@@ -55,7 +55,11 @@ export function Chat({ project, visible }: Props) {
       off = sub;
 
       try {
-        await invoke("agent_start", { id, cwd: project.path });
+        await invoke("agent_start", {
+          id,
+          cwd: project.path,
+          readOnly: project.agent === "read-only",
+        });
       } catch (e) {
         // A missing adapter must fail loudly with the reason, never fall back
         // silently to a different agent.
@@ -67,7 +71,7 @@ export function Chat({ project, visible }: Props) {
       disposed = true;
       off?.();
     };
-  }, [id, project.path, readOnly]);
+  }, [id, project.path, project.agent, readOnly]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
@@ -90,7 +94,11 @@ export function Chat({ project, visible }: Props) {
         // the conversation continues rather than starting over.
         if (state.ended) {
           setState((s) => ({ ...s, ended: null }));
-          await invoke("agent_start", { id, cwd: project.path });
+          await invoke("agent_start", {
+            id,
+            cwd: project.path,
+            readOnly: project.agent === "read-only",
+          });
         }
         await invoke("agent_send", { id, text });
       } catch (e) {
@@ -103,7 +111,7 @@ export function Chat({ project, visible }: Props) {
         );
       }
     })();
-  }, [draft, state.busy, state.ended, id, project.path]);
+  }, [draft, state.busy, state.ended, id, project.path, project.agent]);
 
   const stop = useCallback(() => {
     void invoke("agent_stop", { id }).catch(() => {

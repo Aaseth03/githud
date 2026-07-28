@@ -129,7 +129,7 @@ the actual file being read; STOP kills mid-stream cleanly.
       deliberately deferred, not forgotten
 
 ### M4 — Guardrails
-**Status:** not-started
+**Status:** in-progress
 **Validation:** a default-deny test suite — every denied op attempted and
 blocked, every allowed op attempted and passing. Ship on green only.
 
@@ -139,17 +139,27 @@ blocked, every allowed op attempted and passing. Ship on green only.
       exist right now
 - [x] **Decided how to replace Layer 3** — D16: bwrap is promoted out of
       "deferred" and into v1, and is the floor
-- [ ] Specify the bwrap scope — project dir read-write, toolchain read-only,
-      `~/.ssh` and `~/.gitconfig` not mounted at all
-- [ ] bwrap sandbox around the agent subprocess — **this is the floor**
-- [ ] PATH shim wrappers for `git`, `gh`, `rm`, `sudo` — a fast, legible guard
-      on top of the floor, not a substitute for it
-- [ ] Shim injected into the agent process environment only, never the terminal
-- [ ] Branch isolation on project open
-- [ ] **Honour `agent = "read-only"` from `config/projects.toml`** (D18). It is
-      recorded and displayed from M1 but enforced by nothing until here — an
-      external project must be unwritable by the agent, not merely labelled so
-- [ ] Test suite green across **both** layers
+- [x] bwrap scope specified — [D19](decisions/2026-07-28-D19-sandbox-scope.md).
+      Everything read-only by default; the project is the one writable place;
+      `~/.ssh` masked with an empty tmpfs; `~/.gitconfig` readable but not
+      writable; `--die-with-parent` and `--new-session`
+- [x] bwrap sandbox around the agent subprocess — **the floor**, and it holds:
+      a live test asks the real agent to edit a file outside its project and it
+      cannot. The tool reports the path as non-existent, because it genuinely is
+- [x] PATH shim for `git`, `gh`, `rm`, `sudo` — generated at every start, so a
+      stale checkout cannot leave an out-of-date guard
+- [x] Shim in the agent environment only, never the terminal
+- [x] **`agent = "read-only"` honoured** (D18) — the project binds read-only, so
+      the declaration is enforcement rather than a label
+- [x] **The agent will not start without bwrap.** A floor that silently is not
+      there is worse than no floor
+- [x] Permission mode settled — `acceptEdits`, defensible *only* because the
+      floor now exists. M3 deliberately left it unset
+- [x] Test suite green across both layers — 15/15 against real bwrap and the
+      real shim
+- [ ] Branch isolation applied on project open — naming and the decision are
+      built and tested; wiring it to the open event is the last step
+- [ ] Confirmed by hand in the app
 
 ### M5 — Panels and project cards
 **Status:** not-started
