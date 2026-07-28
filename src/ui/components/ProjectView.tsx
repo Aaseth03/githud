@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { Project } from "../types";
 import { initialPaneState, isMounted, showPane, type Pane } from "../panes";
 import { Terminal } from "./Terminal";
+import { Chat } from "./Chat";
 
 /**
  * A project tab.
@@ -88,7 +89,7 @@ export function ProjectView({
         <div
           className={`absolute inset-0 ${panes.active === "chat" ? "" : "hidden"}`}
         >
-          <ChatPlaceholder />
+          <Chat project={project} visible={visible && panes.active === "chat"} />
         </div>
 
         {isMounted(panes, "terminal") && (
@@ -143,20 +144,6 @@ function PaneTab({
       )}
       {children}
     </button>
-  );
-}
-
-function ChatPlaceholder() {
-  return (
-    <div className="starfield grid h-full place-items-center px-8">
-      <div className="max-w-md text-center">
-        <p className="text-sm text-ink-dim">The agent channel lands at M3.</p>
-        <p className="mt-2 text-xs leading-relaxed text-ink-faint">
-          Until then the Terminal pane is a real shell — run{" "}
-          <span className="font-mono text-ink-dim">claude</span> in it by hand.
-        </p>
-      </div>
-    </div>
   );
 }
 

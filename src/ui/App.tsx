@@ -35,6 +35,11 @@ export default function App() {
     void invoke("pty_close", { id: key }).catch(() => {
       /* nothing to close */
     });
+    // Same for the agent: a closed tab must not leak a process. This is the
+    // M2 pty_close bug, not repeated.
+    void invoke("agent_stop", { id: key }).catch(() => {
+      /* nothing to stop */
+    });
   }, []);
 
   const handleSelect = useCallback((key: string) => {

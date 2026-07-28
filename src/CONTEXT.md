@@ -27,6 +27,8 @@ src/
 │  ├─ tabs.test.ts
 │  ├─ panes.ts             Chat|Terminal sub-tab rules, pure
 │  ├─ panes.test.ts
+│  ├─ agent.ts             normalized events + transcript reducer, pure
+│  ├─ agent.test.ts
 │  ├─ hooks/
 │  │  └─ useProjects.ts    calls the scan command; parses nothing
 │  ├─ components/
@@ -35,6 +37,7 @@ src/
 │  │  ├─ IcmBadge.tsx
 │  │  ├─ MainView.tsx      the main tab — routes, never acts (D5)
 │  │  ├─ ProjectView.tsx   header + Chat|Terminal panes
+│  │  ├─ Chat.tsx          Channel 2 — transcript, composer, status, STOP
 │  │  └─ Terminal.tsx      xterm.js — the only file that touches it
 │  └─ styles/
 │     └─ index.css         Tailwind v4 @theme — there is no tailwind.config.js
@@ -50,6 +53,10 @@ src/
    │  ├─ lib.rs            commands + handler registration
    │  ├─ overrides/
    │  │  └─ mod.rs         config/projects.toml — project kind, agent access
+   │  ├─ agent/
+   │  │  ├─ mod.rs         Channel 2 — agent sessions, lifecycle
+   │  │  ├─ event.rs       the normalized vocabulary the UI subscribes to
+   │  │  └─ claude.rs      Claude Code adapter + line mapping + tests
    │  ├─ pty/
    │  │  └─ mod.rs         Channel 1 — real PTYs, one per project
    │  └─ scan/
@@ -65,6 +72,8 @@ src/
 | `src-tauri/src/scan/` | The walk, ICM detection | Changing discovery rules |
 | `src-tauri/src/overrides/` | `projects.toml` — kind, agent access, notes | Changing what can be declared about a project |
 | `src-tauri/src/pty/` | Terminal sessions: spawn, write, resize, kill | Changing terminal behaviour |
+| `src-tauri/src/agent/` | Agent sessions and the normalized event mapping | Adding an adapter, or changing what the UI sees |
+| `ui/agent.ts` | Event types + transcript reducer | Changing how a conversation is assembled |
 | `ui/panes.ts` | Chat \| Terminal sub-tab rules | Changing when a pane mounts or shows |
 | `src-tauri/src/lib.rs` | Tauri commands | Adding a command the UI can call |
 | `ui/tabs.ts` | Tab open/focus/close semantics | Changing tab behaviour |
@@ -81,7 +90,7 @@ when a module actually lands.
 src-tauri/src/
 ├─ scan/     repo discovery, registry, project cards        (M1 ✓ · M5)
 ├─ pty/      portable-pty sessions — Channel 1              (M2 ✓)
-├─ agent/    adapters + event normalization — Channel 2     (M3)
+├─ agent/    adapters + event normalization — Channel 2     (M3 ✓)
 ├─ git/      status, branch, diff                           (M5)
 ├─ guard/    bwrap scope + PATH shim generation             (M4)
 └─ parse/    milestone parser                               (M5)
@@ -130,6 +139,13 @@ src-tauri/src/
   and the view drops anything at or below what its replay covered — output can
   arrive between the snapshot and the write, and without that number it would
   be written twice. Hiding tabs is the first defence; this is the floor.
+- **A turn ending is not the session ending.** A harness `result` line closes a
+  turn; the process stays alive and keeps its context. Emitting `SessionEnded`
+  there would tear down a live session — the single easiest mistake in the
+  adapter, guarded by tests on both sides.
+- **The UI never sees a harness's JSON.** Everything crossing the boundary is
+  `agent::event::AgentEvent`. That is what makes a second adapter a
+  self-contained change (D2).
 - **PTY bytes stay bytes.** Output crosses the IPC boundary base64-encoded
   because a read can split a UTF-8 character or an escape sequence in half, and
   `from_utf8_lossy` would corrupt exactly the sequences a TUI needs.
