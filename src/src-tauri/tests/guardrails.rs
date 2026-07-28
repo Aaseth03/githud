@@ -337,3 +337,97 @@ fn the_shim_never_shadows_itself_into_a_loop() {
 
     assert_eq!(code, 0, "the shim failed to reach the real git");
 }
+
+// ── Branch isolation ─────────────────────────────────────────────────────────
+
+use githud_lib::guard::branch;
+
+fn seeded_repo(tag: &str, on: &str) -> PathBuf {
+    let repo = scratch(tag);
+    for args in [
+        vec!["init", "-q", "-b", on],
+        vec!["config", "user.email", "t@example.invalid"],
+        vec!["config", "user.name", "T"],
+    ] {
+        Command::new("git").args(&args).current_dir(&repo).output().unwrap();
+    }
+    std::fs::write(repo.join("seed.txt"), "seed").unwrap();
+    for args in [vec!["add", "-A"], vec!["commit", "-qm", "seed"]] {
+        Command::new("git").args(&args).current_dir(&repo).output().unwrap();
+    }
+    repo
+}
+
+#[test]
+fn a_clean_shared_branch_is_isolated_onto_an_agent_branch() {
+    let repo = seeded_repo("iso-clean", "main");
+    assert_eq!(branch::current(&repo).as_deref(), Some("main"));
+
+    let moved = branch::isolate(&repo, "Professor").expect("isolation should succeed");
+
+    let now = branch::current(&repo).unwrap();
+    assert!(moved.is_some(), "expected a switch");
+    assert!(now.starts_with("agent/professor-"), "on {now}");
+    assert!(!branch::is_shared(&now));
+}
+
+#[test]
+fn a_feature_branch_is_left_where_it_is() {
+    let repo = seeded_repo("iso-feature", "my-work");
+
+    let moved = branch::isolate(&repo, "Proj").expect("should not error");
+
+    assert_eq!(moved, None, "it should not have switched");
+    assert_eq!(branch::current(&repo).as_deref(), Some("my-work"));
+}
+
+#[test]
+fn uncommitted_work_on_a_shared_branch_stops_the_session() {
+    // Git would carry the changes across and lose nothing, but they would land
+    // on a branch the user never chose. Surface instead.
+    let repo = seeded_repo("iso-dirty", "main");
+    std::fs::write(repo.join("wip.txt"), "half-finished").unwrap();
+    assert!(branch::is_dirty(&repo));
+
+    let err = branch::isolate(&repo, "Proj").expect_err("should refuse");
+
+    assert!(err.contains("uncommitted"), "{err}");
+    assert_eq!(
+        branch::current(&repo).as_deref(),
+        Some("main"),
+        "it must not have moved anything"
+    );
+    assert!(repo.join("wip.txt").is_file(), "the work is untouched");
+}
+
+#[test]
+fn isolating_twice_reuses_the_branch_rather_than_failing() {
+    // Opening a project again the same day must not error on an existing branch.
+    let repo = seeded_repo("iso-twice", "main");
+
+    let first = branch::isolate(&repo, "Proj").unwrap().unwrap();
+    Command::new("git")
+        .args(["checkout", "-q", "main"])
+        .current_dir(&repo)
+        .output()
+        .unwrap();
+    let second = branch::isolate(&repo, "Proj").unwrap().unwrap();
+
+    assert_eq!(first, second);
+    assert_eq!(branch::current(&repo).as_deref(), Some(second.as_str()));
+}
+
+#[test]
+fn a_repo_with_no_commits_is_left_alone_rather_than_guessed_at() {
+    let repo = scratch("iso-empty");
+    Command::new("git")
+        .args(["init", "-q", "-b", "main"])
+        .current_dir(&repo)
+        .output()
+        .unwrap();
+
+    // An unborn HEAD reports a branch name but has nothing to switch from.
+    let result = branch::isolate(&repo, "Proj");
+
+    assert!(result.is_ok(), "must not error: {result:?}");
+}
