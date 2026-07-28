@@ -132,7 +132,12 @@ export function applyEvent(state: ChatState, event: AgentEvent): ChatState {
           ...state.entries,
           { kind: "error", id: nextId(), text: event.message },
         ],
+        // A fatal error ends the turn, so the indicator must stop claiming
+        // work is happening. Leaving it on "thinking" next to an error message
+        // is the app contradicting itself.
         busy: event.fatal ? false : state.busy,
+        activity: event.fatal ? "idle" : state.activity,
+        detail: event.fatal ? null : state.detail,
       };
 
     case "turn_ended":

@@ -53,18 +53,9 @@ export function Chat({ project, visible }: Props) {
         return;
       }
       off = sub;
-
-      try {
-        await invoke("agent_start", {
-          id,
-          cwd: project.path,
-          readOnly: project.agent === "read-only",
-        });
-      } catch (e) {
-        // A missing adapter must fail loudly with the reason, never fall back
-        // silently to a different agent.
-        setStartError(e instanceof Error ? e.message : String(e));
-      }
+      // Deliberately does NOT start the agent. Starting isolates the branch,
+      // and merely opening a project to look at it must not touch your repo —
+      // the session begins when you actually give it work.
     })();
 
     return () => {
@@ -89,17 +80,17 @@ export function Chat({ project, visible }: Props) {
 
     void (async () => {
       try {
-        // STOP kills the process, so a stopped session has to be restarted
-        // before it can take another turn. The Rust side passes --resume, so
-        // the conversation continues rather than starting over.
-        if (state.ended) {
-          setState((s) => ({ ...s, ended: null }));
-          await invoke("agent_start", {
-            id,
-            cwd: project.path,
-            readOnly: project.agent === "read-only",
-          });
-        }
+        setStartError(null);
+        setState((s) => ({ ...s, ended: null }));
+        // Idempotent: a running session returns immediately, and an agent
+        // already on its own branch is left alone. Doing this on every turn
+        // also means a manual switch back to a shared branch is caught before
+        // the next message rather than after it.
+        await invoke("agent_start", {
+          id,
+          cwd: project.path,
+          readOnly: project.agent === "read-only",
+        });
         await invoke("agent_send", { id, text });
       } catch (e) {
         setState((s) =>
@@ -111,7 +102,7 @@ export function Chat({ project, visible }: Props) {
         );
       }
     })();
-  }, [draft, state.busy, state.ended, id, project.path, project.agent]);
+  }, [draft, state.busy, id, project.path, project.agent]);
 
   const stop = useCallback(() => {
     void invoke("agent_stop", { id }).catch(() => {

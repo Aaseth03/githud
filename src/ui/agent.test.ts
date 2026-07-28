@@ -213,3 +213,43 @@ describe("recovering from STOP", () => {
     expect(s.ended).toBeNull();
   });
 });
+
+describe("a failed turn does not leave the indicator lying", () => {
+  it("clears activity and busy on a fatal error", () => {
+    // The reported symptom: a "thinking" pill sitting next to an error
+    // message. The app was contradicting itself.
+    let s = appendUserTurn(initialChatState, "do a thing");
+    s = apply(s, { type: "status", state: "working", detail: "reading x" });
+
+    s = apply(s, {
+      type: "error",
+      message: "no agent session for AI-Dashboard",
+      fatal: true,
+    });
+
+    expect(s.busy).toBe(false);
+    expect(s.activity).toBe("idle");
+    expect(activityLabel(s)).toBeNull();
+  });
+
+  it("leaves a non-fatal error mid-turn alone", () => {
+    // A denied tool does not end the turn; the agent carries on.
+    let s = appendUserTurn(initialChatState, "do a thing");
+    s = apply(s, { type: "status", state: "working", detail: "editing y" });
+
+    s = apply(s, { type: "error", message: "Refused: Edit", fatal: false });
+
+    expect(s.busy).toBe(true);
+    expect(activityLabel(s)).toBe("editing y");
+  });
+
+  it("still records the error in the transcript", () => {
+    const s = apply(appendUserTurn(initialChatState, "x"), {
+      type: "error",
+      message: "boom",
+      fatal: true,
+    });
+
+    expect(s.entries.at(-1)).toMatchObject({ kind: "error", text: "boom" });
+  });
+});
