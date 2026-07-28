@@ -82,9 +82,35 @@ with one is oriented well enough that flagging it would be noise.
 
 ## Conformance
 
-A repo is **conformant** when both L0 and L1 resolve. Anything else is badged
-with the specific missing layers, because "your repo is wrong" is not
-actionable and "no L1" is.
+A repo is **conformant** when both L0 and L1 resolve.
+
+## Conformance is not the same question as expectation
+
+This contract answers **"does this repo have ICM files?"** It does *not* answer
+**"should it?"** — that is a property of the project's relationship to its
+owner, not of its filesystem, and no amount of scanning can derive it.
+
+A third-party dependency has no Layer 0 and never will. Reporting that
+truthfully is correct; **badging** it for that is noise.
+
+So the two are kept on separate axes (D18):
+
+- **Detection is universal.** GIT HUD records the true L0/L1 status for every
+  repo it finds, whatever the repo is. This contract stays canonical and must
+  never be made to lie in order to silence a badge.
+- **Expectation comes from the project's declared `kind`**, in
+  `../projects.toml`. Only `own` projects expect ICM.
+
+```
+badged  =  kind == own  &&  not conformant
+```
+
+Anything badged names the specific missing layers, because "your repo is wrong"
+is not actionable and "no L1" is.
+
+**If you are here to stop a repo being flagged, this is the wrong file.** Set
+its `kind` in `../projects.toml`. Changing detection to suppress one repo would
+break the contract for every other repo on every machine.
 
 ## Creating a conformant workspace
 

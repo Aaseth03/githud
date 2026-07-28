@@ -16,6 +16,9 @@ function project(name: string, rel = name): Project {
     rel_path: rel,
     depth: rel.split("/").length,
     icm: { layer0: true, layer1: true },
+    kind: "own",
+    agent: "read-write",
+    note: null,
   };
 }
 

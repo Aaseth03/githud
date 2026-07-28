@@ -95,6 +95,9 @@ blocked, every allowed op attempted and passing. Ship on green only.
       on top of the floor, not a substitute for it
 - [ ] Shim injected into the agent process environment only, never the terminal
 - [ ] Branch isolation on project open
+- [ ] **Honour `agent = "read-only"` from `config/projects.toml`** (D18). It is
+      recorded and displayed from M1 but enforced by nothing until here — an
+      external project must be unwritable by the agent, not merely labelled so
 - [ ] Test suite green across **both** layers
 
 ### M5 — Panels and project cards

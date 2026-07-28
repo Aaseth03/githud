@@ -16,16 +16,40 @@ export function ProjectView({ project }: { project: Project }) {
         </h1>
         <p className="mt-1.5 font-mono text-xs text-ink-faint">{project.path}</p>
 
+        {project.note && (
+          <p className="mt-3 max-w-prose text-xs leading-relaxed text-ink-dim">
+            {project.note}
+          </p>
+        )}
+
         <dl className="mt-5 flex flex-wrap gap-x-8 gap-y-3">
           <Field label="Relative">{project.rel_path}</Field>
           <Field label="Depth">{String(project.depth)}</Field>
-          <Field label="Layer 0" ok={project.icm.layer0}>
+          <Field label="Kind">{project.kind}</Field>
+          <Field label="Agent" ok={project.agent === "read-write"}>
+            {project.agent}
+          </Field>
+          {/* Detection is reported for every project — the icm.md contract is
+              canonical and never made to lie. Only the *expectation* varies by
+              kind, so a third-party repo shows its layers plainly rather than
+              in warning colour (D18). */}
+          <Field label="Layer 0" ok={expectationTone(project, project.icm.layer0)}>
             {project.icm.layer0 ? "present" : "missing"}
           </Field>
-          <Field label="Layer 1" ok={project.icm.layer1}>
+          <Field label="Layer 1" ok={expectationTone(project, project.icm.layer1)}>
             {project.icm.layer1 ? "present" : "missing"}
           </Field>
         </dl>
+
+        {project.kind !== "own" && (
+          <p className="mt-4 text-xs text-ink-faint">
+            {project.kind === "external"
+              ? "Third-party. Not expected to carry ICM context, and not flagged for its absence."
+              : "Superseded. Kept, not developed."}
+            {project.agent === "read-only" &&
+              " Agent access is declared read-only — enforced from M4."}
+          </p>
+        )}
       </header>
 
       <div className="mt-8 grid gap-3 sm:grid-cols-2">
@@ -45,6 +69,15 @@ export function ProjectView({ project }: { project: Project }) {
       </div>
     </div>
   );
+}
+
+/**
+ * A missing layer is only a *problem* where ICM is expected. Elsewhere it is
+ * just a fact, so it renders neutral rather than in warning colour.
+ */
+function expectationTone(project: Project, present: boolean): boolean | undefined {
+  if (project.kind !== "own") return undefined;
+  return present;
 }
 
 function Field({

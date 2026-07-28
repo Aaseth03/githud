@@ -15,7 +15,8 @@ import {
 import type { Project } from "./types";
 
 export default function App() {
-  const { projects, uninitiated, root, loading, error, rescan } = useProjects();
+  const { projects, uninitiated, root, loading, error, overridesError, rescan } =
+    useProjects();
 
   // Tab rules live in ./tabs.ts, pure and unit-tested. This component only
   // wires them to events.
@@ -43,6 +44,7 @@ export default function App() {
         root={root}
         loading={loading}
         error={error}
+        overridesError={overridesError}
         openKeys={openProjectKeys(tabState)}
         activeKey={tabState.activeKey}
         onOpen={handleOpen}

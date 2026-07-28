@@ -9,6 +9,12 @@ type State = {
   loading: boolean;
   /** Never swallowed — principle 5. A failed scan is shown, not hidden. */
   error: string | null;
+  /**
+   * A malformed `config/projects.toml`. Distinct from `error`: the scan
+   * succeeded, but every declared override was lost — which silently means
+   * `own` and read-write everywhere. That must be visible (D18).
+   */
+  overridesError: string | null;
 };
 
 const EMPTY: State = {
@@ -17,6 +23,7 @@ const EMPTY: State = {
   root: "",
   loading: true,
   error: null,
+  overridesError: null,
 };
 
 /**
@@ -39,6 +46,7 @@ export function useProjects() {
         root,
         loading: false,
         error: null,
+        overridesError: result.overrides_error,
       });
     } catch (e) {
       setState((s) => ({

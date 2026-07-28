@@ -1,4 +1,4 @@
-import type { Project } from "../types";
+import { shouldFlagIcm, type Project } from "../types";
 
 /**
  * The main tab: the routing point.
@@ -15,7 +15,13 @@ export function MainView({
   projects: Project[];
   onOpen: (p: Project) => void;
 }) {
-  const nonConformant = projects.filter((p) => !p.icm.layer0 || !p.icm.layer1);
+  // Counts consider your own projects only. Including third-party or
+  // superseded repos would restore exactly the noise D18 removes.
+  const own = projects.filter((p) => p.kind === "own");
+  const needsContext = projects.filter(shouldFlagIcm);
+  // Not "not yours" — a deprecated project is still yours. What these share is
+  // that ICM is not expected of them.
+  const exempt = projects.length - own.length;
 
   return (
     <div className="starfield flex h-full flex-col items-center justify-center overflow-y-auto px-8 py-12">
@@ -27,21 +33,26 @@ export function MainView({
           Every repo, enterable. Pick one from the left.
         </p>
 
-        <div className="mt-12 grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-line bg-line">
+        <div className="mt-12 grid grid-cols-4 gap-px overflow-hidden rounded-lg border border-line bg-line">
           <Stat label="Repos" value={String(projects.length)} />
           <Stat
             label="ICM ready"
-            value={String(projects.length - nonConformant.length)}
+            value={String(own.length - needsContext.length)}
             tone="go"
           />
           <Stat
             label="Needs context"
-            value={String(nonConformant.length)}
-            tone={nonConformant.length > 0 ? "warn" : undefined}
+            value={String(needsContext.length)}
+            tone={needsContext.length > 0 ? "warn" : undefined}
+          />
+          <Stat
+            label="Exempt"
+            value={String(exempt)}
+            title="Third-party or superseded — ICM is not expected of these, so they are never flagged."
           />
         </div>
 
-        {nonConformant.length > 0 && (
+        {needsContext.length > 0 && (
           <section className="mt-8">
             <h2 className="text-[11px] font-semibold tracking-[0.18em] text-ink-faint uppercase">
               Missing agent context
@@ -50,7 +61,7 @@ export function MainView({
               An agent opened in these has nothing to route from.
             </p>
             <ul className="mt-3 space-y-px">
-              {nonConformant.map((p) => (
+              {needsContext.map((p) => (
                 <li key={p.rel_path}>
                   <button
                     onClick={() => onOpen(p)}
@@ -81,15 +92,17 @@ function Stat({
   label,
   value,
   tone,
+  title,
 }: {
   label: string;
   value: string;
   tone?: "go" | "warn";
+  title?: string;
 }) {
   const color =
     tone === "go" ? "text-go" : tone === "warn" ? "text-warn" : "text-ink";
   return (
-    <div className="bg-surface px-5 py-4">
+    <div className="bg-surface px-5 py-4" title={title}>
       <div className={`font-mono text-3xl leading-none ${color}`}>{value}</div>
       <div className="mt-2 text-[10px] tracking-[0.16em] text-ink-faint uppercase">
         {label}

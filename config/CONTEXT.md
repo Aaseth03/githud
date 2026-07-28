@@ -26,7 +26,7 @@ config/
 
 | Path | Contains | When to use |
 |---|---|---|
-| `projects.toml` | Per-project overrides — adapter, model, character, display name | Overriding something the scan gets wrong |
+| `projects.toml` | Per-project overrides — **`kind`**, agent access, note, display name, adapter, model, character | Declaring something the scan cannot derive: chiefly whether a repo is yours (D18) |
 | `characters/` | `<name>.toml` — sprite set, voice id, theme | Adding or editing a character (M7) |
 | `contracts/milestones.md` | The milestone format the Rust parser reads out of *any* repo | Changing the format, or writing the parser |
 | `contracts/icm.md` | The L0/L1 detection contract `scan::detect_icm` implements | Changing what GIT HUD badges as non-conformant |

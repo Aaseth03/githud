@@ -10,6 +10,8 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use crate::overrides::{AgentAccess, Overrides, ProjectKind};
+
 /// How many directory levels below the root to search.
 ///
 /// The vault lives at `~/github/Obsidian/HOME_AI_VAULT` — depth 2 — which is the
@@ -65,7 +67,27 @@ pub struct Project {
     pub rel_path: String,
     /// Directory levels below the scan root.
     pub depth: usize,
+    /// What ICM detection actually found. **Always the truth about disk**, for
+    /// every project regardless of kind — `config/contracts/icm.md` is
+    /// canonical and must never be made to lie.
     pub icm: IcmStatus,
+    /// What this project *is* (D18). Declared, never derived.
+    pub kind: ProjectKind,
+    /// Agent write policy. Recorded here from M1, **enforced at M4**.
+    pub agent: AgentAccess,
+    /// Why an override exists, so the reason travels with it.
+    pub note: Option<String>,
+}
+
+impl Project {
+    /// Should a missing ICM layer be surfaced as a badge?
+    ///
+    /// Detection and expectation are separate axes (D18). `voicebox` genuinely
+    /// has no Layer 0 — that stays true in `icm` — but it is third-party, so
+    /// being flagged for it would be noise.
+    pub fn should_flag_icm(&self) -> bool {
+        self.kind.expects_icm() && !self.icm.is_conformant()
+    }
 }
 
 /// A folder sitting in the scan root that is not a repository and contains none.
@@ -84,6 +106,9 @@ pub struct Uninitiated {
 pub struct ScanResult {
     pub projects: Vec<Project>,
     pub uninitiated: Vec<Uninitiated>,
+    /// A malformed `config/projects.toml`, surfaced rather than swallowed.
+    /// The scan still returns every project; they simply carry their defaults.
+    pub overrides_error: Option<String>,
 }
 
 /// Walk `root` and return every git repository, ordered by relative path.
@@ -96,9 +121,38 @@ pub fn walk(root: &Path, max_depth: usize) -> Vec<Project> {
 
 /// As [`walk`], but also reports root-level folders that hold no repository.
 pub fn scan(root: &Path, max_depth: usize) -> ScanResult {
+    scan_with(root, max_depth, &Overrides::default(), None)
+}
+
+/// The full scan, with declared overrides applied (D18).
+///
+/// `overrides_error` carries a parse failure through instead of hiding it — a
+/// typo that silently reverted a project to `own` + read-write is exactly the
+/// failure this must not have.
+pub fn scan_with(
+    root: &Path,
+    max_depth: usize,
+    overrides: &Overrides,
+    overrides_error: Option<String>,
+) -> ScanResult {
     let mut projects = Vec::new();
     walk_into(root, root, 0, max_depth, &mut projects);
     projects.sort_by(|a, b| a.rel_path.cmp(&b.rel_path));
+
+    for project in &mut projects {
+        let (kind, agent) = overrides.resolve(&project.rel_path);
+        project.kind = kind;
+        project.agent = agent;
+        if let Some(entry) = overrides.get(&project.rel_path) {
+            project.note = entry.note.clone();
+            if let Some(name) = &entry.name {
+                project.name = name.clone();
+            }
+        }
+    }
+    // An override naming a repo that is not on this machine is ignored, not an
+    // error: `config/` syncs across machines (D8), so that is the normal case.
+    projects.retain(|p| overrides.get(&p.rel_path).is_none_or(|o| !o.hidden));
 
     let mut uninitiated: Vec<Uninitiated> = child_dirs(root)
         .into_iter()
@@ -124,6 +178,7 @@ pub fn scan(root: &Path, max_depth: usize) -> ScanResult {
     ScanResult {
         projects,
         uninitiated,
+        overrides_error,
     }
 }
 
@@ -194,6 +249,10 @@ fn describe(root: &Path, path: &Path, depth: usize) -> Project {
         rel_path,
         depth,
         icm: detect_icm(path),
+        // Defaults; `scan_with` applies any declared override afterwards.
+        kind: ProjectKind::default(),
+        agent: AgentAccess::default(),
+        note: None,
     }
 }
 
@@ -488,6 +547,147 @@ mod tests {
             result.uninitiated.is_empty(),
             "real-ish leads to a repo; its inner folders are not root-level"
         );
+    }
+
+    #[test]
+    fn an_external_repo_is_not_flagged_but_detection_still_tells_the_truth() {
+        // The voicebox case. `icm` must keep reporting what is actually on
+        // disk — the contract in config/contracts/icm.md is canonical and must
+        // never be made to lie. Only the *flag* is suppressed.
+        let fx = Fixture::new("kind-external");
+        fx.repo("voicebox");
+        let ov = Overrides::parse(
+            r#"
+            [projects.voicebox]
+            kind = "external"
+            "#,
+        )
+        .unwrap();
+
+        let result = scan_with(&fx.root, DEFAULT_MAX_DEPTH, &ov, None);
+        let p = &result.projects[0];
+
+        assert!(!p.icm.layer0, "detection still reports the truth");
+        assert!(!p.icm.is_conformant());
+        assert!(!p.should_flag_icm(), "an external repo is not flagged");
+        assert_eq!(p.kind, ProjectKind::External);
+        assert_eq!(p.agent, AgentAccess::ReadOnly);
+    }
+
+    #[test]
+    fn an_own_repo_missing_icm_is_still_flagged() {
+        let fx = Fixture::new("kind-own");
+        fx.repo("mine");
+
+        let result = scan_with(&fx.root, DEFAULT_MAX_DEPTH, &Overrides::default(), None);
+
+        assert!(result.projects[0].should_flag_icm());
+        assert_eq!(result.projects[0].kind, ProjectKind::Own);
+    }
+
+    #[test]
+    fn a_conformant_own_repo_is_not_flagged() {
+        let fx = Fixture::new("kind-own-ok");
+        fx.repo("mine");
+        fx.file("mine/AGENTS.md", "# Mine\n");
+        fx.file("mine/CONTEXT.md", "# Routing\n");
+
+        let result = scan_with(&fx.root, DEFAULT_MAX_DEPTH, &Overrides::default(), None);
+
+        assert!(!result.projects[0].should_flag_icm());
+    }
+
+    #[test]
+    fn a_deprecated_repo_is_not_flagged_but_stays_writable() {
+        let fx = Fixture::new("kind-deprecated");
+        fx.repo("old-thing");
+        let ov = Overrides::parse(
+            r#"
+            [projects.old-thing]
+            kind = "deprecated"
+            "#,
+        )
+        .unwrap();
+
+        let p = &scan_with(&fx.root, DEFAULT_MAX_DEPTH, &ov, None).projects[0];
+
+        assert!(!p.should_flag_icm());
+        assert_eq!(p.agent, AgentAccess::ReadWrite);
+    }
+
+    #[test]
+    fn an_override_carries_its_note_and_display_name() {
+        let fx = Fixture::new("kind-note");
+        fx.repo("voicebox");
+        let ov = Overrides::parse(
+            r#"
+            [projects.voicebox]
+            kind = "external"
+            name = "Voicebox"
+            note = "MIT, third-party."
+            "#,
+        )
+        .unwrap();
+
+        let p = &scan_with(&fx.root, DEFAULT_MAX_DEPTH, &ov, None).projects[0];
+
+        assert_eq!(p.name, "Voicebox");
+        assert_eq!(p.note.as_deref(), Some("MIT, third-party."));
+    }
+
+    #[test]
+    fn an_override_for_a_repo_not_on_this_machine_is_ignored() {
+        // config/ syncs across machines (D8), so this is the normal case, not
+        // an error.
+        let fx = Fixture::new("kind-absent");
+        fx.repo("here");
+        let ov = Overrides::parse(
+            r#"
+            [projects.somewhere-else]
+            kind = "external"
+            "#,
+        )
+        .unwrap();
+
+        let result = scan_with(&fx.root, DEFAULT_MAX_DEPTH, &ov, None);
+
+        assert_eq!(names(&result.projects), vec!["here"]);
+        assert_eq!(result.projects[0].kind, ProjectKind::Own);
+    }
+
+    #[test]
+    fn a_hidden_override_removes_the_project_from_the_list() {
+        let fx = Fixture::new("kind-hidden");
+        fx.repo("shown");
+        fx.repo("secret");
+        let ov = Overrides::parse(
+            r#"
+            [projects.secret]
+            hidden = true
+            "#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            names(&scan_with(&fx.root, DEFAULT_MAX_DEPTH, &ov, None).projects),
+            vec!["shown"]
+        );
+    }
+
+    #[test]
+    fn an_overrides_parse_error_is_carried_through_not_swallowed() {
+        let fx = Fixture::new("kind-err");
+        fx.repo("mine");
+
+        let result = scan_with(
+            &fx.root,
+            DEFAULT_MAX_DEPTH,
+            &Overrides::default(),
+            Some("projects.toml:3 bad kind".into()),
+        );
+
+        assert_eq!(result.overrides_error.as_deref(), Some("projects.toml:3 bad kind"));
+        assert_eq!(names(&result.projects), vec!["mine"], "projects still returned");
     }
 
     #[test]

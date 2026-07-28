@@ -7,6 +7,7 @@ interface Props {
   root: string;
   loading: boolean;
   error: string | null;
+  overridesError: string | null;
   openKeys: Set<string>;
   activeKey: string;
   onOpen: (project: Project) => void;
@@ -19,6 +20,7 @@ export function Sidebar({
   root,
   loading,
   error,
+  overridesError,
   openKeys,
   activeKey,
   onOpen,
@@ -56,6 +58,27 @@ export function Sidebar({
         <p className="mx-3 mb-3 rounded border border-danger/40 bg-danger/10 px-3 py-2 text-xs text-danger">
           {error}
         </p>
+      )}
+
+      {overridesError && (
+        // The scan worked; the overrides did not. Every project silently fell
+        // back to `own` and read-write, which is exactly what must not pass
+        // unnoticed (D18).
+        <div
+          title={overridesError}
+          className="mx-3 mb-3 rounded border border-warn/40 bg-warn/10 px-3 py-2"
+        >
+          <p className="text-xs font-semibold text-warn">
+            config/projects.toml could not be read
+          </p>
+          <p className="mt-1 text-[11px] leading-relaxed text-warn/85">
+            Overrides are being ignored — every project is treated as your own
+            and agent-writable.
+          </p>
+          <p className="mt-1.5 truncate font-mono text-[10px] text-warn/70">
+            {overridesError}
+          </p>
+        </div>
       )}
 
       <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
@@ -97,14 +120,31 @@ export function Sidebar({
                     ].join(" ")}
                   />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm">{p.name}</span>
+                    <span
+                      className={[
+                        "block truncate text-sm",
+                        // Superseded, not gone. Legible, clearly not current.
+                        p.kind === "deprecated" ? "text-ink-faint" : "",
+                      ].join(" ")}
+                    >
+                      {p.name}
+                    </span>
                     {p.depth > 1 && (
                       <span className="block truncate font-mono text-[10px] text-ink-faint">
                         {p.rel_path}
                       </span>
                     )}
                   </span>
-                  <IcmBadge icm={p.icm} />
+                  {p.agent === "read-only" && (
+                    <span
+                      aria-hidden
+                      title="Agent access: read-only (declared; enforced at M4)"
+                      className="shrink-0 font-mono text-[10px] text-ink-faint"
+                    >
+                      ro
+                    </span>
+                  )}
+                  <IcmBadge project={p} />
                 </button>
               </li>
             );

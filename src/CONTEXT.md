@@ -22,6 +22,7 @@ src/
 │  ├─ main.tsx
 │  ├─ App.tsx              wires tab rules to events; holds no rules itself
 │  ├─ types.ts             mirrors the Rust structs crossing the boundary
+│  ├─ types.test.ts        the ICM flagging rule, mirrored from Rust
 │  ├─ tabs.ts              tab semantics, pure
 │  ├─ tabs.test.ts
 │  ├─ hooks/
@@ -44,6 +45,8 @@ src/
    ├─ src/
    │  ├─ main.rs           thin entry point
    │  ├─ lib.rs            commands + handler registration
+   │  ├─ overrides/
+   │  │  └─ mod.rs         config/projects.toml — project kind, agent access
    │  └─ scan/
    │     └─ mod.rs         repo discovery, ICM detection, unit tests
    └─ tests/
@@ -55,6 +58,7 @@ src/
 | Path | Contains | When to use |
 |---|---|---|
 | `src-tauri/src/scan/` | The walk, ICM detection | Changing discovery rules |
+| `src-tauri/src/overrides/` | `projects.toml` — kind, agent access, notes | Changing what can be declared about a project |
 | `src-tauri/src/lib.rs` | Tauri commands | Adding a command the UI can call |
 | `ui/tabs.ts` | Tab open/focus/close semantics | Changing tab behaviour |
 | `ui/types.ts` | The Rust↔TS boundary types | Any change to a struct that crosses it |
@@ -89,6 +93,13 @@ src-tauri/src/
   supervisors. See `../planning/decisions/2026-07-28-D01-dual-channel.md`.
 - **The UI reads structs, never prose.** All parsing happens in Rust. See
   `../planning/decisions/2026-07-28-D11-project-card-cached.md`.
+- **Detection and expectation are separate axes** (D18). `scan::detect_icm`
+  always reports what is on disk, for every repo. Whether a missing layer is
+  *badged* comes from the project's declared `kind`. Never suppress detection to
+  silence a badge — that makes `config/contracts/icm.md` lie for every repo on
+  every machine.
+- **`should_flag_icm` exists twice**, in `scan/mod.rs` and in `ui/types.ts`, and
+  both are tested. If you change one, change the other.
 - **Errors surface; they are never swallowed.** A failed scan renders as a
   visible error, not an empty list.
 - **Never panic on a user's file.** Any parser handed a malformed file in
