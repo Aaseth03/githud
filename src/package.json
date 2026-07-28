@@ -9,8 +9,8 @@
     "lint": "oxlint",
     "preview": "vite preview",
     "tauri": "tauri",
-    "app": "tauri dev",
-    "app:build": "tauri build",
+    "app": "WEBKIT_DISABLE_DMABUF_RENDERER=1 tauri dev",
+    "app:build": "WEBKIT_DISABLE_DMABUF_RENDERER=1 tauri build",
     "test:core": "cargo test --manifest-path src-tauri/Cargo.toml",
     "test": "vitest run",
     "test:watch": "vitest"

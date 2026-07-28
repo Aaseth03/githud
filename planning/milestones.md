@@ -45,9 +45,14 @@ the scan against the real root, and `npm test` proves the tab rules. Green
 - [x] ICM badge on repos lacking Layer 0 or Layer 1, per
       `../config/contracts/icm.md`
 - [x] Plan written and its Outputs contract discharged
-- [ ] Seen running in a window by a human — the one part a test cannot assert
-      (blocked only by the Wayland launch issue in
-      `../docs/guides/build-and-run.md`; runs clean under XWayland)
+- [x] **Seen rendering in a real window** — screenshotted on native Wayland
+      2026-07-28. Sidebar lists all five repos with the vault showing its
+      `Obsidian/HOME_AI_VAULT` path at depth 2, `AIOSV1` and `Hermes` under
+      Uninitiated, `L1` badge on the vault and `L0` on voicebox, stat tiles
+      reading 5 / 3 / 2
+- [x] Scaffold defaults fixed, found by that first look: window was 800×600,
+      identifier was the placeholder `com.tauri.dev`, and there was no CSP
+- [x] Production CSP verified against a real release build, not just assumed
 
 ### M2 — Embedded terminal
 **Status:** not-started

@@ -79,25 +79,41 @@ build fails at link time.
 Linux instructions but is only needed for a system tray, which GIT HUD does not
 have. It is not installed on the dev machine and nothing has asked for it.
 
-## Known issue — Wayland
+## Known issue — WebKitGTK DMABUF on Nvidia
 
-Launching the dev app from a **non-interactive or sandboxed shell** can fail
-with:
+**`npm run app` already sets the fix.** This section explains what it is and why,
+so nobody removes it.
+
+On this machine (KDE/Wayland, GeForce RTX 3060 alongside Intel UHD 770),
+WebKitGTK's DMABUF renderer cannot allocate a GPU buffer. It fails one of two
+ways depending on the backend:
 
 ```
-Gdk-Message: Error 71 (Protocol error) dispatching to Wayland display.
+Gdk-Message: Error 71 (Protocol error) dispatching to Wayland display.   # native Wayland: no window at all
+Failed to create GBM buffer of size 1440x900: Invalid argument           # XWayland: a window that paints nothing
 ```
 
-The Rust core builds and starts correctly; only the window creation fails,
-because that shell cannot reach the compositor socket. Launch it from a normal
-terminal session instead, or force XWayland:
+The second is the dangerous one — **the process stays alive and the window is
+titled correctly, but the content area is solid black.** A liveness check passes
+while the app is completely broken.
+
+The fix is one environment variable:
 
 ```bash
-GDK_BACKEND=x11 npm run app
+WEBKIT_DISABLE_DMABUF_RENDERER=1
 ```
 
-Observed 2026-07-28 on KDE/Wayland. This is not an application bug — the same
-binary runs cleanly under XWayland from the same shell.
+That alone resolves both symptoms on native Wayland. `GDK_BACKEND=x11` is **not**
+required and was a misdiagnosis on first contact — XWayland appeared to help only
+because it converted a hard failure into a silent one.
+
+Verified 2026-07-28: with the variable set, `npm run app` renders correctly on
+native Wayland. Drop the variable when WebKitGTK or the driver fixes the DMABUF
+path; the only cost of keeping it is losing that renderer's acceleration, which
+is broken here anyway.
+
+**Lesson worth keeping:** a Tauri process that survives is not evidence that it
+renders. Screenshot it.
 
 ## Notes
 
