@@ -12,7 +12,7 @@ pub const ADAPTER_ID: &str = "claude-code";
 
 /// The invocation. `--input-format stream-json` is the flag that matters: it
 /// makes the process a persistent bidirectional session rather than a one-shot.
-pub fn args(model: Option<&str>) -> Vec<String> {
+pub fn args(model: Option<&str>, resume: Option<&str>) -> Vec<String> {
     let mut a = vec![
         "--print".into(),
         "--output-format".into(),
@@ -24,6 +24,12 @@ pub fn args(model: Option<&str>) -> Vec<String> {
     if let Some(m) = model {
         a.push("--model".into());
         a.push(m.into());
+    }
+    // STOP kills the process, so resuming is the only way the conversation
+    // survives it. Without this, pressing STOP silently discards the context.
+    if let Some(sid) = resume {
+        a.push("--resume".into());
+        a.push(sid.into());
     }
     a
 }
@@ -143,11 +149,15 @@ fn map_user(v: &Value) -> Vec<AgentEvent> {
     content
         .iter()
         .filter(|b| b.get("type").and_then(Value::as_str) == Some("tool_result"))
-        .map(|b| AgentEvent::ToolResult {
-            id: str_at(b, "tool_use_id").unwrap_or_default(),
-            // Absent `is_error` means success — that is how the CLI reports it.
-            ok: !b.get("is_error").and_then(Value::as_bool).unwrap_or(false),
-            detail: None,
+        .map(|b| {
+            let ok = !b.get("is_error").and_then(Value::as_bool).unwrap_or(false);
+            AgentEvent::ToolResult {
+                id: str_at(b, "tool_use_id").unwrap_or_default(),
+                // Absent `is_error` means success — that is how the CLI reports it.
+                ok,
+                // A failure without its reason is a failure you cannot act on.
+                detail: if ok { None } else { result_text(b) },
+            }
         })
         .collect()
 }
@@ -159,6 +169,30 @@ fn map_user(v: &Value) -> Vec<AgentEvent> {
 /// after this line.
 fn map_result(v: &Value) -> Vec<AgentEvent> {
     let mut out = Vec::new();
+
+    // A denied tool is not a failure of the agent, and saying nothing about it
+    // makes the app look broken. Name what was refused and why it can be.
+    if let Some(denials) = v.get("permission_denials").and_then(Value::as_array) {
+        if !denials.is_empty() {
+            let tools: Vec<String> = denials
+                .iter()
+                .filter_map(|d| str_at(d, "tool_name"))
+                .collect();
+            let names = if tools.is_empty() {
+                "a tool".to_string()
+            } else {
+                tools.join(", ")
+            };
+            out.push(AgentEvent::Error {
+                message: format!(
+                    "Permission denied: {names}. GIT HUD runs the agent on the CLI's \
+                     default permission mode until the M4 guardrails exist — reads work, \
+                     writes do not. Use the Terminal pane for now."
+                ),
+                fatal: false,
+            });
+        }
+    }
 
     if v.get("is_error").and_then(Value::as_bool).unwrap_or(false) {
         out.push(AgentEvent::Error {
@@ -210,6 +244,31 @@ fn describe(name: &str, detail: Option<&str>) -> String {
     }
 }
 
+/// The text of a tool result, which may be a string or a content-block array.
+fn result_text(block: &Value) -> Option<String> {
+    let content = block.get("content")?;
+    let text = match content {
+        Value::String(s) => s.clone(),
+        Value::Array(parts) => parts
+            .iter()
+            .filter_map(|p| p.get("text").and_then(Value::as_str))
+            .collect::<Vec<_>>()
+            .join(" "),
+        _ => return None,
+    };
+    let text = text.trim();
+    if text.is_empty() {
+        return None;
+    }
+    // One line, bounded — this renders inline next to the tool name.
+    let one_line = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    Some(if one_line.len() > 160 {
+        format!("{}…", &one_line[..160])
+    } else {
+        one_line
+    })
+}
+
 fn str_at(v: &Value, key: &str) -> Option<String> {
     v.get(key).and_then(Value::as_str).map(str::to_string)
 }
@@ -223,7 +282,7 @@ mod tests {
 
     #[test]
     fn invocation_requests_a_persistent_bidirectional_session() {
-        let a = args(Some("claude-opus-5"));
+        let a = args(Some("claude-opus-5"), None);
 
         assert!(a.contains(&"--print".to_string()));
         assert!(a.windows(2).any(|w| w == ["--output-format", "stream-json"]));
@@ -234,7 +293,14 @@ mod tests {
 
     #[test]
     fn model_is_omitted_when_unset_so_the_cli_default_applies() {
-        assert!(!args(None).contains(&"--model".to_string()));
+        assert!(!args(None, None).contains(&"--model".to_string()));
+    }
+
+    #[test]
+    fn resuming_passes_the_prior_session_id() {
+        // What makes STOP recoverable rather than destructive.
+        let a = args(None, Some("ede19129"));
+        assert!(a.windows(2).any(|w| w == ["--resume", "ede19129"]));
     }
 
     #[test]
@@ -367,13 +433,57 @@ mod tests {
     }
 
     #[test]
-    fn a_failed_tool_result_is_marked_not_ok() {
-        let line = r#"{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","is_error":true,"content":"nope"}]}}"#;
+    fn a_failed_tool_result_is_marked_not_ok_and_carries_the_reason() {
+        // A failure without its reason is a failure you cannot act on.
+        let line = r#"{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","is_error":true,"content":"Claude requested permissions to write to editme.txt"}]}}"#;
 
         match &map_line("p", line)[0] {
-            AgentEvent::ToolResult { ok, .. } => assert!(!ok),
+            AgentEvent::ToolResult { ok, detail, .. } => {
+                assert!(!ok);
+                assert!(
+                    detail.as_deref().is_some_and(|d| d.contains("permissions")),
+                    "the reason must survive: {detail:?}"
+                );
+            }
             other => panic!("expected a tool result, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn a_successful_tool_result_carries_no_noise() {
+        let line = r#"{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","content":"1\thello"}]}}"#;
+
+        match &map_line("p", line)[0] {
+            AgentEvent::ToolResult { ok, detail, .. } => {
+                assert!(ok);
+                assert_eq!(*detail, None, "success needs no explanation");
+            }
+            other => panic!("expected a tool result, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_denied_permission_is_explained_rather_than_left_silent() {
+        // The reported symptom: edits simply did not happen, with no reason
+        // shown. Saying nothing makes a deliberate posture look like a bug.
+        let line = r#"{"type":"result","subtype":"success","is_error":false,"stop_reason":"end_turn","permission_denials":[{"tool_name":"Edit","tool_use_id":"t1"}]}"#;
+
+        let events = map_line("p", line);
+
+        let explained = events.iter().any(|e| matches!(
+            e, AgentEvent::Error { message, .. }
+            if message.contains("Edit") && message.contains("M4")
+        ));
+        assert!(explained, "a denial must name the tool and say why: {events:?}");
+    }
+
+    #[test]
+    fn no_denials_means_no_noise() {
+        let line = r#"{"type":"result","subtype":"success","is_error":false,"permission_denials":[]}"#;
+
+        assert!(!map_line("p", line)
+            .iter()
+            .any(|e| matches!(e, AgentEvent::Error { .. })));
     }
 
     #[test]

@@ -82,16 +82,28 @@ export function Chat({ project, visible }: Props) {
     if (!text || state.busy) return;
     setDraft("");
     setState((s) => appendUserTurn(s, text));
-    void invoke("agent_send", { id, text }).catch((e) =>
-      setState((s) =>
-        applyEvent(s, {
-          type: "error",
-          message: e instanceof Error ? e.message : String(e),
-          fatal: true,
-        }),
-      ),
-    );
-  }, [draft, state.busy, id]);
+
+    void (async () => {
+      try {
+        // STOP kills the process, so a stopped session has to be restarted
+        // before it can take another turn. The Rust side passes --resume, so
+        // the conversation continues rather than starting over.
+        if (state.ended) {
+          setState((s) => ({ ...s, ended: null }));
+          await invoke("agent_start", { id, cwd: project.path });
+        }
+        await invoke("agent_send", { id, text });
+      } catch (e) {
+        setState((s) =>
+          applyEvent(s, {
+            type: "error",
+            message: e instanceof Error ? e.message : String(e),
+            fatal: true,
+          }),
+        );
+      }
+    })();
+  }, [draft, state.busy, state.ended, id, project.path]);
 
   const stop = useCallback(() => {
     void invoke("agent_stop", { id }).catch(() => {
@@ -122,7 +134,9 @@ export function Chat({ project, visible }: Props) {
     <div className="flex h-full min-h-0 flex-col bg-deep">
       <header className="flex shrink-0 items-center gap-3 border-b border-line px-4 py-2">
         <span className="font-mono text-[10px] tracking-wider text-ink-faint">
-          {state.adapter ?? "connecting"}
+          {/* The harness prints nothing until the first message, so claiming
+              to be "connecting" before then would be a lie. */}
+          {state.adapter ?? "ready — send a message to start"}
           {state.model && (
             <span className="text-ink-dim"> · {state.model}</span>
           )}
@@ -148,9 +162,16 @@ export function Chat({ project, visible }: Props) {
           </p>
         )}
         {state.entries.length === 0 && !startError && (
-          <p className="pt-8 text-center text-xs text-ink-faint">
-            Ask it something. It is running in {project.name}.
-          </p>
+          <div className="pt-8 text-center text-xs text-ink-faint">
+            <p>Ask it something. It is running in {project.name}.</p>
+            <p className="mx-auto mt-3 max-w-sm leading-relaxed">
+              It can read and search. <span className="text-ink-dim">Writes are
+              refused</span> until the M4
+              guardrails exist — running with edit permission and no sandbox
+              beneath it is the one thing this app is built to avoid. Use the
+              Terminal pane meanwhile.
+            </p>
+          </div>
         )}
         {state.entries.map((entry) => (
           <EntryView key={entry.id + entry.kind} entry={entry} />
@@ -158,6 +179,10 @@ export function Chat({ project, visible }: Props) {
         {state.ended && (
           <p className="text-center font-mono text-[10px] text-ink-faint">
             session ended — {state.ended}
+            <br />
+            <span className="text-ink-dim">
+              send a message to resume the conversation
+            </span>
           </p>
         )}
       </div>

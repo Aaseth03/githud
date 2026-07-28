@@ -39,9 +39,9 @@ impl Adapter {
         }
     }
 
-    fn args(&self, model: Option<&str>) -> Vec<String> {
+    fn args(&self, model: Option<&str>, resume: Option<&str>) -> Vec<String> {
         match self {
-            Adapter::ClaudeCode => claude::args(model),
+            Adapter::ClaudeCode => claude::args(model, resume),
         }
     }
 
@@ -67,6 +67,24 @@ impl Adapter {
     }
 }
 
+/// Append a raw protocol line to `$GITHUD_AGENT_LOG`, when set.
+///
+/// The adapter's whole job is translating someone else's stream; when it
+/// disagrees with reality you need the actual bytes, not a reconstruction.
+pub fn debug_log(line: &str) {
+    let Ok(path) = std::env::var("GITHUD_AGENT_LOG") else {
+        return;
+    };
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+    {
+        use std::io::Write as _;
+        let _ = writeln!(f, "{line}");
+    }
+}
+
 fn which(binary: &str) -> Option<std::path::PathBuf> {
     let path = std::env::var_os("PATH")?;
     std::env::split_paths(&path)
@@ -84,6 +102,10 @@ struct Session {
 #[derive(Clone, Default)]
 pub struct Agents {
     inner: Arc<Mutex<HashMap<String, Session>>>,
+    /// Last known session id per project, kept **after** a session ends so the
+    /// next start can `--resume` it. STOP kills the process; without this the
+    /// conversation would be silently discarded along with it.
+    resumable: Arc<Mutex<HashMap<String, String>>>,
 }
 
 impl Agents {
@@ -93,6 +115,23 @@ impl Agents {
 
     fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<String, Session>> {
         self.inner.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    fn resumable_lock(&self) -> std::sync::MutexGuard<'_, HashMap<String, String>> {
+        self.resumable.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Remember a session id so a later start can resume this conversation.
+    pub fn remember_session(&self, id: &str, session_id: &str) {
+        if !session_id.is_empty() {
+            self.resumable_lock()
+                .insert(id.to_string(), session_id.to_string());
+        }
+    }
+
+    /// The conversation a fresh start would resume, if any.
+    pub fn resumable_session(&self, id: &str) -> Option<String> {
+        self.resumable_lock().get(id).cloned()
     }
 
     pub fn has(&self, id: &str) -> bool {
@@ -128,17 +167,33 @@ impl Agents {
             ));
         }
 
+        let resume = self.resumable_session(id);
         let mut child = Command::new(adapter.binary())
-            .args(adapter.args(model))
+            .args(adapter.args(model, resume.as_deref()))
             .current_dir(cwd)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::null())
+            // Captured, not discarded. A harness that complains on stderr and
+            // is never read is a harness that fails silently.
+            .stderr(Stdio::piped())
             .spawn()
             .map_err(|e| format!("could not start {}: {e}", adapter.binary()))?;
 
         let stdin = child.stdin.take().ok_or("no stdin on the agent process")?;
         let stdout = child.stdout.take().ok_or("no stdout on the agent process")?;
+
+        // Drain stderr on its own thread. A full pipe would otherwise block the
+        // child, and its complaints are worth logging rather than losing.
+        if let Some(stderr) = child.stderr.take() {
+            let id = id.to_string();
+            std::thread::spawn(move || {
+                use std::io::BufRead as _;
+                for line in std::io::BufReader::new(stderr).lines().map_while(Result::ok) {
+                    log::warn!("agent[{id}] stderr: {line}");
+                    debug_log(&format!("STDERR {line}"));
+                }
+            });
+        }
 
         self.lock().insert(
             id.to_string(),
@@ -272,6 +327,44 @@ mod tests {
         agents.stop_all();
 
         assert_eq!(agents.count(), 0);
+    }
+
+    #[test]
+    fn a_session_id_survives_the_session_so_stop_is_recoverable() {
+        // The reported bug: STOP left the project unusable. Killing the process
+        // is unavoidable, so the conversation has to be resumable instead.
+        let agents = Agents::new();
+        assert_eq!(agents.resumable_session("proj"), None);
+
+        agents.remember_session("proj", "ede19129");
+        assert_eq!(
+            agents.resumable_session("proj"),
+            Some("ede19129".to_string())
+        );
+
+        agents.stop("proj");
+        assert_eq!(
+            agents.resumable_session("proj"),
+            Some("ede19129".to_string()),
+            "stopping must not discard what makes the conversation recoverable"
+        );
+    }
+
+    #[test]
+    fn an_empty_session_id_is_not_remembered() {
+        let agents = Agents::new();
+        agents.remember_session("proj", "");
+        assert_eq!(agents.resumable_session("proj"), None);
+    }
+
+    #[test]
+    fn resumable_ids_are_per_project() {
+        let agents = Agents::new();
+        agents.remember_session("a", "sid-a");
+        agents.remember_session("b", "sid-b");
+
+        assert_eq!(agents.resumable_session("a"), Some("sid-a".into()));
+        assert_eq!(agents.resumable_session("b"), Some("sid-b".into()));
     }
 
     #[test]

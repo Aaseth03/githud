@@ -110,10 +110,23 @@ the actual file being read; STOP kills mid-stream cleanly.
 - [x] **Permission mode deliberately unset** until M4 — `acceptEdits` now would
       grant free writes with no sandbox under them. Reads work on the default
 - [x] Seen holding a real conversation in the app
-- [ ] A conversation that **edits** a file — **needs a human**, and needs the
-      permission question settled at M4
-- [ ] Status line observed naming a real file mid-read — **needs a human**
-- [ ] STOP pressed mid-stream — **needs a human**
+- [x] Status line observed naming a real file mid-read — confirmed by hand
+- [x] STOP pressed mid-stream — confirmed by hand, and the bug it exposed fixed:
+      STOP killed the process and left the project unusable ("no agent session
+      for Professor"). Killing is unavoidable, so the next message now restarts
+      with `--resume` and the conversation survives. **Proved** by a live test:
+      told 41 before STOP, it answered 42 after
+- [x] **Denied tools are explained rather than silent.** Writes are refused
+      under the default permission mode, which is deliberate — but nothing said
+      so, which made a chosen posture look like a broken app. The denial now
+      names the tool, carries the harness's reason, and says why
+- [x] Live integration test against the real binary
+      (`cargo test --test agent_live -- --ignored`) — proves the production path
+      end to end, after driving the UI repeatedly failed for reasons unrelated
+      to the channel
+- [ ] A conversation that **edits** a file — blocked until M4 settles the
+      permission mode. This is the milestone's last open item and it is
+      deliberately deferred, not forgotten
 
 ### M4 — Guardrails
 **Status:** not-started

@@ -233,7 +233,13 @@ fn agent_start(
         let reader = std::io::BufReader::new(stdout);
         for line in reader.lines() {
             let Ok(line) = line else { break };
+            agent::debug_log(&line);
             for event in agents.map_line(&id, &project, &line) {
+                // Keep the session id so STOP is recoverable: the next start
+                // resumes this conversation instead of losing it.
+                if let agent::AgentEvent::SessionStarted { session_id, .. } = &event {
+                    agents.remember_session(&id, session_id);
+                }
                 if app
                     .emit(
                         "agent://event",

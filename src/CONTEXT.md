@@ -143,6 +143,13 @@ src-tauri/src/
   turn; the process stays alive and keeps its context. Emitting `SessionEnded`
   there would tear down a live session — the single easiest mistake in the
   adapter, guarded by tests on both sides.
+- **STOP kills, so the conversation must be resumable.** The CLI has no
+  interrupt message; stopping ends the process. The session id is kept after
+  the session dies and replayed as `--resume`, so the next message continues
+  rather than starting over. Without that, STOP silently discards the thread.
+- **A refused tool must say so.** Writes are denied under the default
+  permission mode until M4. Surfacing nothing made a deliberate posture look
+  like a broken app — the denial names the tool and the reason.
 - **The UI never sees a harness's JSON.** Everything crossing the boundary is
   `agent::event::AgentEvent`. That is what makes a second adapter a
   self-contained change (D2).

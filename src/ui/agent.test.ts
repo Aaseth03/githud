@@ -175,3 +175,41 @@ describe("activity label", () => {
     expect(activityLabel(ended)).toBeNull();
   });
 });
+
+describe("recovering from STOP", () => {
+  it("marks the session ended so the next send can restart it", () => {
+    // The reported bug: after STOP, sending produced "no agent session".
+    // Killing the process is unavoidable, so the UI has to know it must
+    // restart — and the Rust side resumes the conversation rather than
+    // losing it.
+    let s = applyEvent(initialChatState, started);
+    s = appendUserTurn(s, "long running thing");
+    s = apply(s, { type: "session_ended", reason: "the agent process exited" });
+
+    expect(s.ended).not.toBeNull();
+    expect(s.busy).toBe(false);
+  });
+
+  it("keeps the transcript across a stop so context is visibly preserved", () => {
+    let s = applyEvent(initialChatState, started);
+    s = appendUserTurn(s, "remember 41");
+    s = apply(
+      s,
+      { type: "assistant_text", text: "ONE", final: true },
+      { type: "turn_ended", stop_reason: "end_turn" },
+      { type: "session_ended", reason: "stopped" },
+    );
+
+    expect(s.entries).toHaveLength(2);
+  });
+
+  it("clears the ended marker once a new session starts", () => {
+    let s = apply(initialChatState, {
+      type: "session_ended",
+      reason: "stopped",
+    });
+    s = applyEvent(s, started);
+
+    expect(s.ended).toBeNull();
+  });
+});
