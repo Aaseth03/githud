@@ -15,8 +15,11 @@ config/
 ├─ CONTEXT.md
 ├─ projects.toml               declared overrides only
 ├─ characters/                 (empty — .gitkeep; profiles arrive at M7)
-└─ contracts/
-   └─ milestones.md            the cross-project milestone file format
+├─ contracts/
+│  ├─ milestones.md            the cross-project milestone file format
+│  └─ icm.md                   what counts as an ICM workspace, and how it is detected
+└─ skills/
+   └─ icm-architect/           vendored procedure for building an ICM workspace (MIT, third-party)
 ```
 
 ## Routing
@@ -26,6 +29,12 @@ config/
 | `projects.toml` | Per-project overrides — adapter, model, character, display name | Overriding something the scan gets wrong |
 | `characters/` | `<name>.toml` — sprite set, voice id, theme | Adding or editing a character (M7) |
 | `contracts/milestones.md` | The milestone format the Rust parser reads out of *any* repo | Changing the format, or writing the parser |
+| `contracts/icm.md` | The L0/L1 detection contract `scan::detect_icm` implements | Changing what GIT HUD badges as non-conformant |
+| `skills/icm-architect/` | How to *build* a conformant workspace — vendored, harness-neutral | The M8 new-project flow; restructuring a repo |
+
+**`contracts/icm.md` and `skills/icm-architect/` answer different questions.**
+The contract is what GIT HUD *recognises* and is deliberately more permissive
+than the method; the skill is how a workspace gets *built*. Do not merge them.
 
 ## Rules
 

@@ -8,7 +8,8 @@ architecture contracts are `../planning/architecture/`. Neither belongs here.
 ```text
 docs/
 ├─ CONTEXT.md
-└─ guides/          (empty — .gitkeep; build-and-run.md lands at M1)
+└─ guides/
+   └─ build-and-run.md
 ```
 
 ## Routing
@@ -19,9 +20,8 @@ docs/
 
 ## Canonical
 
-`guides/build-and-run.md` is the **single home for every build and packaging
-dependency** — system libraries, Tauri plugins, sidecars, signing. When a
+[`guides/build-and-run.md`](guides/build-and-run.md) is the **single home for
+every build and packaging dependency** — system libraries, Tauri plugins,
+sidecars, signing, proven toolchain versions, and known platform issues. When a
 dependency is added anywhere in the project, it is recorded there and nowhere
 else. Link to it; never mirror it.
-
-It does not exist yet. It is created at M1, when there is something to build.
