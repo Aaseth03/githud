@@ -56,10 +56,19 @@ the scan against the real root, and `npm test` proves the tab rules. Green
 
 ### M2 — Embedded terminal
 **Status:** in-progress
-**Validation:** run `htop` in a project tab, then run `claude` by hand inside it.
+**Validation:** run a full-screen TUI in a project tab — `top` is installed;
+`vim` or `watch -n1 date` do just as well — then run `claude` by hand inside it.
 At this point GIT HUD already replaces the terminal. **Not yet run by hand** —
 no input-automation tool exists on this machine, so typing into the terminal is
 the one step a test cannot stand in for.
+
+What the TUI actually proves: the alternate screen buffer, a full redraw driven
+by escape sequences, and reflow on resize. Any curses program shows it.
+
+*The original line named `htop`, which is not installed on this machine — the
+validation was written without checking the binary existed. Naming a capability
+rather than a binary is the fix; `htop` is fine if you want it
+(`sudo dnf install htop`) but nothing should depend on it.*
 
 - [x] `portable-pty` spawn per tab with correct `cwd`
 - [x] xterm.js mount, with a Nerd Font first so prompt glyphs render
@@ -70,7 +79,8 @@ the one step a test cannot stand in for.
       close, kill all on app exit. Verified: shells die with the app, none
       orphaned
 - [x] Seen rendering the real shell with its prompt, git branch and colours
-- [ ] `htop` drawn and reflowing on resize — **needs a human**
+- [x] Confirmed by hand to look and feel like a terminal window
+- [ ] A full-screen TUI (`top`) drawn and reflowing on resize — **needs a human**
 - [ ] `claude` run by hand inside it — **needs a human**
 
 ### M3 — Agent channel

@@ -20,7 +20,8 @@
 2. xterm.js renders it. **Zero parsing** — bytes in, bytes out.
 3. Resizing the window resizes the PTY, and full-screen programs reflow.
 4. Scrollback survives switching to Chat and back.
-5. `htop` runs. `claude` runs. At that point this replaces the terminal.
+5. A full-screen TUI runs and reflows. `claude` runs. At that point this
+   replaces the terminal.
 
 ### Design decisions
 
@@ -92,6 +93,12 @@
 
 ## Validation
 
-`npm run app`, open a project tab, switch to Terminal, run `htop` — it draws and
-reflows on window resize. Then run `claude` by hand inside it and hold a short
-conversation. Close the tab and confirm the shell is gone, not orphaned.
+`npm run app`, open a project tab, switch to Terminal, run a full-screen TUI —
+`top` is installed on this machine — and confirm it draws and reflows on window
+resize. Then run `claude` by hand inside it and hold a short conversation. Close
+the tab and confirm the shell is gone, not orphaned.
+
+**Name the capability, not the binary.** This line originally said `htop`, which
+is not installed here; the validation would have failed on a missing package
+rather than on anything about the terminal. What matters is a curses program
+using the alternate screen buffer.
