@@ -20,7 +20,8 @@ planning/
 │  └─ failure-modes.md
 ├─ plans/
 │  ├─ _TEMPLATE.plan.md
-│  └─ 2026-07-28-m1-shell-scan-tabs.plan.md
+│  ├─ 2026-07-28-m1-shell-scan-tabs.plan.md
+│  └─ 2026-07-28-m2-embedded-terminal.plan.md
 └─ decisions/
    ├─ 2026-07-28-D01-dual-channel.md
    ├─ 2026-07-28-D02-adapters-target-harnesses.md
@@ -104,6 +105,7 @@ thing*, not from planning it.
 | Date | Plan | Status |
 |---|---|---|
 | 2026-07-28 | [M1 — shell, scan, tabs](plans/2026-07-28-m1-shell-scan-tabs.plan.md) | **Implemented** — validation green |
+| 2026-07-28 | [M2 — embedded terminal](plans/2026-07-28-m2-embedded-terminal.plan.md) | **Implemented** — awaiting the hands-on `htop` / `claude` check |
 
 ## Plan contract
 

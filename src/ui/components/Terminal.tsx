@@ -50,7 +50,14 @@ export function Terminal({ id, cwd, visible }: Props) {
 
     let disposed = false;
     const term = new Xterm({
+      // A Nerd Font first, and it matters more than it looks: a modern shell
+      // prompt (starship, powerlevel10k, oh-my-posh) is built from powerline
+      // and Nerd Font glyphs. Without one they render as replacement boxes,
+      // and the prompt — the thing you look at most — becomes the ugliest part
+      // of the app. Falls back through plain monospace if none is installed.
       fontFamily:
+        '"FiraCode Nerd Font Mono", "CaskaydiaCove Nerd Font Mono", ' +
+        '"JetBrainsMono Nerd Font Mono", "Symbols Nerd Font Mono", ' +
         '"JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, monospace',
       fontSize: 13,
       // Requirement 4: scrollback must survive switching to Chat and back.

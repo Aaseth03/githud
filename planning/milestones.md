@@ -55,14 +55,23 @@ the scan against the real root, and `npm test` proves the tab rules. Green
 - [x] Production CSP verified against a real release build, not just assumed
 
 ### M2 — Embedded terminal
-**Status:** not-started
+**Status:** in-progress
 **Validation:** run `htop` in a project tab, then run `claude` by hand inside it.
-At this point GIT HUD already replaces the terminal.
+At this point GIT HUD already replaces the terminal. **Not yet run by hand** —
+no input-automation tool exists on this machine, so typing into the terminal is
+the one step a test cannot stand in for.
 
-- [ ] `portable-pty` spawn per tab with correct `cwd`
-- [ ] xterm.js mount
-- [ ] Resize propagation
-- [ ] Scrollback
+- [x] `portable-pty` spawn per tab with correct `cwd`
+- [x] xterm.js mount, with a Nerd Font first so prompt glyphs render
+- [x] Resize propagation, coalesced to one animation frame
+- [x] Scrollback (10k lines); the pane hides rather than unmounts, so it
+      survives switching to Chat and back
+- [x] Session lifecycle — reattach rather than double-spawn, release on tab
+      close, kill all on app exit. Verified: shells die with the app, none
+      orphaned
+- [x] Seen rendering the real shell with its prompt, git branch and colours
+- [ ] `htop` drawn and reflowing on resize — **needs a human**
+- [ ] `claude` run by hand inside it — **needs a human**
 
 ### M3 — Agent channel
 **Status:** not-started

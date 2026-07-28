@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { Sidebar } from "./components/Sidebar";
 import { TabStrip } from "./components/TabStrip";
 import { MainView } from "./components/MainView";
@@ -28,6 +29,12 @@ export default function App() {
 
   const handleClose = useCallback((key: string) => {
     setTabState((s) => closeTab(s, key));
+    // Closing the tab kills its shell. Without this every closed tab leaks a
+    // login shell — invisible until there are forty of them. Closing a tab
+    // whose terminal was never opened is a no-op on the Rust side.
+    void invoke("pty_close", { id: key }).catch(() => {
+      /* nothing to close */
+    });
   }, []);
 
   const handleSelect = useCallback((key: string) => {
