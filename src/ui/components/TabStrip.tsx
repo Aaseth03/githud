@@ -19,47 +19,59 @@ export function TabStrip({ tabs, activeKey, onSelect, onClose }: Props) {
         const isActive = key === activeKey;
         const isMain = tab.kind === "main";
         return (
-          <div
-            key={key}
-            className={[
-              "group relative flex items-center gap-2 rounded-t border-x border-t px-3.5 py-2",
-              "transition-colors",
-              isActive
-                ? "border-line-bright bg-surface text-ink"
-                : "border-transparent bg-transparent text-ink-faint hover:bg-surface/50 hover:text-ink-dim",
-            ].join(" ")}
-          >
-            {/* The active tab is lit along its top edge — the strip reads at a
-                glance without relying on fill alone. */}
-            {isActive && (
-              <span
-                aria-hidden
-                className="absolute inset-x-0 top-0 h-px bg-signal shadow-[0_0_10px_var(--color-signal)]"
-              />
-            )}
-
+          // The wrapper carries no padding and no visual styling of its own.
+          // Everything that *looks* like the tab lives on the button, so the
+          // hit area and the hover area are the same rectangle by construction
+          // rather than by two sets of classes agreeing.
+          <div key={key} className="group relative flex shrink-0">
             <button
               role="tab"
               aria-selected={isActive}
               onClick={() => onSelect(key)}
-              className="max-w-52 truncate text-sm focus-visible:outline-2
-                         focus-visible:outline-offset-2 focus-visible:outline-signal"
               title={tab.kind === "project" ? tab.project.path : "Main"}
+              className={[
+                "relative flex min-h-10 items-center rounded-t border-x border-t",
+                "px-4 py-2.5 text-sm transition-colors",
+                // Room for the close control, which overlays the right edge.
+                isMain ? "" : "pr-9",
+                isActive
+                  ? "border-line-bright bg-surface text-ink"
+                  : "border-transparent bg-transparent text-ink-faint hover:bg-surface/50 hover:text-ink-dim",
+                // Inset so the ring is not clipped by the top of the window.
+                "focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-signal",
+              ].join(" ")}
             >
-              {isMain ? (
-                <span className="font-mono tracking-[0.16em]">HUD</span>
-              ) : (
-                tab.project.name
+              {/* The active tab is lit along its top edge — the strip reads at
+                  a glance without relying on fill alone. */}
+              {isActive && (
+                <span
+                  aria-hidden
+                  className="absolute inset-x-0 top-0 h-px bg-signal shadow-[0_0_10px_var(--color-signal)]"
+                />
               )}
+
+              <span className="max-w-52 truncate">
+                {isMain ? (
+                  <span className="font-mono tracking-[0.16em]">HUD</span>
+                ) : (
+                  tab.project.name
+                )}
+              </span>
             </button>
 
             {!isMain && (
+              // A sibling rather than a child — a button cannot nest inside a
+              // button. Being later in the DOM and absolutely positioned, it
+              // takes the click in its own area without needing to stop
+              // propagation.
               <button
                 onClick={() => onClose(key)}
                 aria-label={`Close ${tab.project.name}`}
                 title={`Close ${tab.project.name}`}
-                className="-mr-1 rounded px-1 text-ink-faint opacity-0 transition
-                           group-hover:opacity-100 hover:text-danger
+                className="absolute top-1/2 right-1.5 flex size-6 -translate-y-1/2
+                           items-center justify-center rounded text-ink-faint
+                           opacity-0 transition group-hover:opacity-100
+                           hover:bg-line hover:text-danger
                            focus-visible:opacity-100 focus-visible:outline-2
                            focus-visible:outline-offset-1 focus-visible:outline-signal"
               >
