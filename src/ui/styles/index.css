@@ -1,0 +1,95 @@
+@import "tailwindcss";
+
+/* GIT HUD is a cockpit, not a document. Dark by commitment, not by toggle —
+   there is no light mode and the design does not pretend to support one.
+   Depth comes from layered surfaces over a deep-space field, hierarchy from
+   scale contrast, and anything that is a real machine value (a path, a branch,
+   a count) is set in mono so it reads as data rather than as prose. */
+
+@theme {
+  --color-void: #05060b;
+  --color-deep: #0a0d17;
+  --color-surface: #111524;
+  --color-raised: #171c30;
+  --color-line: #232a44;
+  --color-line-bright: #333d63;
+
+  --color-ink: #e6e9f5;
+  --color-ink-dim: #98a0bf;
+  --color-ink-faint: #626a8a;
+
+  --color-signal: #6ee7ff;
+  --color-signal-deep: #1e6f85;
+  --color-warn: #ffb454;
+  --color-danger: #ff6b81;
+  --color-go: #7ee787;
+
+  --font-mono: "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular,
+    Menlo, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-void);
+  color: var(--color-ink);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden;
+}
+
+/* The galaxy field from the sketch. Three offset radial washes rather than an
+   image: it scales to any window size, costs nothing, and never bands. */
+.starfield {
+  background-image:
+    radial-gradient(
+      ellipse 80% 55% at 50% -10%,
+      rgba(110, 231, 255, 0.09),
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse 60% 50% at 12% 105%,
+      rgba(126, 87, 255, 0.11),
+      transparent 70%
+    ),
+    radial-gradient(
+      ellipse 45% 40% at 92% 88%,
+      rgba(30, 111, 133, 0.13),
+      transparent 70%
+    );
+}
+
+/* Scrollbars that belong to the instrument rather than to the OS. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-line-bright) transparent;
+}
+*::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--color-line-bright);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--color-signal-deep);
+  background-clip: content-box;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

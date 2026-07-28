@@ -11,8 +11,17 @@ githud/
    ├─ projects.toml              declared overrides only, never a project list
    ├─ characters/<name>.toml     sprite set, voice id, theme
    ├─ sessions-index.jsonl       append-only session summaries
-   └─ contracts/milestones.md    the cross-project milestone format
+   ├─ contracts/
+   │  ├─ milestones.md           the cross-project milestone format
+   │  └─ icm.md                  what counts as an ICM workspace, and how it is detected
+   └─ skills/icm-architect/      vendored procedure for building one (MIT, third-party)
 ```
+
+**Capabilities travel here too, not just data.** D17 vendored the ICM procedure
+into `config/` for the same reason the contracts live there: anything GIT HUD
+depends on to read or create a project must exist on every machine and under
+every harness. A dependency installed into one harness's skills directory is
+not portable, and it fails by silently vanishing rather than by erroring.
 
 ## Local state — never synced, never committed
 

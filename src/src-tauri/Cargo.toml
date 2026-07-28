@@ -1,0 +1,30 @@
+[package]
+name = "githud"
+version = "0.1.0"
+description = "GIT HUD — a desktop replacement for the terminal workflow in AI-assisted development"
+authors = ["Aaseth03"]
+license = ""
+repository = "https://github.com/Aaseth03/githud"
+edition = "2021"
+rust-version = "1.77.2"
+
+# The app logic lives in a lib so the desktop binary (main.rs) and the test
+# harness share it. `cargo test` runs against the lib without building a window.
+[lib]
+name = "githud_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.6.3", features = [] }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+log = "0.4"
+tauri = { version = "2.11.3", features = [] }
+tauri-plugin-log = "2"
+# Resolves the scan root (~/github) without shelling out or reading $HOME by hand.
+dirs = "6"
+
+[dev-dependencies]
+dirs = "6"

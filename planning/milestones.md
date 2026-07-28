@@ -29,16 +29,25 @@ constraining record, quoted the Layer 0 canary verbatim, and flagged the
 - [x] Private remote created and pushed — `Aaseth03/githud`
 
 ### M1 — Shell, scan, tabs
-**Status:** not-started
+**Status:** in-progress
 **Validation:** all five repos in `~/github` appear, including the vault at depth
-2; clicking an already-open project twice does not open two tabs.
+2; clicking an already-open project twice does not open two tabs. **Both halves
+are mechanical, not visual** — `cargo test --test real_root -- --ignored` proves
+the scan against the real root, and `npm test` proves the tab rules. Green
+2026-07-28: 5 repos found, vault at depth 2, 31 tests passing.
 
-- [ ] Tauri + React + Vite + TS + Tailwind shell builds and runs
-- [ ] Walk `~/github` to depth 3; a folder is a project if it has `.git`; stop
+- [x] Tauri + React + Vite + TS + Tailwind shell builds and runs
+- [x] Walk `~/github` to depth 3; a folder is a project if it has `.git`; stop
       descending once found
-- [ ] Sidebar project list
-- [ ] Tab strip with open/focus semantics
-- [ ] ICM badge on repos lacking Layer 0 or Layer 1
+- [x] Non-git root folders listed as uninitiated, not enterable
+- [x] Sidebar project list
+- [x] Tab strip with open/focus semantics
+- [x] ICM badge on repos lacking Layer 0 or Layer 1, per
+      `../config/contracts/icm.md`
+- [x] Plan written and its Outputs contract discharged
+- [ ] Seen running in a window by a human — the one part a test cannot assert
+      (blocked only by the Wayland launch issue in
+      `../docs/guides/build-and-run.md`; runs clean under XWayland)
 
 ### M2 — Embedded terminal
 **Status:** not-started
@@ -134,7 +143,10 @@ task; a new project is born end to end.
       auto-remove
 - [ ] A second adapter (Gemini CLI or OpenCode)
 - [ ] New-project flow: interview → `icm-architect` → `git init` → private remote
-      via `../ops/scripts/create-private-remote.sh`
+      via `../ops/scripts/create-private-remote.sh`. **Use the vendored copy at
+      `../config/skills/icm-architect/`, never a harness-installed one** (D17) —
+      an installed skill exists on one machine under one harness and vanishes
+      silently everywhere else
 
 ---
 

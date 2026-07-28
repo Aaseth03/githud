@@ -19,7 +19,8 @@ planning/
 │  ├─ ui-layout.md
 │  └─ failure-modes.md
 ├─ plans/
-│  └─ _TEMPLATE.plan.md
+│  ├─ _TEMPLATE.plan.md
+│  └─ 2026-07-28-m1-shell-scan-tabs.plan.md
 └─ decisions/
    ├─ 2026-07-28-D01-dual-channel.md
    ├─ 2026-07-28-D02-adapters-target-harnesses.md
@@ -36,7 +37,8 @@ planning/
    ├─ 2026-07-28-D13-mechanical-work-is-scripted.md
    ├─ 2026-07-28-D14-push-to-talk.md
    ├─ 2026-07-28-D15-speak-summaries-only.md
-   └─ 2026-07-28-D16-bwrap-into-v1.md
+   ├─ 2026-07-28-D16-bwrap-into-v1.md
+   └─ 2026-07-28-D17-vendor-icm.md
 ```
 
 `specs/` is real but currently empty — kept with a `.gitkeep` so the map matches
@@ -52,11 +54,13 @@ disk.
 | `plans/` | Implementation plans (`YYYY-MM-DD-title.plan.md`) | Planning a feature before coding — start from `plans/_TEMPLATE.plan.md` |
 | `specs/` | Feature specs (`feature-name_spec.md`) | Spec'ing a feature in detail |
 
-## Decisions D1–D16
+## Decisions D1–D17
 
-D1–D15 were committed 2026-07-28 out of the design interview; D16 followed the
-same day when a D7 assumption was tested and failed. **Do not re-litigate them.**
-Supersede one with a new dated record that names what it replaces.
+D1–D15 were committed 2026-07-28 out of the design interview; D16 and D17
+followed the same day — D16 when a D7 assumption was tested and failed, D17 when
+M1 turned out to depend on a definition that had no home in the repo. **Do not
+re-litigate them.** Supersede one with a new dated record that names what it
+replaces.
 
 | # | Decision |
 |---|---|
@@ -76,6 +80,7 @@ Supersede one with a new dated record that names what it replaces.
 | D14 | [Push-to-talk only](decisions/2026-07-28-D14-push-to-talk.md), in-app hotkey |
 | D15 | [Speak summaries](decisions/2026-07-28-D15-speak-summaries-only.md), never code or diffs |
 | D16 | [bwrap promoted into v1](decisions/2026-07-28-D16-bwrap-into-v1.md) — it is the floor; the shim is only a guard |
+| D17 | [ICM travels in the repo](decisions/2026-07-28-D17-vendor-icm.md) — the detection contract and the vendored procedure both live in `config/` |
 
 ## Architecture
 
@@ -92,7 +97,7 @@ Supersede one with a new dated record that names what it replaces.
 
 | Date | Plan | Status |
 |---|---|---|
-| — | none yet | — |
+| 2026-07-28 | [M1 — shell, scan, tabs](plans/2026-07-28-m1-shell-scan-tabs.plan.md) | **Implemented** — validation green |
 
 ## Plan contract
 
