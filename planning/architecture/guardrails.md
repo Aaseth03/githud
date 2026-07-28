@@ -43,13 +43,25 @@ blocked, every allowed op attempted and passing.** Ship on green only. An
 unrecognised invocation is denied, not allowed — the wrapper's default branch
 exits non-zero.
 
-## Open risk
+## Open risk — resolved 2026-07-28, badly
 
-Whether GitHub rulesets / protected branches are available on **private** repos
-under the current plan is **unverified**. If they are not, Layer 3 disappears and
-the PATH shim becomes load-bearing — which is a materially weaker position,
-because Layer 1 is bypassable by design. Confirm this at M4 before writing the
-shim, and say so loudly if the answer is no.
+GitHub rulesets and branch protection are **not available on private repos on the
+free plan**. Verified directly:
+
+```
+POST /repos/Aaseth03/githud/rulesets
+→ 403 "Upgrade to GitHub Pro or make this repository public..."
+```
+
+**Layer 3 does not currently exist.** The shim is load-bearing, and the shim is
+bypassable by absolute path by design — so at this moment the design has a guard
+where it claims to have a floor.
+
+Do not write the M4 shim as though Layer 3 backs it up. The open recommendation
+is to **promote Layer 2 (bwrap) into v1**, since it was only deferred on the
+assumption that Layer 3 was the floor, and optionally to buy Layer 3 back with
+GitHub Pro. Full reasoning and the ranked options:
+`../decisions/2026-07-28-D07-three-guardrail-layers.md`.
 
 ## Trust model
 

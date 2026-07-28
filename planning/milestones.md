@@ -12,7 +12,7 @@ not `done` until its `Validation` line has actually been run.
 ---
 
 ### M0 — Repo and ICM skeleton
-**Status:** in-progress
+**Status:** done
 **Validation:** an agent launched cold in this repo routes correctly from Layer 0
 to the right workspace without being told. **Passed 2026-07-28** — routed
 `AGENTS.md` → `CONTEXT.md` → `planning/CONTEXT.md`, read nothing else, derived
@@ -26,7 +26,7 @@ constraining record, quoted the Layer 0 canary verbatim, and flagged the
 - [x] `config/contracts/milestones.md`
 - [x] Decision records D1–D15
 - [x] Cold-agent routing test passed
-- [ ] Private remote created and pushed
+- [x] Private remote created and pushed — `Aaseth03/githud`
 
 ### M1 — Shell, scan, tabs
 **Status:** not-started
@@ -68,9 +68,13 @@ the actual file being read; STOP kills mid-stream cleanly.
 **Validation:** a default-deny test suite — every denied op attempted and
 blocked, every allowed op attempted and passing. Ship on green only.
 
-- [ ] Confirm whether protected branches are available on private repos under
-      the current GitHub plan; if not, say so loudly — the shim becomes the only
-      real layer
+- [x] Confirm whether protected branches are available on private repos under
+      the current GitHub plan — **checked 2026-07-28: they are not.** 403,
+      "Upgrade to GitHub Pro or make this repository public." Layer 3 does not
+      exist right now
+- [ ] **Decide how to replace Layer 3 before writing the shim** — ranked options
+      in `decisions/2026-07-28-D07-three-guardrail-layers.md`; the recommendation
+      is to promote bwrap into v1. This decision gets its own record
 - [ ] PATH shim wrappers for `git`, `gh`, `rm`, `sudo`
 - [ ] Shim injected into the agent process environment only, never the terminal
 - [ ] Branch isolation on project open
