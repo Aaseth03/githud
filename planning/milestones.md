@@ -157,8 +157,13 @@ blocked, every allowed op attempted and passing. Ship on green only.
       floor now exists. M3 deliberately left it unset
 - [x] Test suite green across both layers — 15/15 against real bwrap and the
       real shim
-- [ ] Branch isolation applied on project open — naming and the decision are
-      built and tested; wiring it to the open event is the last step
+- [x] **Branch isolation wired**, and deliberately **not** on project open:
+      it fires when an agent session starts, so browsing a project changes
+      nothing. That deviates from this milestone's original wording — opening
+      five projects to look at them should not create five branches
+- [x] Uncommitted work on a shared branch **stops the session** rather than
+      carrying it onto a branch you did not choose. Git would lose nothing, but
+      your changes would end up somewhere you did not put them
 - [ ] Confirmed by hand in the app
 
 ### M5 — Panels and project cards

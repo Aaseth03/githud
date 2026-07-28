@@ -87,6 +87,24 @@ anything backs it up except bwrap. GitHub Pro would restore Layer 3 as designed
 and is worth buying, but it is a complement — no remote rule stops a local
 `rm -rf`.
 
+## Branch isolation
+
+D6 in practice. An agent session starts on a branch of its own —
+`agent/<project>-<date>` — which is what makes the whole session reversible and
+therefore what makes per-action approval unnecessary.
+
+Three rules, all tested against real repositories:
+
+- **Only off a shared branch.** On a feature branch you are left where you are;
+  moving someone off their own half-finished work would be worse than the
+  problem being solved.
+- **It fires when the agent starts, not when the project opens.** Browsing five
+  projects should not create five branches. This deviates from M4's original
+  wording, on purpose.
+- **Uncommitted work on a shared branch stops the session.** Git would carry the
+  changes across and lose nothing, but they would land on a branch the user
+  never chose. Surface and wait, per `failure-modes.md`.
+
 ## Trust model
 
 D6: the agent commits freely on its own branch and never touches shared history.

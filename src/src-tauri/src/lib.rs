@@ -230,6 +230,14 @@ fn agent_start(
     } else {
         guard::Access::ReadWrite
     };
+    // D6: the agent works on a branch of its own, so the whole session is
+    // reversible and per-action approval is unnecessary. Only off a shared
+    // branch — moving someone off their own feature branch would be worse than
+    // the problem being solved. Read-only projects are never switched.
+    if !read_only.unwrap_or(false) {
+        guard::branch::isolate(std::path::Path::new(&cwd), &id)?;
+    }
+
     let Some(stdout) = agents.start(
         &id,
         std::path::Path::new(&cwd),
