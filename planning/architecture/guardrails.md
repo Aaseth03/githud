@@ -28,15 +28,21 @@ inspects `argv` and exits non-zero on a denied op. This works for every harness
 because they all shell out. It is bypassable by absolute path, so it is a guard,
 not a floor — treat it as one.
 
-**Layer 2 — bwrap filesystem scoping. This is the floor.** In v1 as of D16 —
-promoted out of "deferred" when Layer 3 turned out not to exist. The agent
-subprocess runs inside a bubblewrap sandbox with an explicit filesystem scope.
-Unlike the shim it does not care which binary is invoked or by what path: a
-process cannot write outside its bind mounts. `bubblewrap 0.11.0` is already
-installed, and the vault has proven this pattern
-(`AIOS/Memory/Topics/write-guardrail-hooks`), so this is known territory rather
-than research. The scope is specified in the M4 plan — project directory
-read-write, toolchain read-only, `~/.ssh` and `~/.gitconfig` not mounted at all.
+**Layer 2 — bwrap filesystem scoping. This is the floor. Built at M4.** Scope in
+[D19](../decisions/2026-07-28-D19-sandbox-scope.md); implementation in
+`src/src-tauri/src/guard/`; proved by `cargo test --test guardrails` and by a
+live test that asks the real agent to write outside its project and confirms it
+cannot.
+
+Promoted out of "deferred" by D16 when Layer 3 turned out not to exist. The
+agent runs inside bubblewrap with an explicit scope. Unlike the shim it does not
+care which binary is invoked or by what path: **a process cannot write outside
+its bind mounts.** Everything is read-only by default and writability is granted
+by exception — the project directory, and the harness's own state. `~/.ssh` is
+masked with an empty tmpfs rather than left unbound, because `--ro-bind /` would
+otherwise expose it and readable is enough to steal. `~/.gitconfig` is readable
+so `git commit` has an identity, and not writable so the agent cannot rewrite
+one.
 
 **Layer 3 — remote branch protection. Currently unavailable.** See the finding
 below. It only ever protected shared history; it was never going to stop local
@@ -44,10 +50,19 @@ destruction.
 
 ## Default-deny
 
-The test suite mirrors the vault's precedent: **every denied op attempted and
-blocked, every allowed op attempted and passing.** Ship on green only. An
-unrecognised invocation is denied, not allowed — the wrapper's default branch
-exits non-zero.
+**Green as of M4.** `cargo test --test guardrails` attempts every denied
+operation and every allowed one against real `bwrap` and the real generated
+shim — asserting the argv is not enough, because a floor you have not stood on
+is a floor you are guessing about.
+
+What it proves: a write inside the project succeeds; a write outside is
+impossible; `$HOME` is unwritable; a planted SSH key is unreadable; a
+`read-only` project rejects writes; `~/.gitconfig` reads but does not write; and
+every denied `git`/`gh`/`rm`/`sudo` invocation exits 97 while the allowed ones
+pass through.
+
+**If `bwrap` is missing the agent does not start.** A floor that silently is not
+there is worse than no floor, because you would act as though it were.
 
 ## Open risk — resolved 2026-07-28, badly
 
