@@ -1,0 +1,25 @@
+# Per-project overrides. Committed and synced (D8).
+#
+# THIS IS NOT A PROJECT LIST. The registry is scanned, not declared (D10) — the
+# app walks ~/github to depth 3 and finds projects by their .git directory. Only
+# things the scan cannot know, or gets wrong, are declared here.
+#
+# A file that starts accumulating discovered projects has become a second source
+# of truth. That is a bug, not a convenience.
+#
+# Keys, all optional:
+#   name       display name, when the folder name is not what you want to read
+#   adapter    preferred harness — the machine still decides what actually runs
+#   model      preferred model for that adapter
+#   character  a profile name from config/characters/ (M7)
+#   hidden     true to keep a scanned repo out of the sidebar
+#
+# Example:
+#
+#   [projects."Obsidian/HOME_AI_VAULT"]
+#   name      = "Ideaverse"
+#   character = "mia"
+#
+# The table key is the repo path relative to ~/github.
+
+# No overrides yet.

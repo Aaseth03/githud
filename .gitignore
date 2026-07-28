@@ -1,0 +1,31 @@
+# Derived and machine-local state never reaches git (D8).
+# The canonical local store is ~/.local/share/githud/ and is outside this tree;
+# these rules catch anything that leaks in by accident.
+registry.json
+sessions/
+machine.toml
+shim/
+state/
+
+# Rust
+target/
+**/target/
+
+# Node
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.idea/
+*.swp

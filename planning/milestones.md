@@ -1,0 +1,139 @@
+# Milestones
+
+The roadmap. **This file is the only place milestone status lives.** It is
+machine-parsed against `../config/contracts/milestones.md` — keep the `Status`
+lines exactly to that grammar.
+
+Each milestone ends with a command or observation that proves it. A milestone is
+not `done` until its `Validation` line has actually been run.
+
+**v1 is M0–M5.** Everything after M5 is reward work.
+
+---
+
+### M0 — Repo and ICM skeleton
+**Status:** in-progress
+**Validation:** an agent launched cold in this repo routes correctly from Layer 0
+to the right workspace without being told. **Passed 2026-07-28** — routed
+`AGENTS.md` → `CONTEXT.md` → `planning/CONTEXT.md`, read nothing else, derived
+the decision-record filename convention and next number, identified D2 as the
+constraining record, quoted the Layer 0 canary verbatim, and flagged the
+`CONTEXT.md` update obligation unprompted.
+
+- [x] Local repo initialised
+- [x] `AGENTS.md` (Layer 0) and root `CONTEXT.md` (Layer 1)
+- [x] Four workspaces with their own `CONTEXT.md`, plus `config/`
+- [x] `config/contracts/milestones.md`
+- [x] Decision records D1–D15
+- [x] Cold-agent routing test passed
+- [ ] Private remote created and pushed
+
+### M1 — Shell, scan, tabs
+**Status:** not-started
+**Validation:** all five repos in `~/github` appear, including the vault at depth
+2; clicking an already-open project twice does not open two tabs.
+
+- [ ] Tauri + React + Vite + TS + Tailwind shell builds and runs
+- [ ] Walk `~/github` to depth 3; a folder is a project if it has `.git`; stop
+      descending once found
+- [ ] Sidebar project list
+- [ ] Tab strip with open/focus semantics
+- [ ] ICM badge on repos lacking Layer 0 or Layer 1
+
+### M2 — Embedded terminal
+**Status:** not-started
+**Validation:** run `htop` in a project tab, then run `claude` by hand inside it.
+At this point GIT HUD already replaces the terminal.
+
+- [ ] `portable-pty` spawn per tab with correct `cwd`
+- [ ] xterm.js mount
+- [ ] Resize propagation
+- [ ] Scrollback
+
+### M3 — Agent channel
+**Status:** not-started
+**Validation:** a full conversation with file edits; the status indicator names
+the actual file being read; STOP kills mid-stream cleanly.
+
+- [ ] Verify Claude streaming flags against `claude --help` before writing the adapter
+- [ ] Claude Code adapter implementing `AgentAdapter` / `AgentSession`
+- [ ] Event normalization to the schema in `architecture/event-schema.md`
+- [ ] Streaming chat
+- [ ] Status indicator driven by real `tool.call` events
+- [ ] Adapter + model shown in the chat header
+- [ ] STOP
+
+### M4 — Guardrails
+**Status:** not-started
+**Validation:** a default-deny test suite — every denied op attempted and
+blocked, every allowed op attempted and passing. Ship on green only.
+
+- [ ] Confirm whether protected branches are available on private repos under
+      the current GitHub plan; if not, say so loudly — the shim becomes the only
+      real layer
+- [ ] PATH shim wrappers for `git`, `gh`, `rm`, `sudo`
+- [ ] Shim injected into the agent process environment only, never the terminal
+- [ ] Branch isolation on project open
+- [ ] Remote branch protection configured
+- [ ] Test suite green
+
+### M5 — Panels and project cards
+**Status:** not-started
+**Validation:** open a project cold and see stack, branch, dirty files, last
+commit, and milestone progress without an agent running.
+
+- [ ] File tree in the left panel
+- [ ] Diff panel fed by `diff` events and the working tree
+- [ ] Activity panel with a persistent error log
+- [ ] Project card read once at registration and cached
+- [ ] Rust milestone parser against `../config/contracts/milestones.md`
+- [ ] Unparseable or missing milestones degrade to a panel error, never a crash
+
+---
+
+**— v1 complete at M5 —**
+
+---
+
+### M6 — Voice
+**Status:** not-started
+**Validation:** a full spoken session; kill Voicebox mid-session and confirm the
+app keeps working.
+
+- [ ] Resolve the Voicebox REST port — its README says `17493`, Professor's
+      `AGENTS.md` says `17600`; one is stale
+- [ ] Voicebox supervision: status pill, start/stop
+- [ ] Degrade to text-only when down
+- [ ] Push-to-talk in (in-app hotkey only)
+- [ ] `assistant.speak` out, subtitles always
+- [ ] MUTE, and a speaker button on every assistant message
+
+### M7 — Character
+**Status:** not-started
+**Validation:** two projects, two characters, two voices, visibly distinct rooms.
+
+- [ ] Amplitude-driven sprite frames
+- [ ] Per-project character assignment
+- [ ] Themes
+- [ ] Character/voice config screen that picks from Voicebox's profiles API —
+      voice *creation* stays in Voicebox, do not rebuild it
+
+### M8 — Parallel and portable
+**Status:** not-started
+**Validation:** two concurrent sessions on one repo; a second adapter runs a real
+task; a new project is born end to end.
+
+- [ ] Worktree sessions
+- [ ] Orphan worktree sweep on project open — prune clean, surface dirty, never
+      auto-remove
+- [ ] A second adapter (Gemini CLI or OpenCode)
+- [ ] New-project flow: interview → `icm-architect` → `git init` → private remote
+      via `../ops/scripts/create-private-remote.sh`
+
+---
+
+## Deliberately deferred
+
+bwrap filesystem scoping · per-repo character profiles · global push-to-talk ·
+real viseme lip-sync · PR review inside the app (reviewed on GitHub) · anything
+resembling per-action approval.
