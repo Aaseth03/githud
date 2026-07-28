@@ -29,7 +29,7 @@ constraining record, quoted the Layer 0 canary verbatim, and flagged the
 - [x] Private remote created and pushed — `Aaseth03/githud`
 
 ### M1 — Shell, scan, tabs
-**Status:** in-progress
+**Status:** done
 **Validation:** all five repos in `~/github` appear, including the vault at depth
 2; clicking an already-open project twice does not open two tabs. **Both halves
 are mechanical, not visual** — `cargo test --test real_root -- --ignored` proves
@@ -55,14 +55,38 @@ the scan against the real root, and `npm test` proves the tab rules. Green
 - [x] Production CSP verified against a real release build, not just assumed
 
 ### M2 — Embedded terminal
-**Status:** not-started
-**Validation:** run `htop` in a project tab, then run `claude` by hand inside it.
-At this point GIT HUD already replaces the terminal.
+**Status:** in-progress
+**Validation:** run a full-screen TUI in a project tab — `top` is installed;
+`vim` or `watch -n1 date` do just as well — then run `claude` by hand inside it.
+At this point GIT HUD already replaces the terminal. **Not yet run by hand** —
+no input-automation tool exists on this machine, so typing into the terminal is
+the one step a test cannot stand in for.
 
-- [ ] `portable-pty` spawn per tab with correct `cwd`
-- [ ] xterm.js mount
-- [ ] Resize propagation
-- [ ] Scrollback
+What the TUI actually proves: the alternate screen buffer, a full redraw driven
+by escape sequences, and reflow on resize. Any curses program shows it.
+
+*The original line named `htop`, which is not installed on this machine — the
+validation was written without checking the binary existed. Naming a capability
+rather than a binary is the fix; `htop` is fine if you want it
+(`sudo dnf install htop`) but nothing should depend on it.*
+
+- [x] `portable-pty` spawn per tab with correct `cwd`
+- [x] xterm.js mount, with a Nerd Font first so prompt glyphs render
+- [x] Resize propagation, coalesced to one animation frame
+- [x] Scrollback (10k lines); the pane hides rather than unmounts, so it
+      survives switching to Chat and back
+- [x] Session lifecycle — reattach rather than double-spawn, release on tab
+      close, kill all on app exit. Verified: shells die with the app, none
+      orphaned
+- [x] Switching tabs keeps every open tab mounted, so a terminal is never
+      wiped by leaving it
+- [x] Reattach replays retained output, so a fresh view of a live shell
+      repaints instead of appearing blank. Verified against a real remount:
+      identical output, one shell, no respawn
+- [x] Seen rendering the real shell with its prompt, git branch and colours
+- [x] Confirmed by hand to look and feel like a terminal window
+- [ ] A full-screen TUI (`top`) drawn and reflowing on resize — **needs a human**
+- [ ] `claude` run by hand inside it — **needs a human**
 
 ### M3 — Agent channel
 **Status:** not-started
@@ -95,6 +119,9 @@ blocked, every allowed op attempted and passing. Ship on green only.
       on top of the floor, not a substitute for it
 - [ ] Shim injected into the agent process environment only, never the terminal
 - [ ] Branch isolation on project open
+- [ ] **Honour `agent = "read-only"` from `config/projects.toml`** (D18). It is
+      recorded and displayed from M1 but enforced by nothing until here — an
+      external project must be unwritable by the agent, not merely labelled so
 - [ ] Test suite green across **both** layers
 
 ### M5 — Panels and project cards

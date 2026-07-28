@@ -3,6 +3,7 @@ import {
   activeTab,
   closeTab,
   initialTabState,
+  isTabVisible,
   openProject,
   openProjectKeys,
   selectTab,
@@ -16,6 +17,9 @@ function project(name: string, rel = name): Project {
     rel_path: rel,
     depth: rel.split("/").length,
     icm: { layer0: true, layer1: true },
+    kind: "own",
+    agent: "read-write",
+    note: null,
   };
 }
 
@@ -111,5 +115,45 @@ describe("tab semantics", () => {
   it("always resolves an active tab even if the key goes stale", () => {
     const stale = { ...initialTabState, activeKey: "gone" };
     expect(activeTab(stale).kind).toBe("main");
+  });
+});
+
+describe("tab visibility — every open tab stays mounted", () => {
+  // The bug this encodes: rendering only the active tab unmounts the others,
+  // which destroys the terminal's xterm buffer while the PTY survives on the
+  // Rust side. The result is a terminal that looks wiped but still works.
+  it("marks exactly one tab visible while the rest stay open", () => {
+    let s = openProject(initialTabState, project("Professor"));
+    s = openProject(s, project("githud"));
+
+    expect(isTabVisible(s, "githud")).toBe(true);
+    expect(isTabVisible(s, "Professor")).toBe(false);
+    expect(isTabVisible(s, MAIN_TAB_KEY)).toBe(false);
+
+    // Invisible is not closed — all three are still in `tabs`, so all three
+    // still render.
+    expect(s.tabs).toHaveLength(3);
+  });
+
+  it("keeps every previously opened project in the tab list", () => {
+    let s = initialTabState;
+    for (const name of ["a", "b", "c"]) s = openProject(s, project(name));
+    s = selectTab(s, "a");
+
+    const keys = s.tabs.flatMap((t) => (t.kind === "project" ? [t.key] : []));
+
+    expect(keys).toEqual(["a", "b", "c"]);
+    expect(isTabVisible(s, "a")).toBe(true);
+    expect(isTabVisible(s, "c")).toBe(false);
+  });
+
+  it("moves visibility without dropping anything when switching back", () => {
+    let s = openProject(initialTabState, project("first"));
+    s = openProject(s, project("second"));
+    s = selectTab(s, "first");
+
+    expect(isTabVisible(s, "first")).toBe(true);
+    expect(isTabVisible(s, "second")).toBe(false);
+    expect(s.tabs).toHaveLength(3);
   });
 });

@@ -1,50 +1,172 @@
+import { useState } from "react";
 import type { Project } from "../types";
+import { initialPaneState, isMounted, showPane, type Pane } from "../panes";
+import { Terminal } from "./Terminal";
 
 /**
  * A project tab.
  *
- * M1 shows only what the scan already knows. The file tree, chat, terminal, and
- * panels arrive at M2–M5 — the placeholders below name the milestone that fills
- * each region rather than mocking up content that does not exist yet.
+ * The centre column is a sub-tab pair, Chat | Terminal, one visible at a time
+ * (`planning/architecture/ui-layout.md`). "Visible", not "rendered" — the
+ * terminal stays mounted and hidden once shown, because unmounting xterm.js
+ * throws away the scrollback.
  */
-export function ProjectView({ project }: { project: Project }) {
+export function ProjectView({
+  project,
+  visible,
+}: {
+  project: Project;
+  /** Is this tab the one on screen? A hidden tab must not fit its terminal. */
+  visible: boolean;
+}) {
+  const [panes, setPanes] = useState(() => initialPaneState("chat"));
+
   return (
-    <div className="starfield flex h-full flex-col overflow-y-auto px-8 py-8">
-      <header className="border-b border-line pb-5">
+    <div className="flex h-full min-h-0 flex-col">
+      <header className="starfield border-b border-line px-8 pt-8 pb-5">
         <h1 className="text-2xl font-light tracking-wide text-ink">
           {project.name}
         </h1>
         <p className="mt-1.5 font-mono text-xs text-ink-faint">{project.path}</p>
 
+        {project.note && (
+          <p className="mt-3 max-w-prose text-xs leading-relaxed text-ink-dim">
+            {project.note}
+          </p>
+        )}
+
         <dl className="mt-5 flex flex-wrap gap-x-8 gap-y-3">
           <Field label="Relative">{project.rel_path}</Field>
           <Field label="Depth">{String(project.depth)}</Field>
-          <Field label="Layer 0" ok={project.icm.layer0}>
+          <Field label="Kind">{project.kind}</Field>
+          <Field label="Agent" ok={project.agent === "read-write"}>
+            {project.agent}
+          </Field>
+          {/* Detection is reported for every project — the icm.md contract is
+              canonical and never made to lie. Only the *expectation* varies by
+              kind, so a third-party repo shows its layers plainly rather than
+              in warning colour (D18). */}
+          <Field label="Layer 0" ok={expectationTone(project, project.icm.layer0)}>
             {project.icm.layer0 ? "present" : "missing"}
           </Field>
-          <Field label="Layer 1" ok={project.icm.layer1}>
+          <Field label="Layer 1" ok={expectationTone(project, project.icm.layer1)}>
             {project.icm.layer1 ? "present" : "missing"}
           </Field>
         </dl>
+
+        {project.kind !== "own" && (
+          <p className="mt-4 text-xs text-ink-faint">
+            {project.kind === "external"
+              ? "Third-party. Not expected to carry ICM context, and not flagged for its absence."
+              : "Superseded. Kept, not developed."}
+            {project.agent === "read-only" &&
+              " Agent access is declared read-only — enforced from M4."}
+          </p>
+        )}
+        <nav className="mt-6 -mb-5 flex gap-px" aria-label="Project panes">
+          <PaneTab
+            pane="chat"
+            active={panes.active}
+            onSelect={(p) => setPanes((s) => showPane(s, p))}
+          >
+            Chat
+          </PaneTab>
+          <PaneTab
+            pane="terminal"
+            active={panes.active}
+            onSelect={(p) => setPanes((s) => showPane(s, p))}
+          >
+            Terminal
+          </PaneTab>
+        </nav>
       </header>
 
-      <div className="mt-8 grid gap-3 sm:grid-cols-2">
-        <Pending title="Terminal" milestone="M2">
-          A real PTY. Runs anything — <span className="font-mono">htop</span>,{" "}
-          <span className="font-mono">claude</span>, a dev server.
-        </Pending>
-        <Pending title="Chat" milestone="M3">
-          The agent channel: normalized events, streaming text, live tool status.
-        </Pending>
-        <Pending title="Guardrails" milestone="M4">
-          bwrap floor plus the command shim. Branch isolation on open.
-        </Pending>
-        <Pending title="Panels" milestone="M5">
-          File tree, diff, activity, and the cached project card.
-        </Pending>
+      <div className="relative min-h-0 flex-1">
+        {/* Both panes are hidden with CSS rather than unmounted — see
+            ../panes.ts. The terminal is not rendered at all until first shown,
+            so browsing a project never leaves a shell behind. */}
+        <div
+          className={`absolute inset-0 ${panes.active === "chat" ? "" : "hidden"}`}
+        >
+          <ChatPlaceholder />
+        </div>
+
+        {isMounted(panes, "terminal") && (
+          <div
+            className={`absolute inset-0 ${
+              panes.active === "terminal" ? "" : "hidden"
+            }`}
+          >
+            <Terminal
+              id={project.rel_path}
+              cwd={project.path}
+              // Both must hold: fitting a terminal on a hidden tab measures
+              // zero and would resize the shell to 1x1.
+              visible={visible && panes.active === "terminal"}
+            />
+          </div>
+        )}
       </div>
     </div>
   );
+}
+
+function PaneTab({
+  pane,
+  active,
+  onSelect,
+  children,
+}: {
+  pane: Pane;
+  active: Pane;
+  onSelect: (p: Pane) => void;
+  children: React.ReactNode;
+}) {
+  const isActive = pane === active;
+  return (
+    <button
+      onClick={() => onSelect(pane)}
+      aria-current={isActive ? "page" : undefined}
+      className={[
+        "relative min-h-9 rounded-t border-x border-t px-4 py-2 text-sm transition-colors",
+        isActive
+          ? "border-line-bright bg-deep text-ink"
+          : "border-transparent text-ink-faint hover:bg-surface/50 hover:text-ink-dim",
+        "focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-signal",
+      ].join(" ")}
+    >
+      {isActive && (
+        <span
+          aria-hidden
+          className="absolute inset-x-0 top-0 h-px bg-signal shadow-[0_0_10px_var(--color-signal)]"
+        />
+      )}
+      {children}
+    </button>
+  );
+}
+
+function ChatPlaceholder() {
+  return (
+    <div className="starfield grid h-full place-items-center px-8">
+      <div className="max-w-md text-center">
+        <p className="text-sm text-ink-dim">The agent channel lands at M3.</p>
+        <p className="mt-2 text-xs leading-relaxed text-ink-faint">
+          Until then the Terminal pane is a real shell — run{" "}
+          <span className="font-mono text-ink-dim">claude</span> in it by hand.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * A missing layer is only a *problem* where ICM is expected. Elsewhere it is
+ * just a fact, so it renders neutral rather than in warning colour.
+ */
+function expectationTone(project: Project, present: boolean): boolean | undefined {
+  if (project.kind !== "own") return undefined;
+  return present;
 }
 
 function Field({
@@ -65,27 +187,5 @@ function Field({
       </dt>
       <dd className={`mt-1 font-mono text-sm ${tone}`}>{children}</dd>
     </div>
-  );
-}
-
-function Pending({
-  title,
-  milestone,
-  children,
-}: {
-  title: string;
-  milestone: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="rounded-lg border border-dashed border-line bg-surface/40 px-4 py-3.5">
-      <div className="flex items-baseline justify-between gap-3">
-        <h2 className="text-sm text-ink-dim">{title}</h2>
-        <span className="font-mono text-[10px] tracking-wider text-ink-faint">
-          {milestone}
-        </span>
-      </div>
-      <p className="mt-1.5 text-xs leading-relaxed text-ink-faint">{children}</p>
-    </section>
   );
 }

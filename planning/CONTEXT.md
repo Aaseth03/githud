@@ -20,7 +20,8 @@ planning/
 │  └─ failure-modes.md
 ├─ plans/
 │  ├─ _TEMPLATE.plan.md
-│  └─ 2026-07-28-m1-shell-scan-tabs.plan.md
+│  ├─ 2026-07-28-m1-shell-scan-tabs.plan.md
+│  └─ 2026-07-28-m2-embedded-terminal.plan.md
 └─ decisions/
    ├─ 2026-07-28-D01-dual-channel.md
    ├─ 2026-07-28-D02-adapters-target-harnesses.md
@@ -38,7 +39,8 @@ planning/
    ├─ 2026-07-28-D14-push-to-talk.md
    ├─ 2026-07-28-D15-speak-summaries-only.md
    ├─ 2026-07-28-D16-bwrap-into-v1.md
-   └─ 2026-07-28-D17-vendor-icm.md
+   ├─ 2026-07-28-D17-vendor-icm.md
+   └─ 2026-07-28-D18-project-kinds.md
 ```
 
 `specs/` is real but currently empty — kept with a `.gitkeep` so the map matches
@@ -54,13 +56,17 @@ disk.
 | `plans/` | Implementation plans (`YYYY-MM-DD-title.plan.md`) | Planning a feature before coding — start from `plans/_TEMPLATE.plan.md` |
 | `specs/` | Feature specs (`feature-name_spec.md`) | Spec'ing a feature in detail |
 
-## Decisions D1–D17
+## Decisions D1–D18
 
-D1–D15 were committed 2026-07-28 out of the design interview; D16 and D17
-followed the same day — D16 when a D7 assumption was tested and failed, D17 when
-M1 turned out to depend on a definition that had no home in the repo. **Do not
+D1–D15 were committed 2026-07-28 out of the design interview; D16–D18 followed
+the same day — D16 when a D7 assumption was tested and failed, D17 when M1 turned
+out to depend on a definition that had no home in the repo, and D18 when M1's
+first run flagged a third-party repo that was never going to carry ICM. **Do not
 re-litigate them.** Supersede one with a new dated record that names what it
 replaces.
+
+The pattern is worth noticing: every decision after D15 came from *running the
+thing*, not from planning it.
 
 | # | Decision |
 |---|---|
@@ -81,6 +87,7 @@ replaces.
 | D15 | [Speak summaries](decisions/2026-07-28-D15-speak-summaries-only.md), never code or diffs |
 | D16 | [bwrap promoted into v1](decisions/2026-07-28-D16-bwrap-into-v1.md) — it is the floor; the shim is only a guard |
 | D17 | [ICM travels in the repo](decisions/2026-07-28-D17-vendor-icm.md) — the detection contract and the vendored procedure both live in `config/` |
+| D18 | [Projects have a kind](decisions/2026-07-28-D18-project-kinds.md) — ICM expectation follows from it; detection stays universal |
 
 ## Architecture
 
@@ -98,6 +105,7 @@ replaces.
 | Date | Plan | Status |
 |---|---|---|
 | 2026-07-28 | [M1 — shell, scan, tabs](plans/2026-07-28-m1-shell-scan-tabs.plan.md) | **Implemented** — validation green |
+| 2026-07-28 | [M2 — embedded terminal](plans/2026-07-28-m2-embedded-terminal.plan.md) | **Implemented** — awaiting the hands-on `htop` / `claude` check |
 
 ## Plan contract
 

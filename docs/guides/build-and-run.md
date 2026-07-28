@@ -115,6 +115,40 @@ is broken here anyway.
 **Lesson worth keeping:** a Tauri process that survives is not evidence that it
 renders. Screenshot it.
 
+## Known trap — a stale Vite serves stale UI to a new window
+
+`vite.config.ts` sets `strictPort: true`, so a second `npm run app` **cannot**
+bind port 1420 if one is already listening. What happens next is the trap: the
+Vite half fails, but Tauri still opens a window pointed at
+`http://localhost:1420` — which the *old* server answers, with whatever code it
+was serving.
+
+The window looks alive and completely current. It is showing another branch's
+frontend against the new Rust binary, and the two disagree in ways that look
+exactly like real bugs. Observed 2026-07-28: a mismatch here read as "every
+project is being classified wrong" when nothing was wrong at all.
+
+Compounding it, a detached launch (`setsid`, `nohup`, or a backgrounded shell
+that exits) leaves the window orphaned to `systemd --user` rather than dying
+with its parent, so instances accumulate silently.
+
+Before trusting anything you see in a dev window:
+
+```bash
+ps -eo comm --no-headers | grep -cx githud     # expect exactly 1
+ss -lptn | grep 1420                           # expect exactly one listener
+```
+
+If either is wrong, kill everything and relaunch:
+
+```bash
+pkill -x githud
+kill "$(ss -lptnH 'sport = :1420' | grep -oP 'pid=\K[0-9]+' | head -1)"
+```
+
+`pkill -x` matches the process name exactly — plain `pkill -f githud` also
+matches the shell command that contains the word, so it kills the caller.
+
 ## Notes
 
 - **Port 1420 is fixed** (`strictPort: true`). A silent port bump would leave

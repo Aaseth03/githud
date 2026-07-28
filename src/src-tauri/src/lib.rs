@@ -4,10 +4,13 @@
 //! knows about a project arrives as a struct from here, never as prose parsed
 //! in the front end (D11).
 
+pub mod overrides;
+pub mod pty;
 pub mod scan;
 
 use std::path::PathBuf;
 
+use overrides::Overrides;
 use scan::{ScanResult, DEFAULT_MAX_DEPTH};
 
 /// Where projects live.
@@ -28,7 +31,29 @@ fn project_root() -> Option<PathBuf> {
 #[tauri::command]
 fn scan_projects() -> Result<ScanResult, String> {
     let root = project_root().ok_or_else(|| "could not resolve the home directory".to_string())?;
-    Ok(scan::scan(&root, DEFAULT_MAX_DEPTH))
+
+    // A malformed overrides file must not take the whole scan down — but it
+    // must also not pass unnoticed, because a typo that silently reverts a
+    // project to `own` + read-write is the failure this cannot have (D18).
+    let (overrides, error) = match Overrides::load(&overrides_path()) {
+        Ok(o) => (o, None),
+        Err(e) => (Overrides::default(), Some(e)),
+    };
+
+    Ok(scan::scan_with(&root, DEFAULT_MAX_DEPTH, &overrides, error))
+}
+
+/// `config/projects.toml`, the committed half of the split store (D8).
+///
+/// Resolved relative to the repo during development. It becomes a bundled
+/// resource path when the app ships; that belongs with packaging, not here.
+fn overrides_path() -> PathBuf {
+    if let Ok(explicit) = std::env::var("GITHUD_CONFIG_DIR") {
+        return PathBuf::from(explicit).join("projects.toml");
+    }
+    // src-tauri/ → src/ → repo root → config/
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../config/projects.toml")
 }
 
 /// The absolute path being scanned, so the UI can show it rather than guess.
@@ -39,9 +64,145 @@ fn scan_root() -> Result<String, String> {
         .ok_or_else(|| "could not resolve the home directory".to_string())
 }
 
+// ── Channel 1: the terminal (D1) ─────────────────────────────────────────────
+//
+// Raw bytes both ways. Nothing here parses anything, and nothing here emits an
+// `AgentEvent` — Channel 2's stream is separate by design.
+
+/// Payload for `pty://output`. `data` is base64 because PTY output is arbitrary
+/// bytes and a read can split a UTF-8 or escape sequence in half.
+#[derive(Clone, serde::Serialize)]
+struct PtyOutput {
+    id: String,
+    data: String,
+    /// Lets a reattaching view discard what its replay already covered.
+    seq: u64,
+}
+
+/// What `pty_open` gives back.
+///
+/// On a fresh shell `replay` is empty. On reattach it is the retained output,
+/// so a new view repaints instead of showing an empty-but-working terminal.
+#[derive(Clone, serde::Serialize)]
+struct PtyOpened {
+    /// Base64 of the retained output.
+    replay: String,
+    /// Everything at or below this number is already in `replay` and must not
+    /// be written again.
+    through_seq: u64,
+}
+
+/// Start a shell for a project, or reattach to the one already running.
+///
+/// The reader owns a dedicated thread because reading a PTY blocks. It emits
+/// chunks rather than single reads so a `yes` flood does not become an IPC
+/// flood.
+#[tauri::command]
+fn pty_open(
+    app: tauri::AppHandle,
+    terminals: tauri::State<'_, pty::Terminals>,
+    id: String,
+    cwd: String,
+    cols: u16,
+    rows: u16,
+) -> Result<PtyOpened, String> {
+    use base64::Engine as _;
+    use tauri::Emitter as _;
+
+    let b64 = base64::engine::general_purpose::STANDARD;
+
+    let Some(mut reader) = terminals.spawn(&id, std::path::Path::new(&cwd), cols, rows)? else {
+        // Already running. Hand back what the shell has printed so a fresh view
+        // repaints rather than showing an empty terminal that nonetheless works.
+        let (bytes, through_seq) = terminals.snapshot(&id).unwrap_or_default();
+        return Ok(PtyOpened {
+            replay: b64.encode(bytes),
+            through_seq,
+        });
+    };
+
+    let terminals = (*terminals).clone();
+    std::thread::spawn(move || {
+        let b64 = base64::engine::general_purpose::STANDARD;
+        let mut buf = vec![0u8; pty::read_buffer_size()];
+        loop {
+            match reader.read(&mut buf) {
+                // EOF: the shell exited. Tell the UI, then drop the session so
+                // a later open starts a fresh shell rather than reattaching to
+                // a dead one.
+                Ok(0) | Err(_) => break,
+                Ok(n) => {
+                    // Retain before emitting, so a snapshot taken concurrently
+                    // either contains this chunk or the listener receives it —
+                    // and `seq` resolves the case where both happen.
+                    let Some(seq) = terminals.record(&id, &buf[..n]) else {
+                        break; // Session gone.
+                    };
+                    let data = b64.encode(&buf[..n]);
+                    if app
+                        .emit(
+                            "pty://output",
+                            PtyOutput {
+                                id: id.clone(),
+                                data,
+                                seq,
+                            },
+                        )
+                        .is_err()
+                    {
+                        // The window is gone; nothing left to emit to.
+                        break;
+                    }
+                }
+            }
+        }
+        let _ = app.emit("pty://closed", id.clone());
+        terminals.kill(&id);
+    });
+
+    // A shell that has just started has printed nothing yet.
+    Ok(PtyOpened {
+        replay: String::new(),
+        through_seq: 0,
+    })
+}
+
+/// Keystrokes, verbatim.
+#[tauri::command]
+fn pty_write(
+    terminals: tauri::State<'_, pty::Terminals>,
+    id: String,
+    data: String,
+) -> Result<(), String> {
+    use base64::Engine as _;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(data)
+        .map_err(|e| format!("bad pty input encoding: {e}"))?;
+    terminals.write(&id, &bytes)
+}
+
+#[tauri::command]
+fn pty_resize(
+    terminals: tauri::State<'_, pty::Terminals>,
+    id: String,
+    cols: u16,
+    rows: u16,
+) -> Result<(), String> {
+    terminals.resize(&id, cols, rows)
+}
+
+/// Close a project's terminal. Closing one that was never opened is fine.
+#[tauri::command]
+fn pty_close(terminals: tauri::State<'_, pty::Terminals>, id: String) {
+    terminals.kill(&id);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let terminals = pty::Terminals::new();
+
     tauri::Builder::default()
+        .manage(terminals.clone())
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -52,7 +213,21 @@ pub fn run() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![scan_projects, scan_root])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .invoke_handler(tauri::generate_handler![
+            scan_projects,
+            scan_root,
+            pty_open,
+            pty_write,
+            pty_resize,
+            pty_close,
+        ])
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(move |_app, event| {
+            // No shell outlives the window. Without this, closing the app
+            // leaves a login shell per project tab orphaned to init.
+            if let tauri::RunEvent::ExitRequested { .. } = event {
+                terminals.kill_all();
+            }
+        });
 }
