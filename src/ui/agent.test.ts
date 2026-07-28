@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   activityLabel,
+  appendNotice,
+  isolationNotice,
   appendUserTurn,
   applyEvent,
   initialChatState,
@@ -211,5 +213,92 @@ describe("recovering from STOP", () => {
     s = applyEvent(s, started);
 
     expect(s.ended).toBeNull();
+  });
+});
+
+describe("a failed turn does not leave the indicator lying", () => {
+  it("clears activity and busy on a fatal error", () => {
+    // The reported symptom: a "thinking" pill sitting next to an error
+    // message. The app was contradicting itself.
+    let s = appendUserTurn(initialChatState, "do a thing");
+    s = apply(s, { type: "status", state: "working", detail: "reading x" });
+
+    s = apply(s, {
+      type: "error",
+      message: "no agent session for AI-Dashboard",
+      fatal: true,
+    });
+
+    expect(s.busy).toBe(false);
+    expect(s.activity).toBe("idle");
+    expect(activityLabel(s)).toBeNull();
+  });
+
+  it("leaves a non-fatal error mid-turn alone", () => {
+    // A denied tool does not end the turn; the agent carries on.
+    let s = appendUserTurn(initialChatState, "do a thing");
+    s = apply(s, { type: "status", state: "working", detail: "editing y" });
+
+    s = apply(s, { type: "error", message: "Refused: Edit", fatal: false });
+
+    expect(s.busy).toBe(true);
+    expect(activityLabel(s)).toBe("editing y");
+  });
+
+  it("still records the error in the transcript", () => {
+    const s = apply(appendUserTurn(initialChatState, "x"), {
+      type: "error",
+      message: "boom",
+      fatal: true,
+    });
+
+    expect(s.entries.at(-1)).toMatchObject({ kind: "error", text: "boom" });
+  });
+});
+
+describe("saying what isolation did", () => {
+  it("names both branches and how to get back", () => {
+    const text = isolationNotice({
+      branch: "agent/professor-2026-07-28",
+      from: "dev",
+      carried: 0,
+    });
+
+    expect(text).toContain("dev");
+    expect(text).toContain("agent/professor-2026-07-28");
+    expect(text).toContain("git switch -");
+  });
+
+  it("says what came along when the tree was dirty", () => {
+    // Switching instead of blocking is only acceptable because it is stated.
+    const text = isolationNotice({
+      branch: "agent/x-2026-07-28",
+      from: "main",
+      carried: 3,
+    });
+
+    expect(text).toContain("3 uncommitted changes");
+    expect(text).toContain("still there");
+  });
+
+  it("uses the singular for one change", () => {
+    const text = isolationNotice({
+      branch: "b",
+      from: "main",
+      carried: 1,
+    });
+
+    expect(text).toContain("1 uncommitted change ");
+  });
+
+  it("says nothing about changes when the tree was clean", () => {
+    const text = isolationNotice({ branch: "b", from: "main", carried: 0 });
+    expect(text).not.toContain("uncommitted");
+  });
+
+  it("records the notice as its own kind, not an error", () => {
+    // It is something GIT HUD did, not something that went wrong.
+    const s = appendNotice(initialChatState, "moved you");
+    expect(s.entries[0]).toMatchObject({ kind: "notice", text: "moved you" });
   });
 });
