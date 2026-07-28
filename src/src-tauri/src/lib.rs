@@ -5,6 +5,7 @@
 //! in the front end (D11).
 
 pub mod agent;
+pub mod guard;
 pub mod overrides;
 pub mod pty;
 pub mod scan;
@@ -217,11 +218,25 @@ fn agent_start(
     id: String,
     cwd: String,
     model: Option<String>,
+    read_only: Option<bool>,
 ) -> Result<(), String> {
     use tauri::Emitter as _;
 
     let adapter = agent::Adapter::ClaudeCode;
-    let Some(stdout) = agents.start(&id, std::path::Path::new(&cwd), adapter, model.as_deref())?
+    // D18 becomes enforcement here: a read-only project is bound read-only in
+    // the sandbox, so the declaration is a guarantee rather than a label.
+    let access = if read_only.unwrap_or(false) {
+        guard::Access::ReadOnly
+    } else {
+        guard::Access::ReadWrite
+    };
+    let Some(stdout) = agents.start(
+        &id,
+        std::path::Path::new(&cwd),
+        adapter,
+        model.as_deref(),
+        access,
+    )?
     else {
         return Ok(()); // Already running.
     };

@@ -57,6 +57,10 @@ src/
    │  │  ├─ mod.rs         Channel 2 — agent sessions, lifecycle
    │  │  ├─ event.rs       the normalized vocabulary the UI subscribes to
    │  │  └─ claude.rs      Claude Code adapter + line mapping + tests
+   │  ├─ guard/
+   │  │  ├─ mod.rs         bwrap scope — the floor (D19)
+   │  │  ├─ shim.rs        PATH wrappers — a guard, not the floor
+   │  │  └─ branch.rs      branch isolation naming and policy (D6)
    │  ├─ pty/
    │  │  └─ mod.rs         Channel 1 — real PTYs, one per project
    │  └─ scan/
@@ -73,6 +77,7 @@ src/
 | `src-tauri/src/overrides/` | `projects.toml` — kind, agent access, notes | Changing what can be declared about a project |
 | `src-tauri/src/pty/` | Terminal sessions: spawn, write, resize, kill | Changing terminal behaviour |
 | `src-tauri/src/agent/` | Agent sessions and the normalized event mapping | Adding an adapter, or changing what the UI sees |
+| `src-tauri/src/guard/` | The sandbox scope, the shim, branch policy | Changing what the agent is allowed to touch |
 | `ui/agent.ts` | Event types + transcript reducer | Changing how a conversation is assembled |
 | `ui/panes.ts` | Chat \| Terminal sub-tab rules | Changing when a pane mounts or shows |
 | `src-tauri/src/lib.rs` | Tauri commands | Adding a command the UI can call |
@@ -92,7 +97,7 @@ src-tauri/src/
 ├─ pty/      portable-pty sessions — Channel 1              (M2 ✓)
 ├─ agent/    adapters + event normalization — Channel 2     (M3 ✓)
 ├─ git/      status, branch, diff                           (M5)
-├─ guard/    bwrap scope + PATH shim generation             (M4)
+├─ guard/    bwrap scope + PATH shim generation             (M4 ✓)
 └─ parse/    milestone parser                               (M5)
 ```
 
@@ -150,6 +155,14 @@ src-tauri/src/
 - **A refused tool must say so.** Writes are denied under the default
   permission mode until M4. Surfacing nothing made a deliberate posture look
   like a broken app — the denial names the tool and the reason.
+- **bwrap is the floor; the shim is a guard.** They are not equivalent and the
+  code says so. The sandbox does not care which binary is called or by what
+  path; the shim is bypassable by absolute path and only catches accidents.
+  Never describe the shim as a guarantee.
+- **The agent does not start without bwrap.** A floor that silently is not there
+  is worse than no floor, because you would act as though it were.
+- **The shim goes into the agent's environment only.** The terminal is the
+  user's (D7). A shared spawn helper would be the easy way to get this wrong.
 - **The UI never sees a harness's JSON.** Everything crossing the boundary is
   `agent::event::AgentEvent`. That is what makes a second adapter a
   self-contained change (D2).

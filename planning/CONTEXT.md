@@ -41,7 +41,8 @@ planning/
    ├─ 2026-07-28-D15-speak-summaries-only.md
    ├─ 2026-07-28-D16-bwrap-into-v1.md
    ├─ 2026-07-28-D17-vendor-icm.md
-   └─ 2026-07-28-D18-project-kinds.md
+   ├─ 2026-07-28-D18-project-kinds.md
+   └─ 2026-07-28-D19-sandbox-scope.md
 ```
 
 `specs/` is real but currently empty — kept with a `.gitkeep` so the map matches
@@ -57,7 +58,7 @@ disk.
 | `plans/` | Implementation plans (`YYYY-MM-DD-title.plan.md`) | Planning a feature before coding — start from `plans/_TEMPLATE.plan.md` |
 | `specs/` | Feature specs (`feature-name_spec.md`) | Spec'ing a feature in detail |
 
-## Decisions D1–D18
+## Decisions D1–D19
 
 D1–D15 were committed 2026-07-28 out of the design interview; D16–D18 followed
 the same day — D16 when a D7 assumption was tested and failed, D17 when M1 turned
@@ -89,6 +90,7 @@ thing*, not from planning it.
 | D16 | [bwrap promoted into v1](decisions/2026-07-28-D16-bwrap-into-v1.md) — it is the floor; the shim is only a guard |
 | D17 | [ICM travels in the repo](decisions/2026-07-28-D17-vendor-icm.md) — the detection contract and the vendored procedure both live in `config/` |
 | D18 | [Projects have a kind](decisions/2026-07-28-D18-project-kinds.md) — ICM expectation follows from it; detection stays universal |
+| D19 | [The sandbox scope](decisions/2026-07-28-D19-sandbox-scope.md) — what the floor covers, and the D-Bus hole left open on purpose |
 
 ## Architecture
 

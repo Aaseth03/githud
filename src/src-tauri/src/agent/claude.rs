@@ -20,6 +20,11 @@ pub fn args(model: Option<&str>, resume: Option<&str>) -> Vec<String> {
         "--input-format".into(),
         "stream-json".into(),
         "--verbose".into(),
+        // Safe only because the sandbox exists (D19). M3 deliberately left this
+        // unset: writes with no floor beneath them were the thing to avoid.
+        // bwrap confines every edit to the project directory.
+        "--permission-mode".into(),
+        "acceptEdits".into(),
     ];
     if let Some(m) = model {
         a.push("--model".into());
@@ -185,9 +190,9 @@ fn map_result(v: &Value) -> Vec<AgentEvent> {
             };
             out.push(AgentEvent::Error {
                 message: format!(
-                    "Permission denied: {names}. GIT HUD runs the agent on the CLI's \
-                     default permission mode until the M4 guardrails exist — reads work, \
-                     writes do not. Use the Terminal pane for now."
+                    "Refused: {names}. The agent is sandboxed to this project — it can \
+                     read and write inside it, and nothing outside is even visible. If \
+                     you meant to reach outside the project, use the Terminal pane."
                 ),
                 fatal: false,
             });
@@ -289,6 +294,14 @@ mod tests {
         // The flag that makes it a session rather than a one-shot.
         assert!(a.windows(2).any(|w| w == ["--input-format", "stream-json"]));
         assert!(a.windows(2).any(|w| w == ["--model", "claude-opus-5"]));
+    }
+
+    #[test]
+    fn edits_are_accepted_because_the_sandbox_confines_them() {
+        // D19: defensible only with the floor in place. Without bwrap this
+        // would be free file writes with nothing beneath them.
+        let a = args(None, None);
+        assert!(a.windows(2).any(|w| w == ["--permission-mode", "acceptEdits"]));
     }
 
     #[test]
@@ -472,7 +485,7 @@ mod tests {
 
         let explained = events.iter().any(|e| matches!(
             e, AgentEvent::Error { message, .. }
-            if message.contains("Edit") && message.contains("M4")
+            if message.contains("Edit") && message.contains("sandboxed")
         ));
         assert!(explained, "a denial must name the tool and say why: {events:?}");
     }
