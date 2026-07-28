@@ -74,3 +74,16 @@ export function openProjectKeys(state: TabState): Set<string> {
 export function activeTab(state: TabState): Tab {
   return state.tabs.find((t) => tabKey(t) === state.activeKey) ?? state.tabs[0]!;
 }
+
+/**
+ * Is this tab the one on screen?
+ *
+ * **Every open tab is rendered; only one is visible.** Rendering just the
+ * active tab would unmount the others, and an unmounted tab loses anything
+ * holding a live buffer — the terminal's scrollback today, the chat transcript
+ * at M3. The PTY survives on the Rust side, so the symptom is the worst kind: a
+ * terminal that is blank but still works.
+ */
+export function isTabVisible(state: TabState, key: string): boolean {
+  return state.activeKey === key;
+}

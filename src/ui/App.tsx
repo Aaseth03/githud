@@ -6,14 +6,14 @@ import { MainView } from "./components/MainView";
 import { ProjectView } from "./components/ProjectView";
 import { useProjects } from "./hooks/useProjects";
 import {
-  activeTab,
   closeTab,
   initialTabState,
+  isTabVisible,
   openProject,
   openProjectKeys,
   selectTab,
 } from "./tabs";
-import type { Project } from "./types";
+import { MAIN_TAB_KEY, type Project } from "./types";
 
 export default function App() {
   const { projects, uninitiated, root, loading, error, overridesError, rescan } =
@@ -41,8 +41,6 @@ export default function App() {
     setTabState((s) => selectTab(s, key));
   }, []);
 
-  const active = activeTab(tabState);
-
   return (
     <div className="flex h-full bg-void">
       <Sidebar
@@ -65,11 +63,36 @@ export default function App() {
           onSelect={handleSelect}
           onClose={handleClose}
         />
-        <div className="min-h-0 flex-1">
-          {active.kind === "main" ? (
+        {/* Every open tab stays mounted; only one is visible.
+            Rendering only the active tab unmounts the others, and an unmounted
+            tab throws away anything holding a live buffer — the terminal's
+            scrollback now, the chat transcript at M3. Because the PTY itself
+            survives on the Rust side, the symptom is the worst kind: a terminal
+            that looks wiped but still works. Same reasoning as ./panes.ts, one
+            level up. */}
+        <div className="relative min-h-0 flex-1">
+          <div
+            className={`absolute inset-0 ${
+              isTabVisible(tabState, MAIN_TAB_KEY) ? "" : "hidden"
+            }`}
+          >
             <MainView projects={projects} onOpen={handleOpen} />
-          ) : (
-            <ProjectView project={active.project} />
+          </div>
+
+          {tabState.tabs.map((tab) =>
+            tab.kind === "project" ? (
+              <div
+                key={tab.key}
+                className={`absolute inset-0 ${
+                  isTabVisible(tabState, tab.key) ? "" : "hidden"
+                }`}
+              >
+                <ProjectView
+                  project={tab.project}
+                  visible={isTabVisible(tabState, tab.key)}
+                />
+              </div>
+            ) : null,
           )}
         </div>
       </main>

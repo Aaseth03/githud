@@ -11,7 +11,14 @@ import { Terminal } from "./Terminal";
  * terminal stays mounted and hidden once shown, because unmounting xterm.js
  * throws away the scrollback.
  */
-export function ProjectView({ project }: { project: Project }) {
+export function ProjectView({
+  project,
+  visible,
+}: {
+  project: Project;
+  /** Is this tab the one on screen? A hidden tab must not fit its terminal. */
+  visible: boolean;
+}) {
   const [panes, setPanes] = useState(() => initialPaneState("chat"));
 
   return (
@@ -93,7 +100,9 @@ export function ProjectView({ project }: { project: Project }) {
             <Terminal
               id={project.rel_path}
               cwd={project.path}
-              visible={panes.active === "terminal"}
+              // Both must hold: fitting a terminal on a hidden tab measures
+              // zero and would resize the shell to 1x1.
+              visible={visible && panes.active === "terminal"}
             />
           </div>
         )}

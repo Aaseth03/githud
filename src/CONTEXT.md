@@ -117,6 +117,13 @@ src-tauri/src/
   UI calls `pty_close`, and a leaked login shell per closed tab is invisible
   until there are dozens. `App.tsx` closes it on tab close; `run()` kills all on
   exit. Both are load-bearing.
+- **Anything holding a live buffer is hidden, never unmounted.** This applies at
+  *both* levels and was got wrong at the second one: `panes.ts` keeps the
+  Terminal pane mounted when you switch to Chat, and `App.tsx` keeps every open
+  project tab mounted when you switch tabs. Unmounting destroys the xterm
+  buffer while the PTY survives in Rust, so the symptom is the worst kind — a
+  terminal that looks wiped but still works. **The chat transcript at M3 has
+  exactly this property.** Encoded by `isTabVisible` and its tests.
 - **PTY bytes stay bytes.** Output crosses the IPC boundary base64-encoded
   because a read can split a UTF-8 character or an escape sequence in half, and
   `from_utf8_lossy` would corrupt exactly the sequences a TUI needs.
