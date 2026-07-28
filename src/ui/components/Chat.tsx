@@ -3,11 +3,14 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import {
   activityLabel,
+  appendNotice,
   appendUserTurn,
   applyEvent,
   initialChatState,
+  isolationNotice,
   type AgentEvent,
   type Entry,
+  type Isolated,
 } from "../agent";
 import type { Project } from "../types";
 
@@ -86,11 +89,15 @@ export function Chat({ project, visible }: Props) {
         // already on its own branch is left alone. Doing this on every turn
         // also means a manual switch back to a shared branch is caught before
         // the next message rather than after it.
-        await invoke("agent_start", {
+        const isolated = await invoke<Isolated | null>("agent_start", {
           id,
           cwd: project.path,
           readOnly: project.agent === "read-only",
         });
+        // Moving someone between branches must never happen quietly.
+        if (isolated) {
+          setState((s) => appendNotice(s, isolationNotice(isolated)));
+        }
         await invoke("agent_send", { id, text });
       } catch (e) {
         setState((s) =>
@@ -230,6 +237,14 @@ function EntryView({ entry }: { entry: Entry }) {
   if (entry.kind === "assistant") {
     return (
       <p className="max-w-[92%] text-sm leading-relaxed whitespace-pre-wrap text-ink-dim">
+        {entry.text}
+      </p>
+    );
+  }
+
+  if (entry.kind === "notice") {
+    return (
+      <p className="rounded border border-signal-deep/40 bg-signal/5 px-3 py-2 text-xs leading-relaxed text-ink-dim">
         {entry.text}
       </p>
     );

@@ -101,9 +101,13 @@ Three rules, all tested against real repositories:
 - **It fires when the agent starts, not when the project opens.** Browsing five
   projects should not create five branches. This deviates from M4's original
   wording, on purpose.
-- **Uncommitted work on a shared branch stops the session.** Git would carry the
-  changes across and lose nothing, but they would land on a branch the user
-  never chose. Surface and wait, per `failure-modes.md`.
+- **Uncommitted work comes along, and is reported.** `git checkout -b` carries
+  the working tree across and loses nothing; `git switch -` undoes it. Refusing
+  instead was tried first and made the agent unusable in any repo with work in
+  progress, which is most of them. The obligation that survives is to *say* what
+  moved — the chat states the branch it left, the branch it made, and how many
+  uncommitted paths came with you. A repo mid-merge or mid-rebase makes git
+  itself refuse, and that error is surfaced rather than worked around.
 
 ## Trust model
 

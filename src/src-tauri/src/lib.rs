@@ -219,7 +219,7 @@ fn agent_start(
     cwd: String,
     model: Option<String>,
     read_only: Option<bool>,
-) -> Result<(), String> {
+) -> Result<Option<guard::branch::Isolated>, String> {
     use tauri::Emitter as _;
 
     let adapter = agent::Adapter::ClaudeCode;
@@ -234,9 +234,11 @@ fn agent_start(
     // reversible and per-action approval is unnecessary. Only off a shared
     // branch — moving someone off their own feature branch would be worse than
     // the problem being solved. Read-only projects are never switched.
-    if !read_only.unwrap_or(false) {
-        guard::branch::isolate(std::path::Path::new(&cwd), &id)?;
-    }
+    let isolated = if read_only.unwrap_or(false) {
+        None
+    } else {
+        guard::branch::isolate(std::path::Path::new(&cwd), &id)?
+    };
 
     let Some(stdout) = agents.start(
         &id,
@@ -246,7 +248,7 @@ fn agent_start(
         access,
     )?
     else {
-        return Ok(()); // Already running.
+        return Ok(isolated); // Already running.
     };
 
     let agents = (*agents).clone();
@@ -292,7 +294,7 @@ fn agent_start(
         agents.stop(&id);
     });
 
-    Ok(())
+    Ok(isolated)
 }
 
 /// Send one turn. The session stays open afterwards.

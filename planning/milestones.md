@@ -161,9 +161,10 @@ blocked, every allowed op attempted and passing. Ship on green only.
       it fires when an agent session starts, so browsing a project changes
       nothing. That deviates from this milestone's original wording — opening
       five projects to look at them should not create five branches
-- [x] Uncommitted work on a shared branch **stops the session** rather than
-      carrying it onto a branch you did not choose. Git would lose nothing, but
-      your changes would end up somewhere you did not put them
+- [x] Uncommitted work **comes along and is reported** — the chat names the
+      branch it left, the branch it made, and how many paths moved. Blocking was
+      tried first and made the agent unusable in any repo with work in progress;
+      `git checkout -b` loses nothing, so the duty is to say it, not to refuse
 - [ ] Confirmed by hand in the app
 
 ### M5 — Panels and project cards

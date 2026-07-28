@@ -97,32 +97,30 @@ mod tests {
 
 // ── The decision ─────────────────────────────────────────────────────────────
 
-/// What opening an agent session should do about the current branch.
+/// What starting an agent session should do about the current branch.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Isolation {
     /// Already on a feature branch. Leave it alone.
     NotNeeded,
-    /// Shared branch, clean tree: move to a branch of the agent's own.
-    Switch(String),
-    /// Shared branch with uncommitted work.
+    /// Shared branch: move to a branch of the agent's own.
     ///
-    /// Switching would carry those changes onto a branch the user did not
-    /// choose. Nothing is lost by git, but their work ends up somewhere they
-    /// did not put it — so this stops and surfaces instead.
-    Blocked { branch: String },
+    /// Uncommitted work comes along, which is what `git checkout -b` does
+    /// anyway — nothing is lost and `git switch -` undoes it. Refusing instead
+    /// was tried and made the agent unusable in any repo with work in progress,
+    /// which is most of them. The obligation that remains is to **say** it
+    /// happened, hence `carried`.
+    Switch { branch: String, carried: usize },
 }
 
 /// Decide, without touching the world.
-pub fn plan(current: &str, dirty: bool, project: &str, today: &str) -> Isolation {
+pub fn plan(current: &str, dirty: usize, project: &str, today: &str) -> Isolation {
     if !should_isolate(current) {
         return Isolation::NotNeeded;
     }
-    if dirty {
-        return Isolation::Blocked {
-            branch: current.to_string(),
-        };
+    Isolation::Switch {
+        branch: agent_branch(project, today),
+        carried: dirty,
     }
-    Isolation::Switch(agent_branch(project, today))
 }
 
 /// `YYYY-MM-DD` for a Unix timestamp, without pulling in a date crate.
@@ -158,7 +156,7 @@ mod decision_tests {
     #[test]
     fn a_feature_branch_is_left_alone() {
         assert_eq!(
-            plan("m4-guardrails", false, "githud", "2026-07-28"),
+            plan("m4-guardrails", 0, "githud", "2026-07-28"),
             Isolation::NotNeeded
         );
     }
@@ -166,28 +164,32 @@ mod decision_tests {
     #[test]
     fn a_clean_shared_branch_moves_to_an_agent_branch() {
         assert_eq!(
-            plan("main", false, "Professor", "2026-07-28"),
-            Isolation::Switch("agent/professor-2026-07-28".into())
+            plan("main", 0, "Professor", "2026-07-28"),
+            Isolation::Switch {
+                branch: "agent/professor-2026-07-28".into(),
+                carried: 0
+            }
         );
     }
 
     #[test]
-    fn a_dirty_shared_branch_stops_rather_than_moving_your_work() {
-        // Git would carry the changes across and lose nothing — but they would
-        // end up on a branch the user never chose.
+    fn uncommitted_work_comes_along_and_is_counted_so_it_can_be_reported() {
+        // Refusing instead was tried; it made the agent unusable in any repo
+        // with work in progress. `git checkout -b` loses nothing, so the
+        // obligation is to say what moved, not to block.
         assert_eq!(
-            plan("main", true, "Professor", "2026-07-28"),
-            Isolation::Blocked {
-                branch: "main".into()
+            plan("main", 3, "Professor", "2026-07-28"),
+            Isolation::Switch {
+                branch: "agent/professor-2026-07-28".into(),
+                carried: 3
             }
         );
     }
 
     #[test]
     fn a_dirty_feature_branch_is_still_left_alone() {
-        // Uncommitted work only matters when we would otherwise move it.
         assert_eq!(
-            plan("my-work", true, "Professor", "2026-07-28"),
+            plan("my-work", 7, "Professor", "2026-07-28"),
             Isolation::NotNeeded
         );
     }
@@ -234,9 +236,16 @@ pub fn current(repo: &Path) -> Option<String> {
     Some(name)
 }
 
-/// Are there uncommitted changes, tracked or untracked?
+/// How many paths have uncommitted changes, tracked or untracked?
+pub fn dirty_count(repo: &Path) -> usize {
+    git(repo, &["status", "--porcelain"])
+        .map(|s| s.lines().filter(|l| !l.trim().is_empty()).count())
+        .unwrap_or(0)
+}
+
+/// Are there uncommitted changes at all?
 pub fn is_dirty(repo: &Path) -> bool {
-    git(repo, &["status", "--porcelain"]).is_ok_and(|s| !s.is_empty())
+    dirty_count(repo) > 0
 }
 
 /// Switch to `branch`, creating it if it does not exist.
@@ -254,25 +263,37 @@ pub fn switch_to(repo: &Path, branch: &str) -> Result<(), String> {
 /// history. That is what makes the whole session reversible, and therefore what
 /// makes per-action approval unnecessary.
 ///
-/// Returns the branch the agent will work on, or an error to surface.
-pub fn isolate(repo: &Path, project: &str) -> Result<Option<String>, String> {
+/// What isolation actually did, so the UI can say it.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct Isolated {
+    pub branch: String,
+    pub from: String,
+    /// Uncommitted paths that came along. Reported, never silently moved.
+    pub carried: usize,
+}
+
+/// Apply isolation before an agent session starts.
+///
+/// Returns what happened, or `None` if nothing needed to.
+pub fn isolate(repo: &Path, project: &str) -> Result<Option<Isolated>, String> {
     let Some(current) = current(repo) else {
         // Detached or empty: nothing meaningful to isolate from, and guessing
         // would be worse than leaving it.
         return Ok(None);
     };
 
-    match plan(&current, is_dirty(repo), project, &today()) {
+    match plan(&current, dirty_count(repo), project, &today()) {
         Isolation::NotNeeded => Ok(None),
-        Isolation::Switch(branch) => {
+        Isolation::Switch { branch, carried } => {
+            // A repo mid-merge or mid-rebase makes git refuse, and that error
+            // is surfaced rather than worked around — those are the cases where
+            // switching genuinely can go wrong.
             switch_to(repo, &branch)?;
-            Ok(Some(branch))
+            Ok(Some(Isolated {
+                branch,
+                from: current,
+                carried,
+            }))
         }
-        Isolation::Blocked { branch } => Err(format!(
-            "You have uncommitted changes on `{branch}`. The agent works on a \
-             branch of its own, and switching now would carry your changes onto \
-             a branch you did not choose. Commit, stash, or switch branch \
-             yourself, then start the agent."
-        )),
     }
 }

@@ -367,6 +367,7 @@ fn a_clean_shared_branch_is_isolated_onto_an_agent_branch() {
 
     let now = branch::current(&repo).unwrap();
     assert!(moved.is_some(), "expected a switch");
+    assert_eq!(moved.unwrap().carried, 0, "a clean tree carries nothing");
     assert!(now.starts_with("agent/professor-"), "on {now}");
     assert!(!branch::is_shared(&now));
 }
@@ -382,22 +383,46 @@ fn a_feature_branch_is_left_where_it_is() {
 }
 
 #[test]
-fn uncommitted_work_on_a_shared_branch_stops_the_session() {
-    // Git would carry the changes across and lose nothing, but they would land
-    // on a branch the user never chose. Surface instead.
+fn uncommitted_work_comes_along_and_is_reported() {
+    // Refusing was tried first and made the agent unusable in any repo with
+    // work in progress. `git checkout -b` loses nothing; the obligation is to
+    // report what moved.
     let repo = seeded_repo("iso-dirty", "main");
     std::fs::write(repo.join("wip.txt"), "half-finished").unwrap();
-    assert!(branch::is_dirty(&repo));
+    std::fs::write(repo.join("seed.txt"), "edited").unwrap();
 
-    let err = branch::isolate(&repo, "Proj").expect_err("should refuse");
+    let moved = branch::isolate(&repo, "Proj")
+        .expect("should switch, not refuse")
+        .expect("expected a switch");
 
-    assert!(err.contains("uncommitted"), "{err}");
+    assert!(moved.branch.starts_with("agent/proj-"));
+    assert_eq!(moved.from, "main");
+    assert_eq!(moved.carried, 2, "both changed paths should be counted");
+
+    // The work is still there, still uncommitted, on the new branch.
     assert_eq!(
-        branch::current(&repo).as_deref(),
-        Some("main"),
-        "it must not have moved anything"
+        std::fs::read_to_string(repo.join("wip.txt")).unwrap(),
+        "half-finished"
     );
-    assert!(repo.join("wip.txt").is_file(), "the work is untouched");
+    assert!(branch::is_dirty(&repo), "changes remain uncommitted");
+    assert!(branch::current(&repo).unwrap().starts_with("agent/"));
+}
+
+#[test]
+fn switching_back_is_one_command() {
+    // The claim made in the UI notice, checked.
+    let repo = seeded_repo("iso-back", "main");
+    std::fs::write(repo.join("wip.txt"), "wip").unwrap();
+
+    branch::isolate(&repo, "Proj").unwrap().unwrap();
+    Command::new("git")
+        .args(["switch", "-"])
+        .current_dir(&repo)
+        .output()
+        .unwrap();
+
+    assert_eq!(branch::current(&repo).as_deref(), Some("main"));
+    assert!(repo.join("wip.txt").is_file(), "the work followed back");
 }
 
 #[test]
@@ -405,13 +430,13 @@ fn isolating_twice_reuses_the_branch_rather_than_failing() {
     // Opening a project again the same day must not error on an existing branch.
     let repo = seeded_repo("iso-twice", "main");
 
-    let first = branch::isolate(&repo, "Proj").unwrap().unwrap();
+    let first = branch::isolate(&repo, "Proj").unwrap().unwrap().branch;
     Command::new("git")
         .args(["checkout", "-q", "main"])
         .current_dir(&repo)
         .output()
         .unwrap();
-    let second = branch::isolate(&repo, "Proj").unwrap().unwrap();
+    let second = branch::isolate(&repo, "Proj").unwrap().unwrap().branch;
 
     assert_eq!(first, second);
     assert_eq!(branch::current(&repo).as_deref(), Some(second.as_str()));

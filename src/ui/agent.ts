@@ -37,7 +37,41 @@ export type Entry =
   | { kind: "user"; id: string; text: string }
   | { kind: "assistant"; id: string; text: string }
   | { kind: "error"; id: string; text: string }
+  /** Something GIT HUD did to the repo, said out loud rather than silently. */
+  | { kind: "notice"; id: string; text: string }
   | ToolEntry;
+
+/** What `agent_start` reports about branch isolation. */
+export interface Isolated {
+  branch: string;
+  from: string;
+  /** Uncommitted paths that came along. */
+  carried: number;
+}
+
+/**
+ * Say what isolation did.
+ *
+ * The agent moving you between branches is exactly the kind of thing that must
+ * never happen quietly — this is the whole reason switching is acceptable
+ * instead of blocking.
+ */
+export function isolationNotice(i: Isolated): string {
+  const moved =
+    i.carried === 0
+      ? ""
+      : ` Your ${i.carried} uncommitted ${
+          i.carried === 1 ? "change" : "changes"
+        } came with you — still uncommitted, still there.`;
+  return `Moved from ${i.from} to ${i.branch} so the agent works on a branch of its own.${moved} \`git switch -\` puts you back.`;
+}
+
+export function appendNotice(state: ChatState, text: string): ChatState {
+  return {
+    ...state,
+    entries: [...state.entries, { kind: "notice", id: nextId(), text }],
+  };
+}
 
 export interface ChatState {
   entries: Entry[];
