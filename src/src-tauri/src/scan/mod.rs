@@ -152,7 +152,9 @@ pub fn scan_with(
     }
     // An override naming a repo that is not on this machine is ignored, not an
     // error: `config/` syncs across machines (D8), so that is the normal case.
-    projects.retain(|p| overrides.get(&p.rel_path).is_none_or(|o| !o.hidden));
+    // `map_or(true, ..)` rather than `is_none_or`, which is only stable since
+    // 1.82 and this crate declares MSRV 1.77.2.
+    projects.retain(|p| overrides.get(&p.rel_path).map_or(true, |o| !o.hidden));
 
     let mut uninitiated: Vec<Uninitiated> = child_dirs(root)
         .into_iter()
@@ -268,7 +270,7 @@ pub fn detect_icm(repo: &Path) -> IcmStatus {
     let layer1 = repo.join("CONTEXT.md").is_file()
         || layer0_file
             .as_deref()
-            .is_some_and(|p| has_routing_section(p))
+            .is_some_and(has_routing_section)
         || repo.join("README.md").is_file();
 
     IcmStatus { layer0, layer1 }
