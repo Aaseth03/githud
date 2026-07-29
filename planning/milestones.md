@@ -208,17 +208,28 @@ Tauri, last commit, and 5/9 milestones, with no agent session anywhere.
 ---
 
 ### M6 — Voice
-**Status:** not-started
+**Status:** in-progress
 **Validation:** a full spoken session; kill Voicebox mid-session and confirm the
 app keeps working.
 
-- [ ] Resolve the Voicebox REST port — its README says `17493`, Professor's
-      `AGENTS.md` says `17600`; one is stale
-- [ ] Voicebox supervision: status pill, start/stop
-- [ ] Degrade to text-only when down
-- [ ] Push-to-talk in (in-app hotkey only)
-- [ ] `assistant.speak` out, subtitles always
-- [ ] MUTE, and a speaker button on every assistant message
+- [x] **Port resolved: `17600`.** Voicebox's own README says `17493`, which is
+      the container-internal port. Probed against the running server rather
+      than picking a side
+- [x] Voicebox client in Rust — required, not preferred: the webview cannot
+      reach Voicebox at all (opaque origin under WebKitGTK)
+- [x] Supervision with **three** states, not two. "Not running" and "running
+      but unable to write its own audio" need different reactions, and the
+      second reported as merely down sends you looking in the wrong place
+- [x] Degrades to text-only, with the reason shown
+- [x] MUTE, and a speaker button on every assistant message — present whether
+      or not Voicebox is up, so coming back is a click
+- [x] D15 honoured in code: fenced code, inline code, paths, URLs and tables
+      are stripped before anything reaches a voice. The adapter emits
+      `assistant.text`, so the constraint cannot rely on the event type alone
+- [x] Push-to-talk, held rather than toggled (D14)
+- [ ] A full spoken session — **needs a human**
+- [ ] Kill Voicebox mid-session and confirm the app keeps working — **needs a
+      human**
 
 ### M7 — Character
 **Status:** not-started

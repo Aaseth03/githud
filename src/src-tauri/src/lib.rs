@@ -230,6 +230,40 @@ fn project_diff(cwd: String) -> git::Diff {
     git::diff(std::path::Path::new(&cwd))
 }
 
+// ── Voice (M6) ───────────────────────────────────────────────────────────────
+//
+// All Voicebox traffic goes through Rust because the webview cannot reach it —
+// see `voice/mod.rs`. Local only; no cloud endpoint is reachable from here.
+
+#[tauri::command]
+async fn voice_health() -> voice::Health {
+    voice::health().await
+}
+
+#[tauri::command]
+async fn voice_voices() -> Result<Vec<voice::Voice>, String> {
+    voice::voices().await
+}
+
+#[tauri::command]
+async fn voice_speak(
+    text: String,
+    voice_id: String,
+    engine: Option<String>,
+) -> Result<voice::Speech, String> {
+    voice::speak(&text, &voice_id, engine.as_deref()).await
+}
+
+/// Push-to-talk: recorded audio in, text out.
+#[tauri::command]
+async fn voice_transcribe(audio: String, mime: String) -> Result<String, String> {
+    use base64::Engine as _;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(audio)
+        .map_err(|e| format!("bad audio encoding: {e}"))?;
+    voice::transcribe(&bytes, &mime).await
+}
+
 /// What is actually running for a project.
 ///
 /// Principle 5: nothing is hidden. The Activity panel should be able to say
@@ -430,6 +464,10 @@ pub fn run() {
             project_tree,
             read_file,
             project_sessions,
+            voice_health,
+            voice_voices,
+            voice_speak,
+            voice_transcribe,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
