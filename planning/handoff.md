@@ -35,8 +35,12 @@ building, running, or launching. Do not rediscover it.
 | M8 — speech shaping | not started — carved out of M6's tail (D20) |
 | M9 — parallel and portable | not started |
 
-Branch `m6-voice`, PR #10 open against `main` — M6's completion went onto that
-same PR rather than a second one. PRs #1–#9 merged.
+**`main` is current: PRs #1–#10 merged, M6 included.** Branch off `main` for
+M7 — and verify it by content rather than by the merged label, which is the
+mistake at the bottom of this file that has cost three trunk misses. On
+2026-07-29 that check was: `reap.rs`, `audio.rs`, `Settings.tsx`, `capture.ts`
+and D20 all present on `main`, with 211 Rust · 21 guardrail · 153 TypeScript
+green there.
 
 Counts as of the last run: **211 Rust unit · 21 guardrail · 153 TypeScript**,
 clippy and oxlint clean. Eleven Rust tests are `#[ignore]`d because they need
