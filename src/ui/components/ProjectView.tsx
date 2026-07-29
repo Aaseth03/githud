@@ -210,7 +210,12 @@ export function ProjectView({
         />
 
         <div style={{ width: widths.right }} className="shrink-0">
-          <Panel cwd={project.path} card={card} problems={problems} />
+          <Panel
+            id={project.rel_path}
+            cwd={project.path}
+            card={card}
+            problems={problems}
+          />
         </div>
       </div>
     </div>

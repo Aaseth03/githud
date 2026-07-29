@@ -229,6 +229,32 @@ fn project_diff(cwd: String) -> git::Diff {
     git::diff(std::path::Path::new(&cwd))
 }
 
+/// What is actually running for a project.
+///
+/// Principle 5: nothing is hidden. The Activity panel should be able to say
+/// whether a shell and an agent are alive without guessing from the UI's own
+/// state, which can drift from the processes it is describing.
+#[derive(Clone, serde::Serialize)]
+struct Sessions {
+    terminal: bool,
+    agent: bool,
+    /// The conversation a stopped agent would resume, if there is one.
+    resumable: bool,
+}
+
+#[tauri::command]
+fn project_sessions(
+    terminals: tauri::State<'_, pty::Terminals>,
+    agents: tauri::State<'_, agent::Agents>,
+    id: String,
+) -> Sessions {
+    Sessions {
+        terminal: terminals.has(&id),
+        agent: agents.has(&id),
+        resumable: agents.resumable_session(&id).is_some(),
+    }
+}
+
 /// One file's contents, for the viewer. Bounded, and refuses to leave the
 /// project.
 #[tauri::command]
@@ -402,6 +428,7 @@ pub fn run() {
             project_diff,
             project_tree,
             read_file,
+            project_sessions,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

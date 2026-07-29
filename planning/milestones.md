@@ -183,7 +183,10 @@ Tauri, last commit, and 5/9 milestones, with no agent session anywhere.
 - [x] Columns resize by dragging the separators, with a floor under each and a
       usable centre kept
 - [x] Diff panel over the working tree, bounded and **saying when truncated**
-- [x] Activity panel with a persistent error log
+- [x] Activity panel: **running processes** (shell and agent, from the
+      processes themselves rather than the UI's belief about them), the current
+      tool call with its real target, recent tools, and a **persistent error
+      log** that does not scroll away
 - [x] Project card read once and cached (D11) — the UI reads a struct, never
       prose
 - [x] Rust milestone parser implementing `../config/contracts/milestones.md`,

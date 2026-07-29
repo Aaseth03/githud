@@ -30,6 +30,8 @@ src/
 │  ├─ panes.ts             Chat|Terminal sub-tab rules, pure
 │  ├─ panes.test.ts
 │  ├─ agent.ts             normalized events + transcript reducer, pure
+│  ├─ activity.ts          live agent state for the panel, pure
+│  ├─ activity.test.ts
 │  ├─ agent.test.ts
 │  ├─ hooks/
 │  │  └─ useProjects.ts    calls the scan command; parses nothing
@@ -182,6 +184,13 @@ src-tauri/src/
   That contract is read by GIT HUD out of *other people's* repos, so changing
   the parser without changing the contract breaks a promise made to every one
   of them. There is a test asserting GIT HUD's own milestones satisfy it.
+- **"What was said" and "what is happening" are different questions.**
+  `agent.ts` reduces the event stream into a transcript; `activity.ts` reduces
+  the same stream into live state for the panel. Two readers of one stream, not
+  duplicated rules — and cheaper than the panel reaching into the chat.
+- **Liveness comes from the processes, not from the UI's belief about them.**
+  `project_sessions` asks the registries directly, because a panel that guesses
+  is worse than no panel.
 - **A chosen width and a displayed width are different things.** `fit` only
   shrinks, so storing its result as the preference makes a transient narrow
   container collapse the columns permanently. Keep what was chosen; derive what

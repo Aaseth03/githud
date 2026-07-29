@@ -1,7 +1,22 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import type { Card, Diff } from "../card";
 import { cardProblems } from "../card";
+import type { AgentEvent } from "../agent";
+import {
+  applyActivity,
+  initialActivity,
+  runningTool,
+  summary,
+  type ActivityState,
+} from "../activity";
+
+interface Sessions {
+  terminal: boolean;
+  agent: boolean;
+  resumable: boolean;
+}
 
 export type PanelMode = "activity" | "diff";
 
@@ -11,16 +26,62 @@ export type PanelMode = "activity" | "diff";
  * Activity and Diff for now; Artifact arrives with the documents that need it.
  */
 export function Panel({
+  id,
   cwd,
   card,
   problems,
 }: {
+  /** Project key, for the live-session and event queries. */
+  id: string;
   cwd: string;
   card: Card | null;
   /** Runtime problems from elsewhere in the app, kept alongside the card's. */
   problems: string[];
 }) {
   const [mode, setMode] = useState<PanelMode>("activity");
+  const [activity, setActivity] = useState<ActivityState>(initialActivity);
+  const [sessions, setSessions] = useState<Sessions | null>(null);
+
+  // The panel reduces the agent stream for itself. The chat answers "what was
+  // said"; this answers "what is happening" — different questions over the same
+  // events, which is cheaper and clearer than reaching into the chat's state.
+  useEffect(() => {
+    let disposed = false;
+    let off: (() => void) | null = null;
+    void (async () => {
+      const sub = await listen<{ id: string; event: AgentEvent }>(
+        "agent://event",
+        (e) => {
+          if (e.payload.id !== id) return;
+          setActivity((s) => applyActivity(s, e.payload.event));
+        },
+      );
+      if (disposed) sub();
+      else off = sub;
+    })();
+    return () => {
+      disposed = true;
+      off?.();
+    };
+  }, [id]);
+
+  // Liveness comes from the processes themselves, not from the UI's belief
+  // about them — those drift, and a panel that guesses is worse than none.
+  useEffect(() => {
+    let live = true;
+    const poll = () =>
+      void invoke<Sessions>("project_sessions", { id })
+        .then((s) => live && setSessions(s))
+        .catch(() => {
+          /* the window is closing */
+        });
+    poll();
+    const t = setInterval(poll, 2000);
+    return () => {
+      live = false;
+      clearInterval(t);
+    };
+  }, [id]);
 
   return (
     <div className="flex h-full min-h-0 flex-col border-l border-line bg-deep">
@@ -34,7 +95,12 @@ export function Panel({
       </div>
 
       {mode === "activity" ? (
-        <Activity card={card} problems={problems} />
+        <Activity
+          card={card}
+          problems={problems}
+          activity={activity}
+          sessions={sessions}
+        />
       ) : (
         <DiffView cwd={cwd} />
       )}
@@ -76,11 +142,91 @@ function ModeTab({
  * Principle 5: nothing is hidden. An error log that scrolls away is a log you
  * cannot act on, so problems stay put until they are fixed.
  */
-function Activity({ card, problems }: { card: Card | null; problems: string[] }) {
-  const all = [...(card ? cardProblems(card) : []), ...problems];
+function Activity({
+  card,
+  problems,
+  activity,
+  sessions,
+}: {
+  card: Card | null;
+  problems: string[];
+  activity: ActivityState;
+  sessions: Sessions | null;
+}) {
+  // Card problems, app problems, and everything the agent reported — all kept,
+  // none scrolling away.
+  const all = [
+    ...(card ? cardProblems(card) : []),
+    ...problems,
+    ...activity.errors,
+  ];
+  const doing = summary(activity);
+  const running = runningTool(activity);
 
   return (
     <div className="min-h-0 flex-1 space-y-4 overflow-auto px-3 py-3">
+      <section>
+        <h3 className="text-[10px] tracking-[0.16em] text-ink-faint uppercase">
+          Running
+        </h3>
+        <ul className="mt-1.5 space-y-1 text-[11px]">
+          <li className="flex items-center gap-2">
+            <Dot on={sessions?.terminal ?? false} />
+            <span className="text-ink-dim">Terminal</span>
+            <span className="text-ink-faint">
+              {sessions?.terminal ? "shell running" : "not started"}
+            </span>
+          </li>
+          <li className="flex items-center gap-2">
+            <Dot on={sessions?.agent ?? false} />
+            <span className="text-ink-dim">Agent</span>
+            <span className="truncate text-ink-faint">
+              {sessions?.agent
+                ? [activity.adapter, activity.model].filter(Boolean).join(" · ") ||
+                  "starting"
+                : sessions?.resumable
+                  ? "stopped — resumable"
+                  : "not started"}
+            </span>
+          </li>
+        </ul>
+
+        {doing && (
+          <p className="mt-2 truncate font-mono text-[11px] text-signal">
+            <span className="mr-1.5 inline-block animate-pulse">●</span>
+            {doing}
+          </p>
+        )}
+      </section>
+
+      {activity.tools.length > 0 && (
+        <section>
+          <h3 className="text-[10px] tracking-[0.16em] text-ink-faint uppercase">
+            Recent tools
+          </h3>
+          <ul className="mt-1.5 space-y-1">
+            {activity.tools.map((t) => (
+              <li
+                key={t.id}
+                className={`flex items-baseline gap-2 font-mono text-[11px] ${
+                  t === running ? "text-signal" : ""
+                }`}
+              >
+                <span className="shrink-0">
+                  {t.ok === null ? "◇" : t.ok ? "◆" : "✕"}
+                </span>
+                <span className="shrink-0 text-ink-dim">{t.name}</span>
+                {t.detail && (
+                  <span className="truncate text-ink-faint" title={t.detail}>
+                    {t.detail}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       <section>
         <h3 className="text-[10px] tracking-[0.16em] text-ink-faint uppercase">
           Problems
@@ -135,6 +281,14 @@ function Activity({ card, problems }: { card: Card | null; problems: string[] })
         </p>
       )}
     </div>
+  );
+}
+
+function Dot({ on }: { on: boolean }) {
+  return (
+    <span
+      className={`size-2 shrink-0 rounded-full ${on ? "bg-go" : "bg-line-bright"}`}
+    />
   );
 }
 
