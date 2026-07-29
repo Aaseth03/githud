@@ -64,7 +64,20 @@ new-project flow already touches repo creation.
   not there is worse than no floor, because you would act as though it were.
 - The M4 suite attempts every denied operation and every allowed one, and ships
   only on green.
-- Now that a floor exists, the agent runs with `--permission-mode acceptEdits`.
-  M3 deliberately left this unset because writes with no sandwich beneath them
-  were the thing to avoid; the sandbox is that floor, and edits are confined to
-  the project directory.
+- Now that a floor exists, the agent runs with
+  `--permission-mode bypassPermissions`.
+
+  M3 deliberately left this unset because writes with no floor beneath them
+  were the thing to avoid. M4 built the floor, and this is what it was built
+  for — D6 removed per-action approval precisely so that a mechanism, not a
+  prompt, would be what constrains the agent.
+
+  **`acceptEdits` was tried first and is the wrong shape.** It permits edits but
+  routes every Bash command for approval, and in `--print` mode there is nobody
+  to approve — so the agent could edit a file and then not run the test that
+  proved the edit worked. Observed in real sessions: `git status --short` and
+  `ls -R planning` both came back "This command requires approval".
+
+  What still constrains it: bwrap confines every write to the project, the PATH
+  shim refuses destructive `git` and `gh`, and a `read-only` project is bound
+  read-only. The residual `gh` hole above is unchanged.

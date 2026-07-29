@@ -263,3 +263,41 @@ fn the_agent_can_edit_inside_the_project_but_not_outside_it() {
     let _ = std::fs::remove_dir_all(&project);
     let _ = std::fs::remove_dir_all(&outside);
 }
+
+#[test]
+#[ignore = "starts a real sandboxed claude session; run explicitly with --ignored"]
+fn the_agent_can_run_commands_not_merely_read_and_edit() {
+    // `acceptEdits` permitted edits but sent every Bash command for approval,
+    // and in --print mode nobody can approve — so the agent could change a file
+    // and not run the test that proved the change worked. This asserts the
+    // thing that was actually broken.
+    let repo = dirs::home_dir().expect("home").join("github/Professor");
+
+    let events = run_turn(
+        &repo,
+        "Run `git status --short` and tell me how many lines it printed. \
+         Use the Bash tool.",
+        180,
+    );
+
+    for e in &events {
+        println!("  {e:?}");
+    }
+
+    let ran_bash = events
+        .iter()
+        .any(|e| matches!(e, AgentEvent::ToolCall { name, .. } if name == "Bash"));
+    assert!(ran_bash, "the agent never invoked Bash");
+
+    let bash_failed = events.iter().any(|e| matches!(
+        e,
+        AgentEvent::ToolResult { ok: false, detail: Some(d), .. }
+            if d.contains("requires approval") || d.contains("permission")
+    ));
+    assert!(!bash_failed, "a Bash command was still refused for permission");
+
+    let refused = events.iter().any(|e| matches!(
+        e, AgentEvent::Error { message, .. } if message.contains("Refused")
+    ));
+    assert!(!refused, "the turn reported a permission denial");
+}

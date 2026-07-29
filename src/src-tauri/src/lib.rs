@@ -5,8 +5,11 @@
 //! in the front end (D11).
 
 pub mod agent;
+pub mod card;
+pub mod git;
 pub mod guard;
 pub mod overrides;
+pub mod parse;
 pub mod pty;
 pub mod scan;
 
@@ -199,6 +202,75 @@ fn pty_close(terminals: tauri::State<'_, pty::Terminals>, id: String) {
     terminals.kill(&id);
 }
 
+// ── The project card and panels (M5) ────────────────────────────────────────
+//
+// No agent involved: opening a project cold and seeing its state is the whole
+// point (D13 — mechanical work is core code, never a prompt).
+
+/// The cached card. Reads disk on first request, then serves the struct (D11).
+#[tauri::command]
+fn project_card(
+    cards: tauri::State<'_, card::Cards>,
+    id: String,
+    cwd: String,
+    refresh: Option<bool>,
+) -> card::Card {
+    let path = std::path::Path::new(&cwd);
+    if refresh.unwrap_or(false) {
+        cards.refresh(&id, path)
+    } else {
+        cards.get(&id, path)
+    }
+}
+
+/// Working-tree changes for the Diff panel.
+#[tauri::command]
+fn project_diff(cwd: String) -> git::Diff {
+    git::diff(std::path::Path::new(&cwd))
+}
+
+/// What is actually running for a project.
+///
+/// Principle 5: nothing is hidden. The Activity panel should be able to say
+/// whether a shell and an agent are alive without guessing from the UI's own
+/// state, which can drift from the processes it is describing.
+#[derive(Clone, serde::Serialize)]
+struct Sessions {
+    terminal: bool,
+    agent: bool,
+    /// The conversation a stopped agent would resume, if there is one.
+    resumable: bool,
+}
+
+#[tauri::command]
+fn project_sessions(
+    terminals: tauri::State<'_, pty::Terminals>,
+    agents: tauri::State<'_, agent::Agents>,
+    id: String,
+) -> Sessions {
+    Sessions {
+        terminal: terminals.has(&id),
+        agent: agents.has(&id),
+        resumable: agents.resumable_session(&id).is_some(),
+    }
+}
+
+/// One file's contents, for the viewer. Bounded, and refuses to leave the
+/// project.
+#[tauri::command]
+fn read_file(cwd: String, path: String) -> Result<git::FileContents, String> {
+    git::read_file(std::path::Path::new(&cwd), &path)
+}
+
+/// One directory of the file tree. Lazy: a huge repo is never walked eagerly.
+#[tauri::command]
+fn project_tree(cwd: String, path: Option<String>) -> Result<Vec<git::TreeEntry>, String> {
+    git::list_dir(
+        std::path::Path::new(&cwd),
+        path.as_deref().unwrap_or_default(),
+    )
+}
+
 // ── Channel 2: the agent (D1) ────────────────────────────────────────────────
 //
 // Normalized events only. The UI never sees a harness's own JSON — that is what
@@ -325,10 +397,12 @@ fn agent_available() -> bool {
 pub fn run() {
     let terminals = pty::Terminals::new();
     let agents = agent::Agents::new();
+    let cards = card::Cards::new();
 
     tauri::Builder::default()
         .manage(terminals.clone())
         .manage(agents.clone())
+        .manage(cards)
         .setup(|app| {
             if cfg!(debug_assertions) {
                 app.handle().plugin(
@@ -350,6 +424,11 @@ pub fn run() {
             agent_send,
             agent_stop,
             agent_available,
+            project_card,
+            project_diff,
+            project_tree,
+            read_file,
+            project_sessions,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

@@ -1,8 +1,24 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import type { Project } from "../types";
 import { initialPaneState, isMounted, showPane, type Pane } from "../panes";
 import { Terminal } from "./Terminal";
 import { Chat } from "./Chat";
+import { FileTree } from "./FileTree";
+import { Panel } from "./Panel";
+import { FileViewer } from "./FileViewer";
+import { ProjectCard } from "./ProjectCard";
+import type { Card } from "../card";
+import { Splitter } from "./Splitter";
+import {
+  DEFAULT_LEFT,
+  DEFAULT_RIGHT,
+  fit,
+  LEFT_BOUNDS,
+  loadWidths,
+  RIGHT_BOUNDS,
+  saveWidths,
+} from "../split";
 
 /**
  * A project tab.
@@ -21,6 +37,46 @@ export function ProjectView({
   visible: boolean;
 }) {
   const [panes, setPanes] = useState(() => initialPaneState("chat"));
+  const [card, setCard] = useState<Card | null>(null);
+  const [problems, setProblems] = useState<string[]>([]);
+  const [openFile, setOpenFile] = useState<string | null>(null);
+  // What the user chose. Never overwritten by fitting — see split.ts.
+  const [preferred, setPreferred] = useState(loadWidths);
+  const [available, setAvailable] = useState(Number.POSITIVE_INFINITY);
+  const columnsRef = useRef<HTMLDivElement | null>(null);
+
+  // Persist per machine — layout preference is local state, not project data.
+  useEffect(() => {
+    saveWidths(preferred);
+  }, [preferred]);
+
+  useEffect(() => {
+    const el = columnsRef.current;
+    if (!el) return;
+    const measure = () => setAvailable(el.clientWidth || Number.POSITIVE_INFINITY);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  // Narrowing the window must not crush the centre; the side columns give way,
+  // and widen again when there is room, because the preference survived.
+  const widths = fit(preferred.left, preferred.right, available);
+
+  // Read once and cached in Rust (D11). No agent is involved in showing a
+  // project's state — that is the point of the card.
+  useEffect(() => {
+    let live = true;
+    void invoke<Card>("project_card", { id: project.rel_path, cwd: project.path })
+      .then((c) => live && setCard(c))
+      .catch((e) =>
+        live && setProblems((p) => [...p, e instanceof Error ? e.message : String(e)]),
+      );
+    return () => {
+      live = false;
+    };
+  }, [project.rel_path, project.path]);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -36,24 +92,13 @@ export function ProjectView({
           </p>
         )}
 
-        <dl className="mt-5 flex flex-wrap gap-x-8 gap-y-3">
-          <Field label="Relative">{project.rel_path}</Field>
-          <Field label="Depth">{String(project.depth)}</Field>
-          <Field label="Kind">{project.kind}</Field>
-          <Field label="Agent" ok={project.agent === "read-write"}>
-            {project.agent}
-          </Field>
-          {/* Detection is reported for every project — the icm.md contract is
-              canonical and never made to lie. Only the *expectation* varies by
-              kind, so a third-party repo shows its layers plainly rather than
-              in warning colour (D18). */}
-          <Field label="Layer 0" ok={expectationTone(project, project.icm.layer0)}>
-            {project.icm.layer0 ? "present" : "missing"}
-          </Field>
-          <Field label="Layer 1" ok={expectationTone(project, project.icm.layer1)}>
-            {project.icm.layer1 ? "present" : "missing"}
-          </Field>
-        </dl>
+        {card ? (
+          <dl className="mt-5">
+            <ProjectCard card={card} />
+          </dl>
+        ) : (
+          <p className="mt-5 font-mono text-xs text-ink-faint">reading project…</p>
+        )}
 
         {project.kind !== "own" && (
           <p className="mt-4 text-xs text-ink-faint">
@@ -79,10 +124,46 @@ export function ProjectView({
           >
             Terminal
           </PaneTab>
+          {isMounted(panes, "file") && (
+            <PaneTab
+              pane="file"
+              active={panes.active}
+              onSelect={(p) => setPanes((s) => showPane(s, p))}
+            >
+              {openFile ? openFile.split("/").pop() : "File"}
+            </PaneTab>
+          )}
         </nav>
       </header>
 
-      <div className="relative min-h-0 flex-1">
+      <div ref={columnsRef} className="flex min-h-0 flex-1">
+        <aside
+          style={{ width: widths.left }}
+          className="flex shrink-0 flex-col bg-deep"
+        >
+          <h2 className="shrink-0 px-3 pt-3 pb-1 text-[10px] tracking-[0.16em] text-ink-faint uppercase">
+            Files
+          </h2>
+          <FileTree
+            cwd={project.path}
+            selected={openFile}
+            onOpen={(path) => {
+              setOpenFile(path);
+              setPanes((p) => showPane(p, "file"));
+            }}
+          />
+        </aside>
+
+        <Splitter
+          side="left"
+          width={widths.left}
+          bounds={LEFT_BOUNDS}
+          onResize={(left) => setPreferred((w) => ({ ...w, left }))}
+          onReset={() => setPreferred((w) => ({ ...w, left: DEFAULT_LEFT }))}
+          label="File tree width"
+        />
+
+        <div className="relative min-h-0 flex-1">
         {/* Both panes are hidden with CSS rather than unmounted — see
             ../panes.ts. The terminal is not rendered at all until first shown,
             so browsing a project never leaves a shell behind. */}
@@ -91,6 +172,16 @@ export function ProjectView({
         >
           <Chat project={project} visible={visible && panes.active === "chat"} />
         </div>
+
+        {isMounted(panes, "file") && (
+          <div
+            className={`absolute inset-0 ${
+              panes.active === "file" ? "" : "hidden"
+            }`}
+          >
+            <FileViewer cwd={project.path} path={openFile} />
+          </div>
+        )}
 
         {isMounted(panes, "terminal") && (
           <div
@@ -107,6 +198,25 @@ export function ProjectView({
             />
           </div>
         )}
+        </div>
+
+        <Splitter
+          side="right"
+          width={widths.right}
+          bounds={RIGHT_BOUNDS}
+          onResize={(right) => setPreferred((w) => ({ ...w, right }))}
+          onReset={() => setPreferred((w) => ({ ...w, right: DEFAULT_RIGHT }))}
+          label="Panel width"
+        />
+
+        <div style={{ width: widths.right }} className="shrink-0">
+          <Panel
+            id={project.rel_path}
+            cwd={project.path}
+            card={card}
+            problems={problems}
+          />
+        </div>
       </div>
     </div>
   );
@@ -144,35 +254,5 @@ function PaneTab({
       )}
       {children}
     </button>
-  );
-}
-
-/**
- * A missing layer is only a *problem* where ICM is expected. Elsewhere it is
- * just a fact, so it renders neutral rather than in warning colour.
- */
-function expectationTone(project: Project, present: boolean): boolean | undefined {
-  if (project.kind !== "own") return undefined;
-  return present;
-}
-
-function Field({
-  label,
-  children,
-  ok,
-}: {
-  label: string;
-  children: React.ReactNode;
-  ok?: boolean;
-}) {
-  const tone =
-    ok === undefined ? "text-ink-dim" : ok ? "text-go" : "text-warn";
-  return (
-    <div>
-      <dt className="text-[10px] tracking-[0.16em] text-ink-faint uppercase">
-        {label}
-      </dt>
-      <dd className={`mt-1 font-mono text-sm ${tone}`}>{children}</dd>
-    </div>
   );
 }

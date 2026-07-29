@@ -6,9 +6,9 @@
  * and that one is easy to get subtly wrong.
  */
 
-export type Pane = "chat" | "terminal";
+export type Pane = "chat" | "terminal" | "file";
 
-export const PANES: readonly Pane[] = ["chat", "terminal"] as const;
+export const PANES: readonly Pane[] = ["chat", "terminal", "file"] as const;
 
 export interface PaneState {
   active: Pane;
