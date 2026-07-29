@@ -23,7 +23,7 @@ use std::path::Path;
 /// Is this process one of ours, and has it outlived the app that started it?
 ///
 /// Both halves matter. The mark alone would match a *live* sibling — a second
-/// GIT HUD, which M8's parallel sessions make a real case — and killing that
+/// GIT HUD, which M9's parallel sessions make a real case — and killing that
 /// would be far worse than the leak. An orphan is a marked process whose parent
 /// is no longer a `githud`: on this machine they reparent to `systemd --user`
 /// rather than to pid 1, so the test is what the parent *is*, never its pid.
@@ -179,7 +179,7 @@ mod tests {
     #[test]
     fn a_marked_sandbox_still_held_by_a_running_app_is_left_alone() {
         // This is the case that must never be got wrong. A second GIT HUD is a
-        // real scenario at M8, and reaping its live session would be far worse
+        // real scenario at M9, and reaping its live session would be far worse
         // than the leak this exists to fix.
         assert!(!is_orphan(OURS, Some("githud")));
     }
