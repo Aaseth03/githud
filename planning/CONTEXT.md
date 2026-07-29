@@ -46,7 +46,8 @@ planning/
    ├─ 2026-07-28-D16-bwrap-into-v1.md
    ├─ 2026-07-28-D17-vendor-icm.md
    ├─ 2026-07-28-D18-project-kinds.md
-   └─ 2026-07-28-D19-sandbox-scope.md
+   ├─ 2026-07-28-D19-sandbox-scope.md
+   └─ 2026-07-29-D20-speech-is-a-script.md
 ```
 
 `specs/` is real but currently empty — kept with a `.gitkeep` so the map matches
@@ -63,14 +64,15 @@ disk.
 | `plans/` | Implementation plans (`YYYY-MM-DD-title.plan.md`) | Planning a feature before coding — start from `plans/_TEMPLATE.plan.md` |
 | `specs/` | Feature specs (`feature-name_spec.md`) | Spec'ing a feature in detail |
 
-## Decisions D1–D19
+## Decisions D1–D20
 
 D1–D15 were committed 2026-07-28 out of the design interview; D16–D18 followed
 the same day — D16 when a D7 assumption was tested and failed, D17 when M1 turned
 out to depend on a definition that had no home in the repo, and D18 when M1's
-first run flagged a third-party repo that was never going to carry ICM. **Do not
-re-litigate them.** Supersede one with a new dated record that names what it
-replaces.
+first run flagged a third-party repo that was never going to carry ICM. D20 came
+out of M6 closing, when hearing the app speak made it obvious that *what* to say
+and *how* to say it are different problems. **Do not re-litigate them.**
+Supersede one with a new dated record that names what it replaces.
 
 The pattern is worth noticing: every decision after D15 came from *running the
 thing*, not from planning it.
@@ -96,6 +98,7 @@ thing*, not from planning it.
 | D17 | [ICM travels in the repo](decisions/2026-07-28-D17-vendor-icm.md) — the detection contract and the vendored procedure both live in `config/` |
 | D18 | [Projects have a kind](decisions/2026-07-28-D18-project-kinds.md) — ICM expectation follows from it; detection stays universal |
 | D19 | [The sandbox scope](decisions/2026-07-28-D19-sandbox-scope.md) — what the floor covers, and the D-Bus hole left open on purpose |
+| D20 | [Speech shaping is a script](decisions/2026-07-29-D20-speech-is-a-script.md), not a judgement — deterministic, with the lexicon as data the user owns |
 
 ## Architecture
 

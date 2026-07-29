@@ -300,22 +300,7 @@ during the outage was spoken once it came back.
 - [ ] Character/voice config screen that picks from Voicebox's profiles API —
       voice *creation* stays in Voicebox, do not rebuild it
 
-### M8 — Parallel and portable
-**Status:** not-started
-**Validation:** two concurrent sessions on one repo; a second adapter runs a real
-task; a new project is born end to end.
-
-- [ ] Worktree sessions
-- [ ] Orphan worktree sweep on project open — prune clean, surface dirty, never
-      auto-remove
-- [ ] A second adapter (Gemini CLI or OpenCode)
-- [ ] New-project flow: interview → `icm-architect` → `git init` → private remote
-      via `../ops/scripts/create-private-remote.sh`. **Use the vendored copy at
-      `../config/skills/icm-architect/`, never a harness-installed one** (D17) —
-      an installed skill exists on one machine under one harness and vanishes
-      silently everywhere else
-
-### M9 — Speech shaping
+### M8 — Speech shaping
 **Status:** not-started
 **Validation:** a spoken paragraph containing `JSON`, `HTTP`, a numbered list, a
 file path and an acronym the lexicon does not know reads aloud the way a person
@@ -338,12 +323,14 @@ Observed at the end of M6, on real replies:
   no view on prosody — a chunk break is currently indistinguishable from a
   paragraph break.
 
-**This is a script, not a judgement call.** The transformation must be
-deterministic and testable: the same text in, the same text out, every time,
-with no model deciding anything at runtime. That is principle 4 — mechanical
-work stays mechanical — and it is also what makes the behaviour ownable, since
-a wrong pronunciation should be fixable by editing a list rather than by
-re-prompting something.
+**This is a script, not a judgement call** —
+[D20](decisions/2026-07-29-D20-speech-is-a-script.md), which is where the
+reasoning lives and is not to be re-litigated here. Deterministic in,
+deterministic out, with the lexicon as data the user owns.
+
+It sits ahead of parallel-and-portable deliberately: character and voice are the
+reward this project was built for, and shaping is what makes a character sound
+like one rather than like a screen reader.
 
 - [ ] A pronunciation lexicon as **committed data**, not code — it is config the
       user owns (D8), sitting with characters rather than in the binary
@@ -358,6 +345,21 @@ re-prompting something.
 - [ ] Pure, and tested per rule, in the same shape as `voice.ts` — the whole
       point is that it can be proved without listening to it
 - [ ] Integrated with M7's character, so delivery and identity are one thing
+
+### M9 — Parallel and portable
+**Status:** not-started
+**Validation:** two concurrent sessions on one repo; a second adapter runs a real
+task; a new project is born end to end.
+
+- [ ] Worktree sessions
+- [ ] Orphan worktree sweep on project open — prune clean, surface dirty, never
+      auto-remove
+- [ ] A second adapter (Gemini CLI or OpenCode)
+- [ ] New-project flow: interview → `icm-architect` → `git init` → private remote
+      via `../ops/scripts/create-private-remote.sh`. **Use the vendored copy at
+      `../config/skills/icm-architect/`, never a harness-installed one** (D17) —
+      an installed skill exists on one machine under one harness and vanishes
+      silently everywhere else
 
 ---
 

@@ -12,7 +12,7 @@ this file says what is in flight and what is waiting on a human.
 
 1. `../AGENTS.md` — Layer 0. Canary `GITHUD-L0-0728`.
 2. `../CONTEXT.md` — Layer 1, repo-wide.
-3. `CONTEXT.md` (this directory) — decisions D1–D19, architecture contracts.
+3. `CONTEXT.md` (this directory) — decisions D1–D20, architecture contracts.
 4. `../src/CONTEXT.md` — **the rules that bite.** Every hard-won lesson is a
    bullet there. Read it before writing any code in `src/`.
 5. `milestones.md` — the roadmap.
@@ -32,16 +32,17 @@ building, running, or launching. Do not rediscover it.
 | M5 — panels and project cards | done — v1 complete |
 | M6 — voice | **done — validated by hand 2026-07-29** |
 | M7 — character | not started — *this is the next build* |
-| M8 — parallel and portable | not started |
-| M9 — speech shaping | not started — carved out of M6's tail |
+| M8 — speech shaping | not started — carved out of M6's tail (D20) |
+| M9 — parallel and portable | not started |
 
 Branch `m6-voice`, PR #10 open against `main` — M6's completion went onto that
 same PR rather than a second one. PRs #1–#9 merged.
 
-Counts as of the last run: **206 Rust unit · 21 guardrail · 153 TypeScript**,
-clippy and oxlint clean. Ten Rust tests are `#[ignore]`d because they need
-something real: 5 need a live Voicebox, 4 start real Claude sessions, 1 scans
-the actual `~/github`. Run them with `--ignored` when you have the thing they
+Counts as of the last run: **211 Rust unit · 21 guardrail · 153 TypeScript**,
+clippy and oxlint clean. Eleven Rust tests are `#[ignore]`d because they need
+something real: 5 need a live Voicebox, 4 start real Claude sessions, 1 spawns a
+real orphaned sandbox to prove the sweep kills it, and 1 scans the actual
+`~/github`. Run them with `--ignored` when you have the thing they
 need — they are the only tests that prove the outside world behaves.
 
 **The five Voicebox live tests were run 2026-07-29 and are 5/5 green**,
@@ -84,7 +85,7 @@ and it earned its keep the day it was built.
 
 ## What M6 deliberately did not do
 
-**M9 — speech shaping** was carved out rather than crammed in. The app speaks;
+**M8 — speech shaping** was carved out rather than crammed in. The app speaks;
 it does not yet speak *well*. `voice.ts` implements D15, which is a filter — it
 decides what must never be read aloud — and a filter is not a narrator. Tables
 vanish, `1.` is read as a flat "one", and no policy distinguishes *Jayson* from
@@ -132,6 +133,12 @@ code-level versions; these are the workflow ones.
   which once produced a completely false bug report ("every project is
   classified wrong"). Check for an existing dev server before believing the UI.
 - **`pkill -f githud` kills the calling shell.** Use `pkill -x`.
+- **`pkill` used to leak a sandboxed Claude session every time.** Tauri's
+  `ExitRequested` never fires on a signal, and `--die-with-parent` ties itself
+  to the spawning *thread* rather than the process. Fixed 2026-07-29 by
+  `reap.rs` — catchable signals now tear down, and a startup sweep reaps what a
+  `SIGKILL` or a crash left. Killing the app is safe again, but check
+  `ps -eo args | grep GITHUD_AGENT` if you ever doubt it.
 - **Verify counts before writing them down.** Test totals and clippy warnings
   have been misreported from cached runs more than once. Re-run, then write.
 - **Assert before replacing.** Scripted edits have silently matched nothing and
