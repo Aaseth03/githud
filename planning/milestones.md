@@ -182,7 +182,9 @@ Tauri, last commit, and 5/9 milestones, with no agent session anywhere.
       rendered as noise, and the viewer refuses to read outside the project
 - [x] Columns resize by dragging the separators, with a floor under each and a
       usable centre kept
-- [x] Diff panel over the working tree, bounded and **saying when truncated**
+- [x] Diff panel over the working tree — **split per file**, collapsible, with
+      per-file `+`/`−` counts, renames shown, binaries flagged rather than
+      rendered. Bounded, and **saying when truncated**
 - [x] Activity panel: **running processes** (shell and agent, from the
       processes themselves rather than the UI's belief about them), the current
       tool call with its real target, recent tools, and a **persistent error

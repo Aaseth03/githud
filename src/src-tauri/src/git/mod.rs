@@ -81,20 +81,37 @@ pub fn status(repo: &Path) -> Status {
     }
 }
 
+/// One file's changes, so the panel can show them separately.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FileDiff {
+    pub path: String,
+    /// Set when the file was renamed, so the panel can show `old → new`.
+    pub old_path: Option<String>,
+    pub added: usize,
+    pub removed: usize,
+    /// This file's portion of the patch.
+    pub patch: String,
+    /// Git reports these rather than diffing them; there is nothing to show.
+    pub binary: bool,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Diff {
-    pub patch: String,
+    pub files: Vec<FileDiff>,
+    /// Said out loud: a silently cut diff reads as a complete one.
     pub truncated: bool,
-    pub files: usize,
+}
+
+impl Diff {
+    pub fn is_empty(&self) -> bool {
+        self.files.is_empty()
+    }
 }
 
 /// The working tree against HEAD, including staged changes.
 pub fn diff(repo: &Path) -> Diff {
-    let files = git(repo, &["diff", "HEAD", "--name-only"])
-        .map(|s| s.lines().filter(|l| !l.trim().is_empty()).count())
-        .unwrap_or(0);
-
     let mut patch = git(repo, &["diff", "HEAD", "--no-color"]).unwrap_or_default();
+
     let truncated = patch.len() > DIFF_LIMIT;
     if truncated {
         // Cut on a char boundary — a diff can contain any UTF-8.
@@ -106,10 +123,78 @@ pub fn diff(repo: &Path) -> Diff {
     }
 
     Diff {
-        patch,
+        files: split_patch(&patch),
         truncated,
-        files,
     }
+}
+
+/// Split a unified diff into one entry per file.
+///
+/// Parsed here rather than in the UI: the panel should render a struct, the
+/// same reason the project card does (D11). Malformed or truncated input yields
+/// fewer files, never a panic — the last file of a truncated patch is simply
+/// incomplete.
+pub fn split_patch(patch: &str) -> Vec<FileDiff> {
+    let mut files: Vec<FileDiff> = Vec::new();
+    let mut current: Option<FileDiff> = None;
+
+    for line in patch.lines() {
+        if let Some(rest) = line.strip_prefix("diff --git ") {
+            if let Some(done) = current.take() {
+                files.push(done);
+            }
+            current = Some(FileDiff {
+                path: path_from_header(rest),
+                ..FileDiff::default()
+            });
+        }
+
+        let Some(f) = current.as_mut() else {
+            continue;
+        };
+
+        f.patch.push_str(line);
+        f.patch.push('\n');
+
+        if line.starts_with("Binary files ") {
+            f.binary = true;
+        } else if let Some(p) = line.strip_prefix("rename from ") {
+            f.old_path = Some(p.trim().to_string());
+        } else if let Some(p) = line.strip_prefix("rename to ") {
+            f.path = p.trim().to_string();
+        } else if let Some(p) = line.strip_prefix("+++ b/") {
+            // The authoritative name; `diff --git` mangles paths with spaces.
+            if p != "/dev/null" {
+                f.path = p.trim().to_string();
+            }
+        } else if line.starts_with("+++") || line.starts_with("---") {
+            // File headers, not content.
+        } else if line.starts_with('+') {
+            f.added += 1;
+        } else if line.starts_with('-') {
+            f.removed += 1;
+        }
+    }
+
+    if let Some(done) = current.take() {
+        files.push(done);
+    }
+    files
+}
+
+/// `a/path b/path` → `path`, taking the second half so a rename reports its
+/// destination.
+fn path_from_header(rest: &str) -> String {
+    let cleaned = rest.trim();
+    if let Some(idx) = cleaned.find(" b/") {
+        return cleaned[idx + 3..].to_string();
+    }
+    cleaned
+        .split_whitespace()
+        .next_back()
+        .unwrap_or(cleaned)
+        .trim_start_matches("b/")
+        .to_string()
 }
 
 /// A guess at the stack, from files that are cheap to look for.
@@ -342,22 +427,37 @@ mod tests {
 
         let d = diff(&r);
 
-        assert_eq!(d.files, 0);
-        assert!(d.patch.is_empty());
+        assert!(d.is_empty());
         assert!(!d.truncated);
     }
 
     #[test]
-    fn a_changed_file_appears_in_the_diff() {
+    fn a_changed_file_appears_with_its_own_counts() {
         let r = repo("dirty");
         commit(&r, "a.txt", "one\n", "c");
         std::fs::write(r.join("a.txt"), "two\n").unwrap();
 
         let d = diff(&r);
 
-        assert_eq!(d.files, 1);
-        assert!(d.patch.contains("-one"), "{}", d.patch);
-        assert!(d.patch.contains("+two"), "{}", d.patch);
+        assert_eq!(d.files.len(), 1);
+        let f = &d.files[0];
+        assert_eq!(f.path, "a.txt");
+        assert_eq!((f.added, f.removed), (1, 1));
+        assert!(f.patch.contains("+two"), "{}", f.patch);
+    }
+
+    #[test]
+    fn each_changed_file_is_separate() {
+        let r = repo("multi");
+        commit(&r, "a.txt", "a\n", "c");
+        std::fs::write(r.join("a.txt"), "A\n").unwrap();
+        std::fs::write(r.join("b.txt"), "new file\n").unwrap();
+        Command::new("git").args(["add", "-A"]).current_dir(&r).output().unwrap();
+
+        let d = diff(&r);
+        let paths: Vec<&str> = d.files.iter().map(|f| f.path.as_str()).collect();
+
+        assert_eq!(paths, vec!["a.txt", "b.txt"]);
     }
 
     #[test]
@@ -369,7 +469,105 @@ mod tests {
         let d = diff(&r);
 
         assert!(d.truncated, "expected truncation");
-        assert!(d.patch.len() <= DIFF_LIMIT);
+        assert!(!d.files.is_empty(), "a truncated diff still shows what it has");
+    }
+
+    // ── Splitting the patch ──────────────────────────────────────────────────
+
+    #[test]
+    fn counts_ignore_the_file_headers() {
+        // `+++` and `---` start with + and -, and counting them would inflate
+        // every file by one each.
+        let patch = "\
+diff --git a/a.txt b/a.txt
+index 111..222 100644
+--- a/a.txt
++++ b/a.txt
+@@ -1 +1,2 @@
+-old
++new
++another
+";
+        let files = split_patch(patch);
+
+        assert_eq!(files.len(), 1);
+        assert_eq!((files[0].added, files[0].removed), (2, 1));
+    }
+
+    #[test]
+    fn a_rename_reports_both_names() {
+        let patch = "\
+diff --git a/old.txt b/new.txt
+similarity index 100%
+rename from old.txt
+rename to new.txt
+";
+        let files = split_patch(patch);
+
+        assert_eq!(files[0].path, "new.txt");
+        assert_eq!(files[0].old_path.as_deref(), Some("old.txt"));
+    }
+
+    #[test]
+    fn a_binary_file_is_flagged_rather_than_shown() {
+        let patch = "\
+diff --git a/logo.png b/logo.png
+index 111..222 100644
+Binary files a/logo.png and b/logo.png differ
+";
+        let files = split_patch(patch);
+
+        assert!(files[0].binary);
+        assert_eq!((files[0].added, files[0].removed), (0, 0));
+    }
+
+    #[test]
+    fn a_path_with_spaces_survives() {
+        // `diff --git a/x y b/x y` is ambiguous; `+++ b/` is authoritative.
+        let patch = "\
+diff --git a/my file.txt b/my file.txt
+--- a/my file.txt
++++ b/my file.txt
+@@ -1 +1 @@
+-a
++b
+";
+        assert_eq!(split_patch(patch)[0].path, "my file.txt");
+    }
+
+    #[test]
+    fn a_deleted_file_still_reports_its_name() {
+        let patch = "\
+diff --git a/gone.txt b/gone.txt
+deleted file mode 100644
+--- a/gone.txt
++++ /dev/null
+@@ -1 +0,0 @@
+-was here
+";
+        let files = split_patch(patch);
+
+        assert_eq!(files[0].path, "gone.txt");
+        assert_eq!(files[0].removed, 1);
+    }
+
+    #[test]
+    fn a_truncated_patch_yields_what_it_can_rather_than_panicking() {
+        let patch = "\
+diff --git a/a.txt b/a.txt
++++ b/a.txt
+@@ -1 +1 @@
++half a li";
+        let files = split_patch(patch);
+
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].path, "a.txt");
+    }
+
+    #[test]
+    fn splitting_nothing_yields_nothing() {
+        assert!(split_patch("").is_empty());
+        assert!(split_patch("not a diff at all").is_empty());
     }
 
     #[test]

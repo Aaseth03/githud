@@ -39,10 +39,19 @@ export interface Card {
   has_milestones: boolean;
 }
 
-export interface Diff {
+export interface FileDiff {
+  path: string;
+  /** Set on a rename, so the panel can show `old → new`. */
+  old_path: string | null;
+  added: number;
+  removed: number;
   patch: string;
+  binary: boolean;
+}
+
+export interface Diff {
+  files: FileDiff[];
   truncated: boolean;
-  files: number;
 }
 
 export interface FileContents {

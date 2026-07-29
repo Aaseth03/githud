@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import type { Card, Diff } from "../card";
+import type { Card, Diff, FileDiff } from "../card";
 import { cardProblems } from "../card";
 import type { AgentEvent } from "../agent";
 import {
@@ -307,6 +307,7 @@ function StateDot({ state }: { state: string }) {
 function DiffView({ cwd }: { cwd: string }) {
   const [diff, setDiff] = useState<Diff | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
   const load = useCallback(() => {
     void invoke<Diff>("project_diff", { cwd })
@@ -318,6 +319,15 @@ function DiffView({ cwd }: { cwd: string }) {
   }, [cwd]);
 
   useEffect(load, [load]);
+
+  const toggle = useCallback((path: string) => {
+    setCollapsed((s) => {
+      const next = new Set(s);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  }, []);
 
   if (error) {
     return (
@@ -331,58 +341,125 @@ function DiffView({ cwd }: { cwd: string }) {
     return <p className="px-3 py-3 text-xs text-ink-faint">…</p>;
   }
 
-  if (diff.files === 0) {
-    return (
-      <div className="flex min-h-0 flex-1 flex-col">
-        <Header files={0} onRefresh={load} truncated={false} />
-        <p className="px-3 py-3 text-xs text-ink-faint">
-          No uncommitted changes.
-        </p>
-      </div>
-    );
-  }
+  const added = diff.files.reduce((n, f) => n + f.added, 0);
+  const removed = diff.files.reduce((n, f) => n + f.removed, 0);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <Header files={diff.files} onRefresh={load} truncated={diff.truncated} />
-      <pre className="min-h-0 flex-1 overflow-auto px-3 py-2 font-mono text-[11px] leading-relaxed">
-        {diff.patch.split("\n").map((line, i) => (
-          <div key={i} className={lineTone(line)}>
-            {line || " "}
-          </div>
-        ))}
-      </pre>
+      <div className="flex shrink-0 items-center gap-2 border-b border-line px-3 py-1.5">
+        <span className="font-mono text-[10px] text-ink-faint">
+          {diff.files.length} file{diff.files.length === 1 ? "" : "s"}
+          {diff.files.length > 0 && (
+            <>
+              {" · "}
+              <span className="text-go">+{added}</span>{" "}
+              <span className="text-danger">−{removed}</span>
+            </>
+          )}
+          {/* Said out loud: a silently cut diff reads as a complete one. */}
+          {diff.truncated && <span className="text-warn"> · truncated</span>}
+        </span>
+        <span className="flex-1" />
+        <button
+          onClick={load}
+          className="rounded border border-line px-2 py-0.5 font-mono text-[10px] text-ink-dim
+                     transition-colors hover:border-signal-deep hover:text-signal
+                     focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal"
+        >
+          REFRESH
+        </button>
+      </div>
+
+      {diff.files.length === 0 ? (
+        <p className="px-3 py-3 text-xs text-ink-faint">
+          No uncommitted changes.
+        </p>
+      ) : (
+        <div className="min-h-0 flex-1 overflow-auto">
+          {diff.files.map((f) => (
+            <FileSection
+              key={f.path}
+              file={f}
+              collapsed={collapsed.has(f.path)}
+              onToggle={() => toggle(f.path)}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-function Header({
-  files,
-  truncated,
-  onRefresh,
+function FileSection({
+  file,
+  collapsed,
+  onToggle,
 }: {
-  files: number;
-  truncated: boolean;
-  onRefresh: () => void;
+  file: FileDiff;
+  collapsed: boolean;
+  onToggle: () => void;
 }) {
   return (
-    <div className="flex shrink-0 items-center gap-2 border-b border-line px-3 py-1.5">
-      <span className="font-mono text-[10px] text-ink-faint">
-        {files} file{files === 1 ? "" : "s"}
-        {/* Said out loud: a silently cut diff would read as a complete one. */}
-        {truncated && <span className="text-warn"> · truncated</span>}
-      </span>
-      <span className="flex-1" />
+    <section className="border-b border-line last:border-b-0">
       <button
-        onClick={onRefresh}
-        className="rounded border border-line px-2 py-0.5 font-mono text-[10px] text-ink-dim
-                   transition-colors hover:border-signal-deep hover:text-signal
-                   focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal"
+        onClick={onToggle}
+        className="flex w-full items-center gap-2 px-3 py-1.5 text-left transition-colors
+                   hover:bg-surface focus-visible:outline-2
+                   focus-visible:outline-offset-[-2px] focus-visible:outline-signal"
       >
-        REFRESH
+        <span aria-hidden className="w-2.5 shrink-0 text-ink-faint">
+          {collapsed ? "▸" : "▾"}
+        </span>
+        {/* Directory dimmed and allowed to truncate, filename kept whole —
+            the filename is what you are looking for. `dir="rtl"` would
+            truncate from the left but reorders punctuation in a path. */}
+        <span
+          className="flex min-w-0 flex-1 items-baseline font-mono text-[11px]"
+          title={file.old_path ? `${file.old_path} → ${file.path}` : file.path}
+        >
+          <span className="truncate text-ink-faint">{dirOf(file.path)}</span>
+          <span className="shrink-0 text-ink-dim">{baseOf(file.path)}</span>
+          {file.old_path && (
+            <span className="ml-1.5 shrink-0 text-ink-faint">
+              ← {baseOf(file.old_path)}
+            </span>
+          )}
+        </span>
+        <span className="shrink-0 font-mono text-[10px]">
+          {file.binary ? (
+            <span className="text-ink-faint">binary</span>
+          ) : (
+            <>
+              <span className="text-go">+{file.added}</span>{" "}
+              <span className="text-danger">−{file.removed}</span>
+            </>
+          )}
+        </span>
       </button>
-    </div>
+
+      {!collapsed && !file.binary && (
+        <pre className="overflow-x-auto px-3 pb-2 font-mono text-[11px] leading-relaxed">
+          {file.patch.split("\n").map((line, i) => (
+            <div key={i} className={lineTone(line)}>
+              {line || " "}
+            </div>
+          ))}
+        </pre>
+      )}
+    </section>
   );
+}
+
+/** `src/ui/Panel.tsx` → `src/ui/` */
+function dirOf(path: string): string {
+  const i = path.lastIndexOf("/");
+  return i === -1 ? "" : path.slice(0, i + 1);
+}
+
+/** `src/ui/Panel.tsx` → `Panel.tsx` */
+function baseOf(path: string): string {
+  const i = path.lastIndexOf("/");
+  return i === -1 ? path : path.slice(i + 1);
 }
 
 function lineTone(line: string): string {
@@ -390,6 +467,6 @@ function lineTone(line: string): string {
   if (line.startsWith("@@")) return "text-signal";
   if (line.startsWith("+")) return "text-go";
   if (line.startsWith("-")) return "text-danger";
-  if (line.startsWith("diff ")) return "text-ink-dim";
+  if (line.startsWith("diff ") || line.startsWith("index ")) return "text-ink-faint";
   return "text-ink-faint";
 }
