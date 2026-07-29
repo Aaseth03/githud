@@ -35,7 +35,11 @@ src/
 │  ├─ agent.test.ts
 │  ├─ voice.ts             what is worth speaking (D15), pure
 │  ├─ voice.test.ts
-│  ├─ useVoice.ts          speech in and out; every call crosses to Rust
+│  ├─ audio.ts             devices, the chosen input, what a capture meant, pure
+│  ├─ audio.test.ts
+│  ├─ capture.ts           recording without MediaRecorder — Web Audio → WAV
+│  ├─ capture.test.ts
+│  ├─ useVoice.ts          speech in and out; owned by App, one per app
 │  ├─ hooks/
 │  │  └─ useProjects.ts    calls the scan command; parses nothing
 │  ├─ components/
@@ -50,7 +54,8 @@ src/
 │  │  ├─ FileTree.tsx      lazy tree, one directory at a time
 │  │  ├─ Splitter.tsx      draggable column separator
 │  │  ├─ FileViewer.tsx    read-only file pane, bounded
-│  │  ├─ VoicePill.tsx     Voicebox status, voice choice, MUTE
+│  │  ├─ VoicePill.tsx     Voicebox status, voice choice, MUTE — in the tab strip
+│  │  ├─ Settings.tsx      audio devices, mic test, voice test, webview facts
 │  │  └─ Terminal.tsx      xterm.js — the only file that touches it
 │  └─ styles/
 │     └─ index.css         Tailwind v4 @theme — there is no tailwind.config.js
@@ -71,6 +76,7 @@ src/
    │  │  ├─ event.rs       the normalized vocabulary the UI subscribes to
    │  │  └─ claude.rs      Claude Code adapter + line mapping + tests
    │  ├─ card.rs           the cached project card (D11)
+   │  ├─ audio.rs          what the machine's audio devices actually are
    │  ├─ mic.rs            webview media permission policy (Linux)
    │  ├─ voice/
    │  │  └─ mod.rs         Voicebox client — health, voices, speech, ASR
@@ -104,6 +110,9 @@ src/
 | `src-tauri/src/card.rs` | Assembling and caching the card | Changing what a project shows cold |
 | `src-tauri/src/voice/` | Voicebox: health, voices, speech, transcription | Anything the app asks of Voicebox |
 | `src-tauri/src/mic.rs` | What the webview may access | Changing device permissions |
+| `src-tauri/src/audio.rs` | The machine's real capture and playback devices | Anything about which device is in use |
+| `ui/audio.ts` | The chosen input, and what a capture meant | Changing capture selection or reporting |
+| `ui/capture.ts` | Recording, and the WAV that leaves the webview | Anything about how audio is captured |
 | `ui/voice.ts` | What is worth speaking (D15), health labels | Changing spoken output |
 | `ui/agent.ts` | Event types + transcript reducer | Changing how a conversation is assembled |
 | `ui/panes.ts` | Chat \| Terminal sub-tab rules | Changing when a pane mounts or shows |
@@ -241,6 +250,93 @@ src-tauri/src/
   before anything reaches a voice, and declines rather than reading punctuation
   aloud. Deleting that stripping does not fail a build; it just makes the app
   read diffs out loud.
+- **A data-carrying enum crossing the boundary must be tagged, and the tag must
+  be tested.** `Health` was declared with `rename_all` and no `tag`, so serde
+  wrote `{"up": {…}}` while `ui/voice.ts` discriminated on a `status` field.
+  `canSpeak` read `undefined`, concluded Voicebox was down, and **every speaker
+  button answered "voicebox unavailable" while Voicebox was working perfectly**
+  — a fault that survived two rounds of hunting for a network problem, because
+  every other path (the Settings speak test, the live Rust tests) bypasses
+  health entirely and worked. `AgentEvent` had `tag = "type"` from M3 and was
+  fine, which is exactly why the omission was invisible by comparison. Both
+  shapes are now pinned by tests that assert the JSON, not the derive.
+  **A type that compiles on both sides and disagrees on the wire is the failure
+  this codebase is least able to see.**
+- **Long speech is split, never truncated.** `trimForSpeech` cut at 600
+  characters and threw the rest away, so a long reply was read to a point and
+  simply stopped — measured on a real message at 555 of 989 speakable
+  characters, ending on the word "one" as it began a numbered list. Nothing
+  said so, and nothing could: the text was gone before it reached a voice.
+  `splitForSpeech` breaks on sentence ends, then line breaks, then words, and
+  a test asserts the chunks rejoin to the original. **A cap that discards is a
+  silent failure wearing a design rationale.** The reason a cap existed —
+  nobody sits through a monologue — is served by MUTE, AUTO off, and clicking
+  ▶ again, all of which stop between chunks.
+- **One voice, one queue, and playback resolves on `ended`.** AUTO speaks every
+  reply as it arrives, and replies arrive faster than they can be spoken — so
+  the player takes the head of a queue and only advances when the audio has
+  actually finished. `play()` resolving on *start* is what would make two
+  replies talk over each other, and the `busy` ref is what stops the effect
+  starting a second player each time the five-second health poll re-runs it.
+  **`pause()` fires no `ended` event**, so `stop()` has to settle the in-flight
+  promise itself or the queue never moves again. Ordering lives in
+  `enqueueSpoken`/`dropSpoken`, pure and tested; `dropSpoken` refuses to drop a
+  head that is not the item that finished, because a manual click replaces the
+  queue while the previous playback is still unwinding.
+- **`offer` ignores AUTO being off, on purpose.** `Chat` offers every assistant
+  entry exactly once whether or not AUTO is on, so switching AUTO on speaks what
+  comes *next* rather than reciting the whole transcript back at you.
+- **Voice status is chrome, and there is exactly one of it.** `useVoice` used to
+  be called inside `Chat`, which meant a health poll per open project tab, a
+  MUTE that only muted the tab it was pressed in, and — the reason it was
+  noticed — **no voice status at all until you opened a project**, because the
+  main tab has no chat pane. It is owned by `App` and rendered in the tab
+  strip's trailing slot, so principle 5's "always visible" includes the tab you
+  land on.
+- **There are two device lists and they are not the same list.** The webview's
+  `enumerateDevices()` is what `getUserMedia` will honour; `pactl` is what the
+  machine has. **When they disagree, the disagreement is the diagnosis** —
+  merging them into one list would hide the only thing worth seeing, and a
+  webview that enumerates nothing at all would then look like a machine with no
+  microphone.
+- **`MediaRecorder` exists in this webview and records nothing.** Proved
+  2026-07-29: the right device opened, the constructor and `start()` both
+  succeeded, `ondataavailable` never fired once, and the result was a zero-byte
+  blob with no error anywhere. Every GStreamer encoder it could want is
+  installed, so this is not a missing plugin — it is an API that is present and
+  hollow, which defeats feature detection. `capture.ts` takes the samples off
+  the Web Audio graph and writes the WAV itself. **Do not reintroduce
+  `MediaRecorder` because it is shorter.**
+- **An empty transcript is two different faults.** Voicebox answers the first
+  transcription after it starts with `{"text": ""}` and a 200, while Whisper
+  loads; the identical request a second later returned the sentence verbatim.
+  Reported as "heard nothing" that sends you to the microphone, which is the
+  wrong place. `/capture/readiness` is what tells them apart, and `transcribe`
+  asks it before concluding anything. Same shape as `model_loaded: false` for
+  speech — **Voicebox is slow to first use on both halves, and neither says so
+  in the obvious place.**
+- **Speech plays from a blob URL, held in a ref.** Two separate ways to get
+  silence with no error, both hit during M6. A `data:` URI carrying a hundred
+  kilobytes of base64 is the fragile path in this webview and fails as a
+  *source refusal*, which reads as Voicebox being at fault after Voicebox has
+  already handed over the audio. And an `Audio` object left in a local is
+  collectable the moment `play()` resolves — which is when playback *starts*,
+  not when it ends. `describeMediaError` turns the element's bare numeric code
+  into the sentence that says which of the two happened.
+- **`media-src` has to be in the CSP.** Spoken replies play from a `data:` URI,
+  and `default-src 'self'` silently blocks every one of them — the app looks
+  like Voicebox is failing when Voicebox has already done its job. `img-src`
+  and `font-src` were listed and `media-src` was not, which is exactly the kind
+  of omission a working test suite never catches.
+- **A capture that yields nothing must say so.** M6 recorded, transcribed to
+  nothing, and hit a `text && onText(text)` guard that discarded it — so a
+  microphone that never opened, one recording a monitor, and one hearing silence
+  were three different faults that all rendered as nothing happening. Every
+  capture now ends in a sentence naming the device, the bytes, and the result;
+  `captureVerdict` is where that lives and it is tested.
+- **A monitor source is not a microphone.** It records what is *playing*, which
+  is either silence or the app hearing itself. `pactl` reports the property and
+  `audio.rs` flags it, because the device name alone does not warn you.
 - **Voicebox has three health states, not two.** Answering-but-unable-to-work is
   not the same as absent, and reporting it as *down* sends you looking in the
   wrong place. The real instance failed exactly this way — running, and unable

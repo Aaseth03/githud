@@ -13,13 +13,19 @@ import {
   type Isolated,
 } from "../agent";
 import type { Project } from "../types";
-import { useVoice, usePushToTalk } from "../useVoice";
-import { VoicePill } from "./VoicePill";
+import { usePushToTalk, type VoiceControls } from "../useVoice";
 
 interface Props {
   project: Project;
   /** Is this pane on screen? Focus the composer when it becomes so. */
   visible: boolean;
+  /**
+   * Owned by the app.
+   *
+   * It used to be a `useVoice()` call right here, which meant a health poll per
+   * open project tab and a MUTE that only muted the tab it was pressed in.
+   */
+  voice: VoiceControls;
 }
 
 /**
@@ -29,7 +35,7 @@ interface Props {
  * JSON (D1, D2). The status line under the composer comes from real `tool_call`
  * events, so it names the actual file rather than inventing a word.
  */
-export function Chat({ project, visible }: Props) {
+export function Chat({ project, visible, voice }: Props) {
   const [state, setState] = useState(initialChatState);
   const [draft, setDraft] = useState("");
   const [startError, setStartError] = useState<string | null>(null);
@@ -38,7 +44,6 @@ export function Chat({ project, visible }: Props) {
 
   const id = project.rel_path;
   const readOnly = project.agent === "read-only";
-  const voice = useVoice();
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const talk = usePushToTalk((text) =>
     setDraft((d) => (d ? `${d} ${text}` : text)),
@@ -77,6 +82,27 @@ export function Chat({ project, visible }: Props) {
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [state.entries.length, state.detail]);
+
+  /**
+   * Offer each new reply to the voice, once.
+   *
+   * Every assistant entry is complete when it appears — `applyEvent` appends a
+   * new one per `assistant_text` rather than growing the last, so there is no
+   * risk of speaking a half-written message.
+   *
+   * Offering happens whether or not AUTO is on, and `offer` ignores it when it
+   * is off. That is deliberate: it means switching AUTO on speaks what comes
+   * *next* rather than reciting everything already on screen.
+   */
+  const offered = useRef(new Set<string>());
+  const offer = voice.offer;
+  useEffect(() => {
+    for (const entry of state.entries) {
+      if (entry.kind !== "assistant" || offered.current.has(entry.id)) continue;
+      offered.current.add(entry.id);
+      offer(entry.id, entry.text);
+    }
+  }, [state.entries, offer]);
 
   useEffect(() => {
     if (visible && !readOnly) inputRef.current?.focus();
@@ -155,14 +181,9 @@ export function Chat({ project, visible }: Props) {
           )}
         </span>
         <span className="flex-1" />
-        <VoicePill
-          health={voice.health}
-          voices={voice.voices}
-          voice={voice.voice}
-          muted={voice.muted}
-          onVoice={voice.setVoice}
-          onToggleMute={voice.toggleMute}
-        />
+        {/* The voice pill is chrome now — it lives in the tab strip, where it
+            is visible on the main tab too. Duplicating it here would give two
+            MUTE buttons for one voice. */}
         {state.busy && (
           <button
             onClick={stop}
@@ -201,11 +222,7 @@ export function Chat({ project, visible }: Props) {
             speaking={voice.speaking === entry.id}
             onSpeak={
               entry.kind === "assistant"
-                ? () => {
-                    void voice
-                      .speak(entry.id, entry.text)
-                      .then((err) => setVoiceError(err));
-                  }
+                ? () => setVoiceError(voice.speak(entry.id, entry.text))
                 : undefined
             }
           />
@@ -222,8 +239,13 @@ export function Chat({ project, visible }: Props) {
       </div>
 
       <div className="shrink-0 border-t border-line px-4 py-3">
-        {(voiceError || talk.error) && (
-          <p className="mb-2 text-[10px] text-warn">{voiceError ?? talk.error}</p>
+        {/* `playbackError` arrives after `speak` has already returned: the
+            element gives up asynchronously, and silence with nothing said about
+            it is the failure this whole milestone kept producing. */}
+        {(voiceError || voice.playbackError || talk.error) && (
+          <p className="mb-2 text-[10px] text-warn">
+            {voiceError ?? voice.playbackError ?? talk.error}
+          </p>
         )}
         {label && (
           <p className="mb-2 font-mono text-[10px] text-signal">

@@ -25,7 +25,8 @@ planning/
 │  ├─ 2026-07-28-m2-embedded-terminal.plan.md
 │  ├─ 2026-07-28-m3-agent-channel.plan.md
 │  ├─ 2026-07-29-m5-panels-and-cards.plan.md
-│  └─ 2026-07-29-m6-voice.plan.md
+│  ├─ 2026-07-29-m6-voice.plan.md
+│  └─ 2026-07-29-m6-settings-and-audio-devices.plan.md
 └─ decisions/
    ├─ 2026-07-28-D01-dual-channel.md
    ├─ 2026-07-28-D02-adapters-target-harnesses.md
@@ -115,7 +116,8 @@ thing*, not from planning it.
 | 2026-07-28 | [M2 — embedded terminal](plans/2026-07-28-m2-embedded-terminal.plan.md) | **Done** — validated by hand |
 | 2026-07-28 | [M3 — agent channel](plans/2026-07-28-m3-agent-channel.plan.md) | **Done** — confirmed by hand |
 | 2026-07-29 | [M5 — panels and project cards](plans/2026-07-29-m5-panels-and-cards.plan.md) | **Done** — confirmed by hand |
-| 2026-07-29 | [M6 — voice](plans/2026-07-29-m6-voice.plan.md) | **Built, unvalidated** — open in PR #10; needs a spoken session |
+| 2026-07-29 | [M6 — voice](plans/2026-07-29-m6-voice.plan.md) | **Done** — validated by hand |
+| 2026-07-29 | [Settings — audio devices and voice diagnostics](plans/2026-07-29-m6-settings-and-audio-devices.plan.md) | **Done** — it found six bugs, then validated the fixes |
 
 ## Plan contract
 

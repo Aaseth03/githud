@@ -30,8 +30,16 @@ const PROBE_TIMEOUT: Duration = Duration::from_secs(3);
 const GENERATE_TIMEOUT: Duration = Duration::from_secs(180);
 
 /// What the status pill shows.
+///
+/// **`tag = "status"`, and it is load-bearing.** Without it serde writes an
+/// externally tagged `{"up": {…}}`, while `ui/voice.ts` discriminates on a
+/// `status` field — so `canSpeak` read `undefined`, decided Voicebox was not
+/// up, and every speaker button answered "voicebox unavailable" while Voicebox
+/// sat there working. It cost this milestone two rounds of hunting a network
+/// fault that never existed. `AgentEvent` carries `tag = "type"` for exactly
+/// the same reason; the wire shape is pinned by a test below.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+#[serde(tag = "status", rename_all = "snake_case")]
 pub enum Health {
     /// Reachable and ready.
     Up {
@@ -377,14 +385,61 @@ pub fn generation_id(v: &serde_json::Value) -> Option<String> {
         .map(str::to_string)
 }
 
+/// Is speech-to-text loaded and able to answer?
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Readiness {
+    pub stt: bool,
+    pub stt_model: Option<String>,
+}
+
+/// What Voicebox says about its speech model.
+pub async fn readiness() -> Result<Readiness, String> {
+    let body: serde_json::Value = client(PROBE_TIMEOUT)?
+        .get(format!("{BASE}/capture/readiness"))
+        .send()
+        .await
+        .map_err(|e| format!("voicebox unreachable: {e}"))?
+        .json()
+        .await
+        .map_err(|e| format!("unreadable readiness: {e}"))?;
+
+    Ok(parse_readiness(&body))
+}
+
+/// Pull the speech-to-text half out of a readiness body.
+pub fn parse_readiness(v: &serde_json::Value) -> Readiness {
+    let stt = v.get("stt");
+    Readiness {
+        stt: stt
+            .and_then(|s| s.get("ready"))
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false),
+        stt_model: stt
+            .and_then(|s| s.get("display_name").or_else(|| s.get("model_name")))
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_string),
+    }
+}
+
 /// Transcribe recorded audio — the push-to-talk half.
+///
+/// **An empty transcript is two different things and they need different
+/// reactions.** Proved on this machine 2026-07-29: the first transcription
+/// after Voicebox starts returns `{"text": ""}` with a 200 and no error, while
+/// Whisper loads — the identical request a second later returned the sentence
+/// verbatim. Reported as "heard nothing", that sends you to the microphone,
+/// which is the wrong place entirely. `/capture/readiness` is what tells the
+/// two apart, so it is asked before anything is concluded.
 pub async fn transcribe(audio: &[u8], mime: &str) -> Result<String, String> {
     if audio.is_empty() {
         return Err("no audio recorded".into());
     }
 
+    // The name has to match the bytes. A WAV uploaded as `speech.webm` is a
+    // file every sniffing server reads as the wrong container — and the app
+    // sends WAV now, because WebKitGTK's `MediaRecorder` records nothing.
     let part = reqwest::multipart::Part::bytes(audio.to_vec())
-        .file_name("speech.webm")
+        .file_name(format!("speech.{}", extension_for(mime)))
         .mime_str(mime)
         .map_err(|e| format!("bad audio type: {e}"))?;
 
@@ -400,7 +455,33 @@ pub async fn transcribe(audio: &[u8], mime: &str) -> Result<String, String> {
         .await
         .map_err(|e| format!("unreadable transcription: {e}"))?;
 
-    Ok(transcript_of(&body))
+    let text = transcript_of(&body);
+    if text.is_empty() {
+        // Silence and a cold model are indistinguishable in the response.
+        if let Ok(r) = readiness().await {
+            if !r.stt {
+                let model = r.stt_model.unwrap_or_else(|| "the speech model".into());
+                return Err(format!(
+                    "{model} was still loading, so the first transcription came back empty — hold and speak again"
+                ));
+            }
+        }
+    }
+
+    Ok(text)
+}
+
+/// The file extension that matches a content type.
+pub fn extension_for(mime: &str) -> &'static str {
+    let base = mime.split(';').next().unwrap_or(mime).trim();
+    match base {
+        "audio/wav" | "audio/x-wav" | "audio/wave" => "wav",
+        "audio/ogg" => "ogg",
+        "audio/mpeg" => "mp3",
+        "audio/mp4" | "audio/m4a" => "m4a",
+        "audio/flac" | "audio/x-flac" => "flac",
+        _ => "webm",
+    }
 }
 
 /// The text out of a transcription response, whatever it wraps it in.
@@ -556,6 +637,82 @@ mod tests {
     fn a_healthy_filesystem_reports_no_problem() {
         let v = json!({"healthy": true, "directories": []});
         assert_eq!(describe_filesystem(&v), None);
+    }
+
+    #[test]
+    fn health_crosses_the_boundary_in_the_shape_the_ui_reads() {
+        // The whole of M6's "voicebox unavailable": serde's default is an
+        // externally tagged `{"up": {…}}`, `ui/voice.ts` discriminates on
+        // `status`, so `canSpeak` read `undefined` and refused to speak while
+        // Voicebox was working perfectly. Two rounds were spent looking for a
+        // network fault that did not exist. This asserts the wire shape rather
+        // than trusting the derive.
+        let up = serde_json::to_value(Health::Up {
+            model_loaded: false,
+            gpu: Some("CUDA".into()),
+        })
+        .unwrap();
+
+        assert_eq!(up["status"], "up");
+        assert_eq!(up["model_loaded"], false);
+        assert_eq!(up["gpu"], "CUDA");
+        // Nothing nested: an externally tagged encoding would put it all here.
+        assert!(up.get("up").is_none(), "{up}");
+
+        let down = serde_json::to_value(Health::Down {
+            reason: "not running".into(),
+        })
+        .unwrap();
+        assert_eq!(down["status"], "down");
+        assert_eq!(down["reason"], "not running");
+
+        let impaired = serde_json::to_value(Health::Impaired {
+            reason: "cannot write /app/data/generations".into(),
+        })
+        .unwrap();
+        assert_eq!(impaired["status"], "impaired");
+    }
+
+    #[test]
+    fn a_cold_speech_model_is_read_out_of_the_readiness_body() {
+        // The real one: the first transcription after Voicebox starts comes
+        // back `{"text": ""}` with a 200, and only this says why.
+        let v = json!({
+            "stt": {"ready": false, "model_name": "whisper-turbo", "display_name": "Whisper Turbo"},
+            "llm": {"ready": false, "model_name": "qwen3-0.6b"}
+        });
+
+        let got = parse_readiness(&v);
+
+        assert!(!got.stt);
+        assert_eq!(got.stt_model.as_deref(), Some("Whisper Turbo"));
+    }
+
+    #[test]
+    fn a_ready_speech_model_reports_ready() {
+        let got = parse_readiness(&json!({"stt": {"ready": true}}));
+        assert!(got.stt);
+        assert_eq!(got.stt_model, None);
+    }
+
+    #[test]
+    fn an_unreadable_readiness_body_is_not_ready_rather_than_assumed_ready() {
+        // Assuming ready would turn "still loading" back into "heard nothing",
+        // which is the wrong place to look.
+        for v in [json!({}), json!(null), json!({"stt": "yes"}), json!(42)] {
+            assert!(!parse_readiness(&v).stt, "{v}");
+        }
+    }
+
+    #[test]
+    fn an_upload_is_named_after_what_it_actually_contains() {
+        // A WAV called `speech.webm` is read as the wrong container by every
+        // server that sniffs by extension.
+        assert_eq!(extension_for("audio/wav"), "wav");
+        assert_eq!(extension_for("audio/x-wav"), "wav");
+        assert_eq!(extension_for("audio/wav; codecs=1"), "wav");
+        assert_eq!(extension_for("audio/webm;codecs=opus"), "webm");
+        assert_eq!(extension_for("nonsense"), "webm");
     }
 
     #[test]

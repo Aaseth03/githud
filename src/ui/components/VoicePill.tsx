@@ -12,15 +12,23 @@ export function VoicePill({
   voices,
   voice,
   muted,
+  auto,
+  pending,
   onVoice,
   onToggleMute,
+  onToggleAuto,
 }: {
   health: VoiceHealth | null;
   voices: Voice[];
   voice: string | null;
   muted: boolean;
+  /** Speak every reply as it arrives, without being asked each time. */
+  auto: boolean;
+  /** Replies still waiting their turn. */
+  pending: number;
   onVoice: (id: string) => void;
   onToggleMute: () => void;
+  onToggleAuto: () => void;
 }) {
   const tone = healthTone(health);
   const dot =
@@ -52,6 +60,28 @@ export function VoicePill({
           ))}
         </select>
       )}
+
+      <button
+        onClick={onToggleAuto}
+        aria-pressed={auto}
+        title={
+          auto
+            ? "Speaking every reply as it arrives — click to stop"
+            : "Speak every reply as it arrives, in order"
+        }
+        className={[
+          "rounded border px-1.5 py-0.5 font-mono text-[10px] tracking-wider transition-colors",
+          auto
+            ? "border-signal-deep bg-signal/10 text-signal"
+            : "border-line text-ink-faint hover:border-signal-deep hover:text-signal",
+          "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal",
+        ].join(" ")}
+      >
+        AUTO
+        {/* A backlog is worth showing: several replies can land while one is
+            still being spoken, and silence plus a queue looks like a hang. */}
+        {pending > 1 && <span className="ml-1 text-ink-faint">{pending}</span>}
+      </button>
 
       <button
         onClick={onToggleMute}

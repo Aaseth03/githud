@@ -9,6 +9,42 @@
 
 use githud_lib::voice::{self, Health};
 
+/// The push-to-talk path, proved without a microphone.
+///
+/// **This is the round trip that M6 could not make.** WebKitGTK's
+/// `MediaRecorder` records zero bytes, so the app builds a 16 kHz mono WAV off
+/// the Web Audio graph itself and sends that. Voicebox speaks a known sentence,
+/// its own audio goes straight back into `/transcribe`, and the words have to
+/// survive — which exercises the upload naming, the content type, and Whisper's
+/// acceptance of WAV in one go.
+#[tokio::test]
+#[ignore = "needs Voicebox running; run explicitly with --ignored"]
+async fn spoken_audio_survives_a_round_trip_through_transcription() {
+    let voices = voice::voices().await.expect("voices");
+    let v = voices.first().expect("at least one voice");
+
+    let spoken = "The guardrails are green.";
+    let speech = voice::speak(spoken, &v.id, v.engine.as_deref())
+        .await
+        .expect("speech");
+
+    use base64::Engine as _;
+    let wav = base64::engine::general_purpose::STANDARD
+        .decode(&speech.audio)
+        .expect("decodable audio");
+    println!("  sending {} bytes of {} back", wav.len(), speech.mime);
+
+    let heard = voice::transcribe(&wav, &speech.mime)
+        .await
+        .expect("transcription");
+
+    println!("  heard: {heard:?}");
+    assert!(
+        heard.to_lowercase().contains("guardrail"),
+        "expected the spoken words back, got {heard:?}"
+    );
+}
+
 #[tokio::test]
 #[ignore = "needs Voicebox running; run explicitly with --ignored"]
 async fn voicebox_is_reachable_on_the_port_we_settled_on() {

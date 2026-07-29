@@ -6,9 +6,10 @@ import {
   isTabVisible,
   openProject,
   openProjectKeys,
+  openSettings,
   selectTab,
 } from "./tabs";
-import { MAIN_TAB_KEY, type Project } from "./types";
+import { MAIN_TAB_KEY, SETTINGS_TAB_KEY, type Project } from "./types";
 
 function project(name: string, rel = name): Project {
   return {
@@ -115,6 +116,38 @@ describe("tab semantics", () => {
   it("always resolves an active tab even if the key goes stale", () => {
     const stale = { ...initialTabState, activeKey: "gone" };
     expect(activeTab(stale).kind).toBe("main");
+  });
+});
+
+describe("settings", () => {
+  it("opens as its own tab and focuses it", () => {
+    const s = openSettings(initialTabState);
+
+    expect(s.activeKey).toBe(SETTINGS_TAB_KEY);
+    expect(activeTab(s).kind).toBe("settings");
+  });
+
+  it("focuses the existing one instead of opening a second", () => {
+    // Two settings tabs would be two views of one machine, and the second is a
+    // copy that can drift.
+    const once = openSettings(initialTabState);
+    const twice = openSettings(selectTab(once, MAIN_TAB_KEY));
+
+    expect(twice.tabs).toHaveLength(2);
+    expect(twice.activeKey).toBe(SETTINGS_TAB_KEY);
+  });
+
+  it("closes, unlike the main tab", () => {
+    const s = closeTab(openSettings(initialTabState), SETTINGS_TAB_KEY);
+
+    expect(s.tabs).toHaveLength(1);
+    expect(s.activeKey).toBe(MAIN_TAB_KEY);
+  });
+
+  it("is not a project, so it never appears in the open project keys", () => {
+    const s = openProject(openSettings(initialTabState), project("Hermes"));
+
+    expect(openProjectKeys(s)).toEqual(new Set(["Hermes"]));
   });
 });
 

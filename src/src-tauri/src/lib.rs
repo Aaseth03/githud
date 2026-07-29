@@ -5,6 +5,7 @@
 //! in the front end (D11).
 
 pub mod agent;
+pub mod audio;
 pub mod card;
 pub mod git;
 pub mod guard;
@@ -238,21 +239,55 @@ fn project_diff(cwd: String) -> git::Diff {
 
 #[tauri::command]
 async fn voice_health() -> voice::Health {
-    voice::health().await
+    let health = voice::health().await;
+    if let voice::Health::Down { reason } | voice::Health::Impaired { reason } = &health {
+        log::warn!("voicebox {}: {reason}", voice::BASE);
+    }
+    health
+}
+
+/// Whether the speech model is loaded.
+///
+/// Separate from `voice_health` on purpose: Voicebox is perfectly healthy while
+/// its Whisper model is cold, and a cold model returns an empty transcript with
+/// a 200. Folding that into the health pill would call a working server broken.
+#[tauri::command]
+async fn voice_readiness() -> Result<voice::Readiness, String> {
+    voice::readiness()
+        .await
+        .inspect_err(|e| log::warn!("voice_readiness: {e}"))
 }
 
 #[tauri::command]
 async fn voice_voices() -> Result<Vec<voice::Voice>, String> {
-    voice::voices().await
+    voice::voices().await.inspect_err(|e| log::warn!("voice_voices: {e}"))
 }
 
+/// Every voice failure is logged verbatim as well as returned.
+///
+/// M6 produced a report of "voicebox unreachable" from the UI while the exact
+/// same call from a test returned playable audio, and nothing on disk could
+/// settle which was true. A message shown once in a corner of a chat pane is
+/// not a record; this is.
 #[tauri::command]
 async fn voice_speak(
     text: String,
     voice_id: String,
     engine: Option<String>,
 ) -> Result<voice::Speech, String> {
-    voice::speak(&text, &voice_id, engine.as_deref()).await
+    voice::speak(&text, &voice_id, engine.as_deref())
+        .await
+        .inspect_err(|e| log::warn!("voice_speak (voice {voice_id}, engine {engine:?}): {e}"))
+}
+
+/// What audio hardware this machine actually has.
+///
+/// Deliberately separate from the webview's own device list: that one is what
+/// `getUserMedia` honours, this one is what exists. Showing both is what makes
+/// "the microphone captured nothing" a question with an answer.
+#[tauri::command]
+fn audio_devices() -> audio::Devices {
+    audio::devices()
 }
 
 /// Push-to-talk: recorded audio in, text out.
@@ -262,7 +297,10 @@ async fn voice_transcribe(audio: String, mime: String) -> Result<String, String>
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(audio)
         .map_err(|e| format!("bad audio encoding: {e}"))?;
-    voice::transcribe(&bytes, &mime).await
+    log::info!("transcribing {} bytes of {mime}", bytes.len());
+    voice::transcribe(&bytes, &mime)
+        .await
+        .inspect_err(|e| log::warn!("voice_transcribe: {e}"))
 }
 
 /// What is actually running for a project.
@@ -471,9 +509,11 @@ pub fn run() {
             read_file,
             project_sessions,
             voice_health,
+            voice_readiness,
             voice_voices,
             voice_speak,
             voice_transcribe,
+            audio_devices,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

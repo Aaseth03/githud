@@ -12,6 +12,7 @@ interface Props {
   activeKey: string;
   onOpen: (project: Project) => void;
   onRescan: () => void;
+  onSettings: () => void;
 }
 
 export function Sidebar({
@@ -25,6 +26,7 @@ export function Sidebar({
   activeKey,
   onOpen,
   onRescan,
+  onSettings,
 }: Props) {
   return (
     <aside className="flex w-72 shrink-0 flex-col border-r border-line bg-deep">
@@ -181,12 +183,22 @@ export function Sidebar({
         )}
       </nav>
 
-      <footer className="border-t border-line px-4 py-2.5">
-        <p className="font-mono text-[10px] text-ink-faint">
+      <footer className="flex items-center justify-between gap-2 border-t border-line px-4 py-2.5">
+        <p className="min-w-0 truncate font-mono text-[10px] text-ink-faint">
           {projects.length} repo{projects.length === 1 ? "" : "s"}
           {uninitiated.length > 0 && ` · ${uninitiated.length} uninitiated`} ·
           depth ≤ 3
         </p>
+        <button
+          onClick={onSettings}
+          title="Settings — audio devices, voice, and what this webview can do"
+          className="shrink-0 rounded border border-line px-2 py-1 font-mono text-[10px]
+                     tracking-wider text-ink-dim transition-colors
+                     hover:border-signal-deep hover:text-signal
+                     focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal"
+        >
+          SET
+        </button>
       </footer>
     </aside>
   );

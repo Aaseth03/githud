@@ -59,13 +59,35 @@ export interface ScanResult {
 /**
  * An open tab. The main tab always exists and is never closable; project tabs
  * are keyed by `rel_path` because that is what stays stable across machines.
+ * Settings is a place you visit — one of it, and closable, unlike main (D5).
  */
 export type Tab =
   | { kind: "main" }
+  | { kind: "settings" }
   | { kind: "project"; key: string; project: Project };
 
 export const MAIN_TAB_KEY = "__main__";
+export const SETTINGS_TAB_KEY = "__settings__";
 
 export function tabKey(tab: Tab): string {
-  return tab.kind === "main" ? MAIN_TAB_KEY : tab.key;
+  switch (tab.kind) {
+    case "main":
+      return MAIN_TAB_KEY;
+    case "settings":
+      return SETTINGS_TAB_KEY;
+    case "project":
+      return tab.key;
+  }
+}
+
+/** What the tab strip calls it. */
+export function tabTitle(tab: Tab): string {
+  switch (tab.kind) {
+    case "main":
+      return "HUD";
+    case "settings":
+      return "Settings";
+    case "project":
+      return tab.project.name;
+  }
 }
