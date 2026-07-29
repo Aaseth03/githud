@@ -30,42 +30,71 @@ building, running, or launching. Do not rediscover it.
 | M3 — agent channel | done |
 | M4 — guardrails | done |
 | M5 — panels and project cards | done — v1 complete |
-| **M6 — voice** | **built, unvalidated — PR #10 open** |
+| M6 — voice | **done — validated by hand 2026-07-29** |
 | M7 — character | not started — *this is the next build* |
 | M8 — parallel and portable | not started |
+| M9 — speech shaping | not started — carved out of M6's tail |
 
-Branch `m6-voice`, pushed, PR #10 open against `main`. Working tree clean.
-PRs #1–#9 merged.
+Branch `m6-voice`, PR #10 open against `main` — M6's completion went onto that
+same PR rather than a second one. PRs #1–#9 merged.
 
-Counts as of the last run: **193 Rust unit · 21 guardrail · 115 TypeScript**,
-clippy and oxlint clean. Nine Rust tests are `#[ignore]`d because they need
-something real: 4 need a live Voicebox, 4 start real Claude sessions, 1 scans
+Counts as of the last run: **206 Rust unit · 21 guardrail · 153 TypeScript**,
+clippy and oxlint clean. Ten Rust tests are `#[ignore]`d because they need
+something real: 5 need a live Voicebox, 4 start real Claude sessions, 1 scans
 the actual `~/github`. Run them with `--ignored` when you have the thing they
 need — they are the only tests that prove the outside world behaves.
+
+**The five Voicebox live tests were run 2026-07-29 and are 5/5 green**,
+including a real generation returning 124 860 base64 chars of `audio/x-wav` and
+a full round trip — Voicebox speaks a sentence, its own audio goes back into
+`/transcribe`, and the words survive. That round trip is what found the cold
+Whisper model below; it failed the first time and passed on the retry, which is
+the whole bug in one line.
 
 `cargo test` output is summarised by RTK; use `rtk proxy cargo test` for the
 per-suite breakdown.
 
-## What needs a human, right now
+## M6 is closed
 
-M6 cannot be closed without these. They are on the user, not on the agent —
-standing instruction: **for manual feature tests, call to him.**
+Validated by hand 2026-07-29: a full spoken session, and Voicebox killed
+mid-session and brought back. Details are in `milestones.md`; the lessons are in
+`../src/CONTEXT.md`, which is where they bite.
 
-1. **Push-to-talk retry.** The first attempt failed with
-   `NotAllowedError`, which was *not* a denied permission — WebKitGTK ships with
-   `enable-media-stream` off, so `getUserMedia` rejects without ever asking.
-   Fixed in `src-tauri/src/mic.rs` (commit `192449f`) and **not yet retried**.
-   Machine side verified present: WebKitGTK 2.52.5 with the setting compiled in,
-   pipewire running, `pipewiresrc` present, HyperX Cloud II as default source.
-   On success the log shows `granting Microphone`.
-2. **A full spoken session.** Send a message, click ▶ on the reply, check the
-   voice picker and MUTE.
-3. **Kill Voicebox mid-session** (`podman stop voicebox`) and confirm the app
-   degrades to text-only with the reason shown, speaker buttons still present,
-   and recovers without a reload.
+**It cost six bugs to get there, and only one was where anyone looked.** In
+order found: `MediaRecorder` defined but recording zero bytes; a CSP with no
+`media-src`; Voicebox answering the first transcription with an empty string
+while Whisper loaded; a `data:` URI refused as a media source; an `Audio` object
+garbage-collected mid-playback; and — underneath all of it — `voice::Health`
+serialized untagged, so `canSpeak` had read `undefined` and every speaker button
+had answered "voicebox unavailable" since the day it was written.
 
-If 1 still fails, the error text is now a real one rather than the misleading
-default — take it verbatim rather than guessing.
+Two things generalise beyond voice:
+
+- **A type that compiles on both sides can still disagree on the wire.** Nothing
+  in Rust or TypeScript caught it; both were internally consistent. Boundary
+  shapes are now asserted against actual JSON, not against the derive.
+- **The tell was which paths worked.** Everything that bypassed health worked;
+  only the path through it failed. When a feature works everywhere except
+  through one predicate, suspect the predicate — not the network, and not the
+  hardware.
+
+The Settings tab exists because of this. It is the surface that turns "it does
+not work" into a sentence naming a device, a byte count, and a verbatim error,
+and it earned its keep the day it was built.
+
+## What M6 deliberately did not do
+
+**M9 — speech shaping** was carved out rather than crammed in. The app speaks;
+it does not yet speak *well*. `voice.ts` implements D15, which is a filter — it
+decides what must never be read aloud — and a filter is not a narrator. Tables
+vanish, `1.` is read as a flat "one", and no policy distinguishes *Jayson* from
+*H-T-T-P*.
+
+The constraint on that milestone came from the user directly and is not
+negotiable: **it is a runnable script, not a model guessing.** Deterministic in,
+deterministic out, with the pronunciation lexicon as committed data he can edit
+from Settings — so a word said wrongly is fixed by editing a list, not by
+re-prompting something. Principle 4, applied to speech.
 
 ## Then: M7 — Character
 

@@ -210,9 +210,15 @@ Tauri, last commit, and 5/9 milestones, with no agent session anywhere.
 ---
 
 ### M6 — Voice
-**Status:** in-progress
+**Status:** done
 **Validation:** a full spoken session; kill Voicebox mid-session and confirm the
-app keeps working.
+app keeps working. **Both passed by hand 2026-07-29.** Spoken session: a reply
+read aloud on ▶, the voice changed mid-session from the tab strip, AUTO speaking
+every reply in arrival order, and MUTE silencing mid-sentence — muted, ▶ says so
+and stays silent; unmuted, it speaks again. Degradation: `podman stop voicebox`
+darkened the pill and refused to speak with the reason shown while chat kept
+working; `podman start voicebox` recovered with no reload, and a reply queued
+during the outage was spoken once it came back.
 
 - [x] **Port resolved: `17600`.** Voicebox's own README says `17493`, which is
       the container-internal port. Probed against the running server rather
@@ -225,13 +231,64 @@ app keeps working.
 - [x] Degrades to text-only, with the reason shown
 - [x] MUTE, and a speaker button on every assistant message — present whether
       or not Voicebox is up, so coming back is a click
+- [x] **AUTO — speak every reply as it arrives**, beside MUTE. Replies land
+      faster than they can be spoken, so they queue: nothing interrupts,
+      nothing overlaps, and order is arrival order. Playback resolves on
+      `ended` rather than on `play()`, which is the difference between a queue
+      and two voices at once. A backlog shows on the button
+- [x] **The status pill is chrome, not chat furniture.** It lived in the chat
+      header, so there was no voice status anywhere until a project was open —
+      and one health poll and one MUTE per tab. Owned by `App`, rendered in the
+      tab strip, visible on every tab including main
+- [x] **`Health` is tagged on the wire.** It was serialized untagged as
+      `{"up": {…}}` while the UI discriminated on `status`, so `canSpeak` read
+      `undefined` and every speaker button answered "voicebox unavailable" with
+      Voicebox running perfectly. The original bug behind the whole hunt, found
+      only because the Settings speak test bypasses health and worked. Pinned
+      by a test asserting the JSON rather than trusting the derive
+- [x] **Speech plays from a blob URL held in a ref.** A `data:` URI of a
+      hundred kilobytes is refused as a source by this webview, and an `Audio`
+      in a local is collectable the moment `play()` resolves — two ways to get
+      silence with no error, both hit here. `describeMediaError` turns the
+      element's bare code into which of the two happened
 - [x] D15 honoured in code: fenced code, inline code, paths, URLs and tables
       are stripped before anything reaches a voice. The adapter emits
       `assistant.text`, so the constraint cannot rely on the event type alone
+- [x] **A long reply is split, not cut off.** The first cap truncated at 600
+      characters and discarded the rest — measured stopping at 555 of 989
+      speakable characters, on the word "one" as it began a list, with nothing
+      said about it. Chunks break on sentences and are spoken back to back; a
+      test asserts they rejoin to the original
 - [x] Push-to-talk, held rather than toggled (D14)
-- [ ] A full spoken session — **needs a human**
-- [ ] Kill Voicebox mid-session and confirm the app keeps working — **needs a
-      human**
+- [x] **Settings tab** — the machine's real capture and playback devices beside
+      the webview's own list, the input push-to-talk uses, a microphone test
+      with a live level, a voice test, and what this webview can actually do.
+      Built because the first run failed twice in ways that said nothing: a
+      capture that recorded silence and a reply that reported Voicebox
+      unreachable while the identical call from Rust returned playable audio
+- [x] **No capture fails silently.** An empty recording, an empty transcript
+      and a refused microphone were three faults that all rendered as nothing
+      happening; each now ends in a sentence naming the device and the result
+- [x] **Recording without `MediaRecorder`.** It is defined in this webview and
+      records zero bytes — right device, no error, nothing captured, and every
+      GStreamer encoder present. The samples come off the Web Audio graph and
+      are written as 16 kHz mono WAV in `capture.ts`
+- [x] **`media-src` added to the CSP.** Every spoken reply plays from a `data:`
+      URI, and `default-src 'self'` blocked all of them — Voicebox had already
+      done its job and the app reported it as the failure
+- [x] **A cold Whisper model is named rather than reported as silence.**
+      Voicebox answers the first transcription after start with `{"text": ""}`
+      and a 200; a second later the same audio came back verbatim. Proved by a
+      live round-trip test that speaks a sentence and transcribes it back
+- [x] A full spoken session — confirmed by hand 2026-07-29
+- [x] Kill Voicebox mid-session and confirm the app keeps working — confirmed by
+      hand 2026-07-29, including recovery without a reload
+- [x] **A queue survives the outage rather than being discarded.** Observed:
+      speech queued while Voicebox was down was spoken once it came back. Not
+      explicitly designed — it falls out of the player gating on health instead
+      of draining the queue — but it is the right behaviour and it is now
+      written down, because the obvious "simplification" is to drop the queue
+      when health goes down and that would silently lose replies
 
 ### M7 — Character
 **Status:** not-started
@@ -257,6 +314,50 @@ task; a new project is born end to end.
       `../config/skills/icm-architect/`, never a harness-installed one** (D17) —
       an installed skill exists on one machine under one harness and vanishes
       silently everywhere else
+
+### M9 — Speech shaping
+**Status:** not-started
+**Validation:** a spoken paragraph containing `JSON`, `HTTP`, a numbered list, a
+file path and an acronym the lexicon does not know reads aloud the way a person
+would say it — and the same input produces the same output every run, provable
+without a model in the loop.
+
+M6 made the app speak. It does not yet make it **speak well**, and the two are
+separate problems: `voice.ts` implements D15 — *never read code aloud* — which
+is a filter, not a narrator. What it strips, it strips wholesale, and what it
+keeps it hands over unshaped.
+
+Observed at the end of M6, on real replies:
+
+- Tables vanish entirely rather than being summarised or read as rows.
+- List markers are spoken as bare digits — `1.` becomes "one", flatly, with no
+  pause where a list item would naturally end.
+- Acronyms have no policy. `JSON` should be *Jayson*; `HTTP` should stay
+  *H-T-T-P*. Nothing distinguishes them today, and no amount of stripping will.
+- Chunk boundaries fall on sentence ends, which is right for length but takes
+  no view on prosody — a chunk break is currently indistinguishable from a
+  paragraph break.
+
+**This is a script, not a judgement call.** The transformation must be
+deterministic and testable: the same text in, the same text out, every time,
+with no model deciding anything at runtime. That is principle 4 — mechanical
+work stays mechanical — and it is also what makes the behaviour ownable, since
+a wrong pronunciation should be fixable by editing a list rather than by
+re-prompting something.
+
+- [ ] A pronunciation lexicon as **committed data**, not code — it is config the
+      user owns (D8), sitting with characters rather than in the binary
+- [ ] A Settings field to add and edit entries, so a word said wrongly is fixed
+      where it is heard rather than in a source file
+- [ ] An acronym policy: say-as-word vs spell-out, defaulting to spell-out for
+      unknown all-caps runs, since spelling an unknown acronym is recoverable
+      and mispronouncing it is not
+- [ ] Cadence — pauses at list items, sentence ends and paragraph breaks
+- [ ] A view on what is *summarised* rather than dropped. A table read as "a
+      table of five rows" carries more than silence does
+- [ ] Pure, and tested per rule, in the same shape as `voice.ts` — the whole
+      point is that it can be proved without listening to it
+- [ ] Integrated with M7's character, so delivery and identity are one thing
 
 ---
 
