@@ -38,6 +38,9 @@ src/
 │  │  ├─ MainView.tsx      the main tab — routes, never acts (D5)
 │  │  ├─ ProjectView.tsx   header + Chat|Terminal panes
 │  │  ├─ Chat.tsx          Channel 2 — transcript, composer, status, STOP
+│  │  ├─ ProjectCard.tsx   branch, changes, stack, commit, milestones
+│  │  ├─ Panel.tsx         Activity | Diff, with a persistent error log
+│  │  ├─ FileTree.tsx      lazy tree, one directory at a time
 │  │  └─ Terminal.tsx      xterm.js — the only file that touches it
 │  └─ styles/
 │     └─ index.css         Tailwind v4 @theme — there is no tailwind.config.js
@@ -57,6 +60,11 @@ src/
    │  │  ├─ mod.rs         Channel 2 — agent sessions, lifecycle
    │  │  ├─ event.rs       the normalized vocabulary the UI subscribes to
    │  │  └─ claude.rs      Claude Code adapter + line mapping + tests
+   │  ├─ card.rs           the cached project card (D11)
+   │  ├─ git/
+   │  │  └─ mod.rs         status, diff, stack guess, lazy tree
+   │  ├─ parse/
+   │  │  └─ mod.rs         the milestone contract, implemented
    │  ├─ guard/
    │  │  ├─ mod.rs         bwrap scope — the floor (D19)
    │  │  ├─ shim.rs        PATH wrappers — a guard, not the floor
@@ -78,6 +86,9 @@ src/
 | `src-tauri/src/pty/` | Terminal sessions: spawn, write, resize, kill | Changing terminal behaviour |
 | `src-tauri/src/agent/` | Agent sessions and the normalized event mapping | Adding an adapter, or changing what the UI sees |
 | `src-tauri/src/guard/` | The sandbox scope, the shim, branch policy | Changing what the agent is allowed to touch |
+| `src-tauri/src/parse/` | The milestone contract | Never without changing `config/contracts/milestones.md` first |
+| `src-tauri/src/git/` | Status, diff, stack, tree | Anything the card or panels read |
+| `src-tauri/src/card.rs` | Assembling and caching the card | Changing what a project shows cold |
 | `ui/agent.ts` | Event types + transcript reducer | Changing how a conversation is assembled |
 | `ui/panes.ts` | Chat \| Terminal sub-tab rules | Changing when a pane mounts or shows |
 | `src-tauri/src/lib.rs` | Tauri commands | Adding a command the UI can call |
@@ -96,7 +107,7 @@ src-tauri/src/
 ├─ scan/     repo discovery, registry, project cards        (M1 ✓ · M5)
 ├─ pty/      portable-pty sessions — Channel 1              (M2 ✓)
 ├─ agent/    adapters + event normalization — Channel 2     (M3 ✓)
-├─ git/      status, branch, diff                           (M5)
+├─ git/      status, branch, diff                           (M5 ✓)
 ├─ guard/    bwrap scope + PATH shim generation             (M4 ✓)
 └─ parse/    milestone parser                               (M5)
 ```
@@ -163,6 +174,15 @@ src-tauri/src/
   is worse than no floor, because you would act as though it were.
 - **The shim goes into the agent's environment only.** The terminal is the
   user's (D7). A shared spawn helper would be the easy way to get this wrong.
+- **`parse/` implements `config/contracts/milestones.md`, not the reverse.**
+  That contract is read by GIT HUD out of *other people's* repos, so changing
+  the parser without changing the contract breaks a promise made to every one
+  of them. There is a test asserting GIT HUD's own milestones satisfy it.
+- **The card is read once and cached** (D11). A markdown parser in the render
+  path would make a malformed file a rendering bug instead of a data error.
+- **A missing or malformed milestone file degrades.** Absence is a state, not a
+  failure; a parse error surfaces in Activity while the rest of the card still
+  renders.
 - **The UI never sees a harness's JSON.** Everything crossing the boundary is
   `agent::event::AgentEvent`. That is what makes a second adapter a
   self-contained change (D2).

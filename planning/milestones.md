@@ -89,7 +89,7 @@ rather than a binary is the fix; `htop` is fine if you want it
 - [x] `claude` run by hand inside it — confirmed by hand
 
 ### M3 — Agent channel
-**Status:** in-progress
+**Status:** done
 **Validation:** a full conversation with file edits; the status indicator names
 the actual file being read; STOP kills mid-stream cleanly.
 
@@ -124,12 +124,11 @@ the actual file being read; STOP kills mid-stream cleanly.
       (`cargo test --test agent_live -- --ignored`) — proves the production path
       end to end, after driving the UI repeatedly failed for reasons unrelated
       to the channel
-- [ ] A conversation that **edits** a file — blocked until M4 settles the
-      permission mode. This is the milestone's last open item and it is
-      deliberately deferred, not forgotten
+- [x] A conversation that **edits** a file — confirmed by hand 2026-07-29, once
+      M4's floor made `acceptEdits` defensible
 
 ### M4 — Guardrails
-**Status:** in-progress
+**Status:** done
 **Validation:** a default-deny test suite — every denied op attempted and
 blocked, every allowed op attempted and passing. Ship on green only.
 
@@ -165,19 +164,29 @@ blocked, every allowed op attempted and passing. Ship on green only.
       branch it left, the branch it made, and how many paths moved. Blocking was
       tried first and made the agent unusable in any repo with work in progress;
       `git checkout -b` loses nothing, so the duty is to say it, not to refuse
-- [ ] Confirmed by hand in the app
+- [x] Confirmed by hand 2026-07-29 — an edit inside the project succeeded, an
+      attempt to reach outside it was blocked, and starting a chat on a branch
+      with uncommitted changes switched and said so
 
 ### M5 — Panels and project cards
-**Status:** not-started
+**Status:** in-progress
 **Validation:** open a project cold and see stack, branch, dirty files, last
-commit, and milestone progress without an agent running.
+commit, and milestone progress without an agent running. **Seen 2026-07-29** —
+GIT HUD reading its own roadmap: branch `m5-panels`, 13 uncommitted, stack
+Tauri, last commit, and 5/9 milestones, with no agent session anywhere.
 
-- [ ] File tree in the left panel
-- [ ] Diff panel fed by `diff` events and the working tree
-- [ ] Activity panel with a persistent error log
-- [ ] Project card read once at registration and cached
-- [ ] Rust milestone parser against `../config/contracts/milestones.md`
-- [ ] Unparseable or missing milestones degrade to a panel error, never a crash
+- [x] File tree in the left panel — lazy, so a huge repo costs nothing to show,
+      and it refuses to walk outside the project
+- [x] Diff panel over the working tree, bounded and **saying when truncated**
+- [x] Activity panel with a persistent error log
+- [x] Project card read once and cached (D11) — the UI reads a struct, never
+      prose
+- [x] Rust milestone parser implementing `../config/contracts/milestones.md`,
+      with a test per rule the contract states, plus one asserting GIT HUD's own
+      milestones satisfy its own contract
+- [x] Unparseable milestones degrade — the error surfaces in Activity and the
+      rest of the card still renders. A missing file is a state, not a failure
+- [ ] Confirmed by hand in the app
 
 ---
 

@@ -1,8 +1,13 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import type { Project } from "../types";
 import { initialPaneState, isMounted, showPane, type Pane } from "../panes";
 import { Terminal } from "./Terminal";
 import { Chat } from "./Chat";
+import { FileTree } from "./FileTree";
+import { Panel } from "./Panel";
+import { ProjectCard } from "./ProjectCard";
+import type { Card } from "../card";
 
 /**
  * A project tab.
@@ -21,6 +26,22 @@ export function ProjectView({
   visible: boolean;
 }) {
   const [panes, setPanes] = useState(() => initialPaneState("chat"));
+  const [card, setCard] = useState<Card | null>(null);
+  const [problems, setProblems] = useState<string[]>([]);
+
+  // Read once and cached in Rust (D11). No agent is involved in showing a
+  // project's state — that is the point of the card.
+  useEffect(() => {
+    let live = true;
+    void invoke<Card>("project_card", { id: project.rel_path, cwd: project.path })
+      .then((c) => live && setCard(c))
+      .catch((e) =>
+        live && setProblems((p) => [...p, e instanceof Error ? e.message : String(e)]),
+      );
+    return () => {
+      live = false;
+    };
+  }, [project.rel_path, project.path]);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -36,24 +57,13 @@ export function ProjectView({
           </p>
         )}
 
-        <dl className="mt-5 flex flex-wrap gap-x-8 gap-y-3">
-          <Field label="Relative">{project.rel_path}</Field>
-          <Field label="Depth">{String(project.depth)}</Field>
-          <Field label="Kind">{project.kind}</Field>
-          <Field label="Agent" ok={project.agent === "read-write"}>
-            {project.agent}
-          </Field>
-          {/* Detection is reported for every project — the icm.md contract is
-              canonical and never made to lie. Only the *expectation* varies by
-              kind, so a third-party repo shows its layers plainly rather than
-              in warning colour (D18). */}
-          <Field label="Layer 0" ok={expectationTone(project, project.icm.layer0)}>
-            {project.icm.layer0 ? "present" : "missing"}
-          </Field>
-          <Field label="Layer 1" ok={expectationTone(project, project.icm.layer1)}>
-            {project.icm.layer1 ? "present" : "missing"}
-          </Field>
-        </dl>
+        {card ? (
+          <dl className="mt-5">
+            <ProjectCard card={card} />
+          </dl>
+        ) : (
+          <p className="mt-5 font-mono text-xs text-ink-faint">reading project…</p>
+        )}
 
         {project.kind !== "own" && (
           <p className="mt-4 text-xs text-ink-faint">
@@ -82,7 +92,15 @@ export function ProjectView({
         </nav>
       </header>
 
-      <div className="relative min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1">
+        <aside className="flex w-60 shrink-0 flex-col border-r border-line bg-deep">
+          <h2 className="shrink-0 px-3 pt-3 pb-1 text-[10px] tracking-[0.16em] text-ink-faint uppercase">
+            Files
+          </h2>
+          <FileTree cwd={project.path} />
+        </aside>
+
+        <div className="relative min-h-0 flex-1">
         {/* Both panes are hidden with CSS rather than unmounted — see
             ../panes.ts. The terminal is not rendered at all until first shown,
             so browsing a project never leaves a shell behind. */}
@@ -107,6 +125,11 @@ export function ProjectView({
             />
           </div>
         )}
+        </div>
+
+        <div className="hidden w-96 shrink-0 lg:block">
+          <Panel cwd={project.path} card={card} problems={problems} />
+        </div>
       </div>
     </div>
   );
@@ -144,35 +167,5 @@ function PaneTab({
       )}
       {children}
     </button>
-  );
-}
-
-/**
- * A missing layer is only a *problem* where ICM is expected. Elsewhere it is
- * just a fact, so it renders neutral rather than in warning colour.
- */
-function expectationTone(project: Project, present: boolean): boolean | undefined {
-  if (project.kind !== "own") return undefined;
-  return present;
-}
-
-function Field({
-  label,
-  children,
-  ok,
-}: {
-  label: string;
-  children: React.ReactNode;
-  ok?: boolean;
-}) {
-  const tone =
-    ok === undefined ? "text-ink-dim" : ok ? "text-go" : "text-warn";
-  return (
-    <div>
-      <dt className="text-[10px] tracking-[0.16em] text-ink-faint uppercase">
-        {label}
-      </dt>
-      <dd className={`mt-1 font-mono text-sm ${tone}`}>{children}</dd>
-    </div>
   );
 }

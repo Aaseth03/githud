@@ -171,11 +171,11 @@ export function Chat({ project, visible }: Props) {
           <div className="pt-8 text-center text-xs text-ink-faint">
             <p>Ask it something. It is running in {project.name}.</p>
             <p className="mx-auto mt-3 max-w-sm leading-relaxed">
-              It can read and search. <span className="text-ink-dim">Writes are
-              refused</span> until the M4
-              guardrails exist — running with edit permission and no sandbox
-              beneath it is the one thing this app is built to avoid. Use the
-              Terminal pane meanwhile.
+              It runs{" "}
+              <span className="text-ink-dim">sandboxed to this project</span> —
+              it can read and write here, and nothing outside is even visible to
+              it. Sending the first message moves you onto a branch of its own,
+              and it will say so; until then nothing in your repo is touched.
             </p>
           </div>
         )}
