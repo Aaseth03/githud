@@ -12,6 +12,7 @@ pub mod overrides;
 pub mod parse;
 pub mod pty;
 pub mod scan;
+pub mod voice;
 
 use std::path::PathBuf;
 
