@@ -78,6 +78,7 @@ src/
    │  ├─ card.rs           the cached project card (D11)
    │  ├─ audio.rs          what the machine's audio devices actually are
    │  ├─ mic.rs            webview media permission policy (Linux)
+   │  ├─ reap.rs           orphaned sandboxes, and teardown on a signal
    │  ├─ voice/
    │  │  └─ mod.rs         Voicebox client — health, voices, speech, ASR
    │  ├─ git/
@@ -110,6 +111,7 @@ src/
 | `src-tauri/src/card.rs` | Assembling and caching the card | Changing what a project shows cold |
 | `src-tauri/src/voice/` | Voicebox: health, voices, speech, transcription | Anything the app asks of Voicebox |
 | `src-tauri/src/mic.rs` | What the webview may access | Changing device permissions |
+| `src-tauri/src/reap.rs` | Reaping sandboxes a dead app left behind | Anything about process lifetime across a crash |
 | `src-tauri/src/audio.rs` | The machine's real capture and playback devices | Anything about which device is in use |
 | `ui/audio.ts` | The chosen input, and what a capture meant | Changing capture selection or reporting |
 | `ui/capture.ts` | Recording, and the WAV that leaves the webview | Anything about how audio is captured |
@@ -135,7 +137,8 @@ src-tauri/src/
 ├─ git/      status, branch, diff                            (M5 ✓)
 ├─ guard/    bwrap scope + PATH shim generation              (M4 ✓)
 ├─ parse/    milestone parser                                (M5 ✓)
-└─ voice/    Voicebox client — speech, ASR                   (M6 ✓)
+├─ voice/    Voicebox client — speech, ASR                   (M6 ✓)
+└─ reap.rs   orphaned sandbox sweep + signal teardown        (M6 ✓)
 ```
 
 ## Rules that bite here
@@ -198,6 +201,23 @@ src-tauri/src/
   Never describe the shim as a guarantee.
 - **The agent does not start without bwrap.** A floor that silently is not there
   is worse than no floor, because you would act as though it were.
+- **`--die-with-parent` is not a guarantee, and neither is `ExitRequested`.**
+  The first sets `PR_SET_PDEATHSIG`, which the kernel ties to the *thread* that
+  created the process — and agents are spawned from Tauri worker threads and
+  test threads, which come and go, so the signal fires at the wrong time or
+  never. The second only runs when a window closes, never when the process is
+  signalled, so every `pkill` during development skipped teardown entirely.
+  Five sandboxes accumulated over two days that way, each holding a live Claude
+  session, reparented to `systemd --user` and answering to nobody. `reap.rs`
+  answers both: teardown on the catchable signals, and a sweep at startup that
+  depends on nothing the dying process managed to do. **The sweep is the floor**
+  — it is the only part that survives `SIGKILL` and a crash.
+- **Reaping must never touch a live sibling.** An orphan is a *marked* process
+  whose parent is no longer a `githud` — both halves, always. The mark alone
+  would match a second instance's running session, which M9's parallel sessions
+  make a real case, and killing that would be far worse than the leak. Orphans
+  reparent to `systemd --user` here rather than to pid 1, so the test is what
+  the parent *is*, never its pid.
 - **The shim goes into the agent's environment only.** The terminal is the
   user's (D7). A shared spawn helper would be the easy way to get this wrong.
 - **`parse/` implements `config/contracts/milestones.md`, not the reverse.**

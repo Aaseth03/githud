@@ -13,6 +13,7 @@ pub mod mic;
 pub mod overrides;
 pub mod parse;
 pub mod pty;
+pub mod reap;
 pub mod scan;
 pub mod voice;
 
@@ -473,6 +474,20 @@ pub fn run() {
     let agents = agent::Agents::new();
     let cards = card::Cards::new();
 
+    // `ExitRequested` fires when a window closes — never when the process is
+    // signalled. Every `pkill` during development therefore skipped teardown
+    // entirely, which is how orphaned sandboxes accumulated. Catchable signals
+    // now run the same cleanup; `SIGKILL` cannot be caught by anything, and is
+    // what the startup sweep is for.
+    reap::on_signal({
+        let terminals = terminals.clone();
+        let agents = agents.clone();
+        move || {
+            terminals.kill_all();
+            agents.stop_all();
+        }
+    });
+
     tauri::Builder::default()
         .manage(terminals.clone())
         .manage(agents.clone())
@@ -485,6 +500,14 @@ pub fn run() {
                         .build(),
                 )?;
             }
+            // Anything a previous run failed to take with it. The floor, not
+            // the first line: it depends on nothing the dying process managed
+            // to do, which is what makes it work after a SIGKILL or a crash.
+            let reaped = reap::sweep();
+            if reaped > 0 {
+                log::warn!("reaped {reaped} orphaned agent sandbox(es) from a previous run");
+            }
+
             // Push-to-talk is dead without this, and fails in a way that
             // blames the user for a prompt they were never shown.
             if let Some(window) = tauri::Manager::get_webview_window(app, "main") {

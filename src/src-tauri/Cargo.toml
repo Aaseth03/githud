@@ -47,6 +47,10 @@ tokio = { version = "1", features = ["rt-multi-thread"] }
 # on the native widget — unreachable from the webview, and not something Tauri
 # turns on. Pinned to the exact version Tauri resolves, because `with_webview`
 # hands back *its* WebView and a different minor is a different type.
+[target.'cfg(unix)'.dependencies]
+# Reaping orphaned sandboxes needs kill(2); nothing else here does.
+libc = "0.2"
+
 [target.'cfg(target_os = "linux")'.dependencies]
 webkit2gtk = "=2.0.2"
 
