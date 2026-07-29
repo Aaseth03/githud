@@ -10,6 +10,7 @@ lives in `../src/`.
 planning/
 ├─ CONTEXT.md
 ├─ milestones.md
+├─ handoff.md                          where things stand, for a cold start
 ├─ specs/                              (empty — .gitkeep)
 ├─ architecture/
 │  ├─ event-schema.md
@@ -23,7 +24,8 @@ planning/
 │  ├─ 2026-07-28-m1-shell-scan-tabs.plan.md
 │  ├─ 2026-07-28-m2-embedded-terminal.plan.md
 │  ├─ 2026-07-28-m3-agent-channel.plan.md
-│  └─ 2026-07-29-m5-panels-and-cards.plan.md
+│  ├─ 2026-07-29-m5-panels-and-cards.plan.md
+│  └─ 2026-07-29-m6-voice.plan.md
 └─ decisions/
    ├─ 2026-07-28-D01-dual-channel.md
    ├─ 2026-07-28-D02-adapters-target-harnesses.md
@@ -54,6 +56,7 @@ disk.
 | Path | Contains | When to use |
 |---|---|---|
 | `milestones.md` | The roadmap, and the only place status lives | Deciding or queuing what to build next |
+| `handoff.md` | Where things stand right now, and what needs a human | **Starting a session cold** — read this first |
 | `architecture/` | Stable contracts | Before writing code that touches events, adapters, storage, or guardrails |
 | `decisions/` | Committed decisions (`YYYY-MM-DD-Dnn-title.md`) | Understanding *why*, or recording a new one |
 | `plans/` | Implementation plans (`YYYY-MM-DD-title.plan.md`) | Planning a feature before coding — start from `plans/_TEMPLATE.plan.md` |
@@ -111,7 +114,8 @@ thing*, not from planning it.
 | 2026-07-28 | [M1 — shell, scan, tabs](plans/2026-07-28-m1-shell-scan-tabs.plan.md) | **Implemented** — validation green |
 | 2026-07-28 | [M2 — embedded terminal](plans/2026-07-28-m2-embedded-terminal.plan.md) | **Done** — validated by hand |
 | 2026-07-28 | [M3 — agent channel](plans/2026-07-28-m3-agent-channel.plan.md) | **Done** — confirmed by hand |
-| 2026-07-29 | [M5 — panels and project cards](plans/2026-07-29-m5-panels-and-cards.plan.md) | **Implemented** — GIT HUD reads its own roadmap |
+| 2026-07-29 | [M5 — panels and project cards](plans/2026-07-29-m5-panels-and-cards.plan.md) | **Done** — confirmed by hand |
+| 2026-07-29 | [M6 — voice](plans/2026-07-29-m6-voice.plan.md) | **Built, unvalidated** — open in PR #10; needs a spoken session |
 
 ## Plan contract
 

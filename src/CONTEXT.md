@@ -33,6 +33,9 @@ src/
 │  ├─ activity.ts          live agent state for the panel, pure
 │  ├─ activity.test.ts
 │  ├─ agent.test.ts
+│  ├─ voice.ts             what is worth speaking (D15), pure
+│  ├─ voice.test.ts
+│  ├─ useVoice.ts          speech in and out; every call crosses to Rust
 │  ├─ hooks/
 │  │  └─ useProjects.ts    calls the scan command; parses nothing
 │  ├─ components/
@@ -47,6 +50,7 @@ src/
 │  │  ├─ FileTree.tsx      lazy tree, one directory at a time
 │  │  ├─ Splitter.tsx      draggable column separator
 │  │  ├─ FileViewer.tsx    read-only file pane, bounded
+│  │  ├─ VoicePill.tsx     Voicebox status, voice choice, MUTE
 │  │  └─ Terminal.tsx      xterm.js — the only file that touches it
 │  └─ styles/
 │     └─ index.css         Tailwind v4 @theme — there is no tailwind.config.js
@@ -67,6 +71,9 @@ src/
    │  │  ├─ event.rs       the normalized vocabulary the UI subscribes to
    │  │  └─ claude.rs      Claude Code adapter + line mapping + tests
    │  ├─ card.rs           the cached project card (D11)
+   │  ├─ mic.rs            webview media permission policy (Linux)
+   │  ├─ voice/
+   │  │  └─ mod.rs         Voicebox client — health, voices, speech, ASR
    │  ├─ git/
    │  │  └─ mod.rs         status, diff, stack guess, lazy tree
    │  ├─ parse/
@@ -95,6 +102,9 @@ src/
 | `src-tauri/src/parse/` | The milestone contract | Never without changing `config/contracts/milestones.md` first |
 | `src-tauri/src/git/` | Status, diff, stack, tree | Anything the card or panels read |
 | `src-tauri/src/card.rs` | Assembling and caching the card | Changing what a project shows cold |
+| `src-tauri/src/voice/` | Voicebox: health, voices, speech, transcription | Anything the app asks of Voicebox |
+| `src-tauri/src/mic.rs` | What the webview may access | Changing device permissions |
+| `ui/voice.ts` | What is worth speaking (D15), health labels | Changing spoken output |
 | `ui/agent.ts` | Event types + transcript reducer | Changing how a conversation is assembled |
 | `ui/panes.ts` | Chat \| Terminal sub-tab rules | Changing when a pane mounts or shows |
 | `src-tauri/src/lib.rs` | Tauri commands | Adding a command the UI can call |
@@ -110,12 +120,13 @@ when a module actually lands.
 
 ```text
 src-tauri/src/
-├─ scan/     repo discovery, registry, project cards        (M1 ✓ · M5)
-├─ pty/      portable-pty sessions — Channel 1              (M2 ✓)
-├─ agent/    adapters + event normalization — Channel 2     (M3 ✓)
-├─ git/      status, branch, diff                           (M5 ✓)
-├─ guard/    bwrap scope + PATH shim generation             (M4 ✓)
-└─ parse/    milestone parser                               (M5)
+├─ scan/     repo discovery, registry, project cards         (M1 ✓ · M5)
+├─ pty/      portable-pty sessions — Channel 1               (M2 ✓)
+├─ agent/    adapters + event normalization — Channel 2      (M3 ✓)
+├─ git/      status, branch, diff                            (M5 ✓)
+├─ guard/    bwrap scope + PATH shim generation              (M4 ✓)
+├─ parse/    milestone parser                                (M5 ✓)
+└─ voice/    Voicebox client — speech, ASR                   (M6 ✓)
 ```
 
 ## Rules that bite here
@@ -210,6 +221,39 @@ src-tauri/src/
   visible error, not an empty list.
 - **Never panic on a user's file.** Any parser handed a malformed file in
   someone else's repo returns a structured error.
+- **The webview cannot reach Voicebox at all.** WebKitGTK serves the app from
+  an opaque origin and discards the response whatever CORS says — proven by
+  experiment in Professor before this repo existed. Every Voicebox call goes
+  through Rust. This is not a preference, and a future `fetch()` here will fail
+  in a way that looks like Voicebox being down.
+- **WebKitGTK ships with media capture off.** With `enable-media-stream` unset,
+  `getUserMedia` rejects with `NotAllowedError` — the same error a refusal
+  produces — without ever asking anyone, so the message blames the user for a
+  prompt that was never shown. The setting lives on the native widget and Tauri
+  does not touch it; `mic.rs` does. And a page that can ask *will* ask, so every
+  permission request is answered — an unanswered one never resolves, and the
+  caller hangs instead of failing.
+- **D15 cannot rely on the event type.** The schema separates `assistant.speak`
+  from `assistant.text` so "speak summaries, never code" is structural — but the
+  Claude adapter only ever emits `assistant.text`, because the harness has no
+  notion of a spoken line. Until a project's own ICM files instruct the agent to
+  produce speakable summaries, `voice.ts` strips code, paths, URLs and tables
+  before anything reaches a voice, and declines rather than reading punctuation
+  aloud. Deleting that stripping does not fail a build; it just makes the app
+  read diffs out loud.
+- **Voicebox has three health states, not two.** Answering-but-unable-to-work is
+  not the same as absent, and reporting it as *down* sends you looking in the
+  wrong place. The real instance failed exactly this way — running, and unable
+  to write its own audio directory.
+- **Voicebox's REST port is 17600.** Its own README says `17493`, which is the
+  container-internal port. Probe before believing either.
+- **A voice carries the engine it is built on, and it must be sent.** Preset
+  profiles refuse any other engine, and the server's default is not one they
+  support. Read the engine from the profile rather than defaulting.
+- **Generation is asynchronous and its status is Server-Sent Events.** Fetching
+  audio immediately gets a 404 that reads like a missing endpoint, and parsing
+  those frames as JSON yields nothing — indistinguishable from "still working",
+  so the wrong reader waits forever.
 - Rust: `snake_case` modules and commands. React: `PascalCase.tsx` components,
   `kebab-case` elsewhere.
 

@@ -169,7 +169,7 @@ blocked, every allowed op attempted and passing. Ship on green only.
       with uncommitted changes switched and said so
 
 ### M5 — Panels and project cards
-**Status:** in-progress
+**Status:** done
 **Validation:** open a project cold and see stack, branch, dirty files, last
 commit, and milestone progress without an agent running. **Seen 2026-07-29** —
 GIT HUD reading its own roadmap: branch `m5-panels`, 13 uncommitted, stack
@@ -199,7 +199,9 @@ Tauri, last commit, and 5/9 milestones, with no agent session anywhere.
       milestones satisfy its own contract
 - [x] Unparseable milestones degrade — the error surfaces in Activity and the
       rest of the card still renders. A missing file is a state, not a failure
-- [ ] Confirmed by hand in the app
+- [x] Confirmed by hand in the app — diff panel, file viewer, and binary
+      marking checked 2026-07-29. Syntax highlighting was added on the same
+      pass, at request
 
 ---
 
