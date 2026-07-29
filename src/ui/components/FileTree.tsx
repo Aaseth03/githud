@@ -10,10 +10,18 @@ import type { TreeEntry } from "../card";
  * prunes the same noise the project scan does and refuses to walk outside the
  * project.
  */
-export function FileTree({ cwd }: { cwd: string }) {
+export function FileTree({
+  cwd,
+  selected,
+  onOpen,
+}: {
+  cwd: string;
+  selected: string | null;
+  onOpen: (path: string) => void;
+}) {
   return (
     <div className="min-h-0 flex-1 overflow-auto px-1 py-2">
-      <Dir cwd={cwd} path="" depth={0} open />
+      <Dir cwd={cwd} path="" depth={0} open selected={selected} onOpen={onOpen} />
     </div>
   );
 }
@@ -23,11 +31,15 @@ function Dir({
   path,
   depth,
   open,
+  selected,
+  onOpen,
 }: {
   cwd: string;
   path: string;
   depth: number;
   open: boolean;
+  selected: string | null;
+  onOpen: (path: string) => void;
 }) {
   const [entries, setEntries] = useState<TreeEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -86,16 +98,33 @@ function Dir({
                   </span>
                   <span className="truncate">{e.name}</span>
                 </button>
-                {isOpen && <Dir cwd={cwd} path={e.path} depth={depth + 1} open />}
+                {isOpen && (
+                  <Dir
+                    cwd={cwd}
+                    path={e.path}
+                    depth={depth + 1}
+                    open
+                    selected={selected}
+                    onOpen={onOpen}
+                  />
+                )}
               </>
             ) : (
-              <div
+              <button
+                onClick={() => onOpen(e.path)}
                 title={e.path}
-                className="flex items-center gap-1.5 rounded px-2 py-0.5 text-[12px] text-ink-faint"
+                className={[
+                  "flex w-full items-center gap-1.5 rounded px-2 py-0.5 text-left text-[12px]",
+                  "transition-colors focus-visible:outline-2",
+                  "focus-visible:outline-offset-[-2px] focus-visible:outline-signal",
+                  selected === e.path
+                    ? "bg-raised text-ink"
+                    : "text-ink-faint hover:bg-surface hover:text-ink-dim",
+                ].join(" ")}
                 style={{ paddingLeft: depth * 12 + 8 + 16 }}
               >
                 <span className="truncate">{e.name}</span>
-              </div>
+              </button>
             )}
           </li>
         );

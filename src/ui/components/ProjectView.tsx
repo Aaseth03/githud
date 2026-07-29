@@ -6,6 +6,7 @@ import { Terminal } from "./Terminal";
 import { Chat } from "./Chat";
 import { FileTree } from "./FileTree";
 import { Panel } from "./Panel";
+import { FileViewer } from "./FileViewer";
 import { ProjectCard } from "./ProjectCard";
 import type { Card } from "../card";
 import { Splitter } from "./Splitter";
@@ -38,6 +39,7 @@ export function ProjectView({
   const [panes, setPanes] = useState(() => initialPaneState("chat"));
   const [card, setCard] = useState<Card | null>(null);
   const [problems, setProblems] = useState<string[]>([]);
+  const [openFile, setOpenFile] = useState<string | null>(null);
   // What the user chose. Never overwritten by fitting — see split.ts.
   const [preferred, setPreferred] = useState(loadWidths);
   const [available, setAvailable] = useState(Number.POSITIVE_INFINITY);
@@ -122,6 +124,15 @@ export function ProjectView({
           >
             Terminal
           </PaneTab>
+          {isMounted(panes, "file") && (
+            <PaneTab
+              pane="file"
+              active={panes.active}
+              onSelect={(p) => setPanes((s) => showPane(s, p))}
+            >
+              {openFile ? openFile.split("/").pop() : "File"}
+            </PaneTab>
+          )}
         </nav>
       </header>
 
@@ -133,7 +144,14 @@ export function ProjectView({
           <h2 className="shrink-0 px-3 pt-3 pb-1 text-[10px] tracking-[0.16em] text-ink-faint uppercase">
             Files
           </h2>
-          <FileTree cwd={project.path} />
+          <FileTree
+            cwd={project.path}
+            selected={openFile}
+            onOpen={(path) => {
+              setOpenFile(path);
+              setPanes((p) => showPane(p, "file"));
+            }}
+          />
         </aside>
 
         <Splitter
@@ -154,6 +172,16 @@ export function ProjectView({
         >
           <Chat project={project} visible={visible && panes.active === "chat"} />
         </div>
+
+        {isMounted(panes, "file") && (
+          <div
+            className={`absolute inset-0 ${
+              panes.active === "file" ? "" : "hidden"
+            }`}
+          >
+            <FileViewer cwd={project.path} path={openFile} />
+          </div>
+        )}
 
         {isMounted(panes, "terminal") && (
           <div

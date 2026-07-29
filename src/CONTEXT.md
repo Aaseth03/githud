@@ -44,6 +44,7 @@ src/
 │  │  ├─ Panel.tsx         Activity | Diff, with a persistent error log
 │  │  ├─ FileTree.tsx      lazy tree, one directory at a time
 │  │  ├─ Splitter.tsx      draggable column separator
+│  │  ├─ FileViewer.tsx    read-only file pane, bounded
 │  │  └─ Terminal.tsx      xterm.js — the only file that touches it
 │  └─ styles/
 │     └─ index.css         Tailwind v4 @theme — there is no tailwind.config.js

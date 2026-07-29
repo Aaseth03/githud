@@ -17,7 +17,9 @@ There is no privileged surface.
 
 - **Left** — the file tree replaces the project list.
 - **Bottom-left** — the character shrinks to a small window beneath the tree.
-- **Centre** — a sub-tab pair, **Chat | Terminal**, one visible at a time.
+- **Centre** — sub-tabs, one visible at a time: **Chat | Terminal**, joined by a
+  **file viewer** once a file is opened from the tree. The viewer is read-only —
+  this is a HUD, not an editor, and edits belong to the agent or the terminal.
 - **Right** — the interchangeable panel.
 
 ## Resizable columns

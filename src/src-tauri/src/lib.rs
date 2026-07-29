@@ -229,6 +229,13 @@ fn project_diff(cwd: String) -> git::Diff {
     git::diff(std::path::Path::new(&cwd))
 }
 
+/// One file's contents, for the viewer. Bounded, and refuses to leave the
+/// project.
+#[tauri::command]
+fn read_file(cwd: String, path: String) -> Result<git::FileContents, String> {
+    git::read_file(std::path::Path::new(&cwd), &path)
+}
+
 /// One directory of the file tree. Lazy: a huge repo is never walked eagerly.
 #[tauri::command]
 fn project_tree(cwd: String, path: Option<String>) -> Result<Vec<git::TreeEntry>, String> {
@@ -394,6 +401,7 @@ pub fn run() {
             project_card,
             project_diff,
             project_tree,
+            read_file,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

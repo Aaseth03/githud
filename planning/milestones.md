@@ -177,6 +177,11 @@ Tauri, last commit, and 5/9 milestones, with no agent session anywhere.
 
 - [x] File tree in the left panel — lazy, so a huge repo costs nothing to show,
       and it refuses to walk outside the project
+- [x] **Clicking a file opens it** in a third centre pane, read-only. Bounded
+      and honest: a truncated file says so, a binary one is named rather than
+      rendered as noise, and the viewer refuses to read outside the project
+- [x] Columns resize by dragging the separators, with a floor under each and a
+      usable centre kept
 - [x] Diff panel over the working tree, bounded and **saying when truncated**
 - [x] Activity panel with a persistent error log
 - [x] Project card read once and cached (D11) — the UI reads a struct, never

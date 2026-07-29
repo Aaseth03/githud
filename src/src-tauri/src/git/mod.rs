@@ -205,6 +205,71 @@ pub fn list_dir(repo: &Path, rel: &str) -> Result<Vec<TreeEntry>, String> {
     Ok(out)
 }
 
+/// A file's contents, bounded and honest about what it did.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FileContents {
+    pub path: String,
+    pub text: String,
+    pub truncated: bool,
+    /// Bytes on disk, whatever was returned.
+    pub bytes: u64,
+    /// Not text. The viewer says so rather than rendering noise.
+    pub binary: bool,
+}
+
+/// How much of a file to read. A viewer is for reading, not for loading a
+/// gigabyte into a webview.
+const FILE_LIMIT: usize = 512 * 1024;
+
+/// Read a file inside the project.
+///
+/// Refuses to leave the project, the same rule the tree walk follows — a `..`
+/// would otherwise turn the viewer into a filesystem browser.
+pub fn read_file(repo: &Path, rel: &str) -> Result<FileContents, String> {
+    if rel.is_empty() {
+        return Err("no file given".into());
+    }
+    if rel.split('/').any(|p| p == "..") {
+        return Err("path escapes the project".into());
+    }
+
+    let full = repo.join(rel);
+    let meta = std::fs::metadata(&full).map_err(|e| format!("{rel}: {e}"))?;
+    if meta.is_dir() {
+        return Err(format!("{rel} is a directory"));
+    }
+    let bytes = meta.len();
+
+    let raw = std::fs::read(&full).map_err(|e| format!("{rel}: {e}"))?;
+
+    // A NUL in the first block is how git itself guesses binary, and it beats
+    // trusting a file extension.
+    let probe = &raw[..raw.len().min(8000)];
+    if probe.contains(&0) {
+        return Ok(FileContents {
+            path: rel.to_string(),
+            text: String::new(),
+            truncated: false,
+            bytes,
+            binary: true,
+        });
+    }
+
+    let truncated = raw.len() > FILE_LIMIT;
+    let slice = if truncated { &raw[..FILE_LIMIT] } else { &raw[..] };
+    // Lossy is right here: a viewer should show what it can rather than refuse
+    // a file with one stray byte.
+    let text = String::from_utf8_lossy(slice).into_owned();
+
+    Ok(FileContents {
+        path: rel.to_string(),
+        text,
+        truncated,
+        bytes,
+        binary: false,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -365,6 +430,82 @@ mod tests {
     fn listing_a_missing_directory_errors_rather_than_panicking() {
         let r = repo("tree-missing");
         assert!(list_dir(&r, "nope").is_err());
+    }
+
+    #[test]
+    fn a_text_file_reads_back_whole() {
+        let r = repo("read");
+        std::fs::write(r.join("a.txt"), "hello\nworld\n").unwrap();
+
+        let f = read_file(&r, "a.txt").unwrap();
+
+        assert_eq!(f.text, "hello\nworld\n");
+        assert!(!f.truncated);
+        assert!(!f.binary);
+        assert_eq!(f.bytes, 12);
+    }
+
+    #[test]
+    fn a_nested_file_reads_by_its_relative_path() {
+        let r = repo("read-nested");
+        std::fs::create_dir_all(r.join("src/inner")).unwrap();
+        std::fs::write(r.join("src/inner/x.rs"), "fn main() {}").unwrap();
+
+        assert_eq!(read_file(&r, "src/inner/x.rs").unwrap().text, "fn main() {}");
+    }
+
+    #[test]
+    fn a_binary_file_is_reported_rather_than_dumped() {
+        let r = repo("read-bin");
+        std::fs::write(r.join("blob.bin"), [0u8, 1, 2, 3, 0, 255]).unwrap();
+
+        let f = read_file(&r, "blob.bin").unwrap();
+
+        assert!(f.binary);
+        assert!(f.text.is_empty(), "binary content must not be rendered");
+    }
+
+    #[test]
+    fn a_huge_file_is_truncated_and_says_so() {
+        let r = repo("read-huge");
+        std::fs::write(r.join("big.txt"), "x".repeat(FILE_LIMIT * 2)).unwrap();
+
+        let f = read_file(&r, "big.txt").unwrap();
+
+        assert!(f.truncated);
+        assert_eq!(f.text.len(), FILE_LIMIT);
+        assert_eq!(f.bytes, (FILE_LIMIT * 2) as u64);
+    }
+
+    #[test]
+    fn the_viewer_cannot_read_outside_the_project() {
+        // Otherwise the tree becomes a filesystem browser.
+        let r = repo("read-escape");
+
+        assert!(read_file(&r, "../../../etc/passwd").is_err());
+        assert!(read_file(&r, "src/../../secret").is_err());
+    }
+
+    #[test]
+    fn reading_a_directory_or_a_missing_file_errors_rather_than_panicking() {
+        let r = repo("read-bad");
+        std::fs::create_dir_all(r.join("adir")).unwrap();
+
+        assert!(read_file(&r, "adir").is_err());
+        assert!(read_file(&r, "nope.txt").is_err());
+        assert!(read_file(&r, "").is_err());
+    }
+
+    #[test]
+    fn invalid_utf8_is_shown_lossily_rather_than_refused() {
+        let r = repo("read-lossy");
+        // High bytes with no NUL: not binary by the probe, not valid UTF-8.
+        std::fs::write(r.join("odd.txt"), [b'h', b'i', 0xff, b'!']).unwrap();
+
+        let f = read_file(&r, "odd.txt").unwrap();
+
+        assert!(!f.binary);
+        assert!(f.text.contains("hi"), "{:?}", f.text);
     }
 
     #[test]

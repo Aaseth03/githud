@@ -65,3 +65,30 @@ describe("project sub-panes", () => {
     expect(isMounted(s, "chat")).toBe(false);
   });
 });
+
+describe("the file pane", () => {
+  it("is not mounted until a file is opened", () => {
+    // Same rule as the terminal: nothing exists until you ask for it.
+    const s = initialPaneState();
+    expect(isMounted(s, "file")).toBe(false);
+  });
+
+  it("mounts on first show and survives switching away", () => {
+    let s = showPane(initialPaneState(), "file");
+    expect(s.active).toBe("file");
+
+    s = showPane(s, "chat");
+
+    expect(s.active).toBe("chat");
+    expect(isMounted(s, "file")).toBe(true);
+  });
+
+  it("coexists with the terminal", () => {
+    let s = showPane(initialPaneState(), "terminal");
+    s = showPane(s, "file");
+
+    expect(isMounted(s, "terminal")).toBe(true);
+    expect(isMounted(s, "file")).toBe(true);
+    expect(isMounted(s, "chat")).toBe(true);
+  });
+});

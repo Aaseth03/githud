@@ -45,6 +45,14 @@ export interface Diff {
   files: number;
 }
 
+export interface FileContents {
+  path: string;
+  text: string;
+  truncated: boolean;
+  bytes: number;
+  binary: boolean;
+}
+
 export interface TreeEntry {
   name: string;
   path: string;
