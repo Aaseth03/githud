@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Project } from "../types";
 import { initialPaneState, isMounted, showPane, type Pane } from "../panes";
@@ -8,6 +8,16 @@ import { FileTree } from "./FileTree";
 import { Panel } from "./Panel";
 import { ProjectCard } from "./ProjectCard";
 import type { Card } from "../card";
+import { Splitter } from "./Splitter";
+import {
+  DEFAULT_LEFT,
+  DEFAULT_RIGHT,
+  fit,
+  LEFT_BOUNDS,
+  loadWidths,
+  RIGHT_BOUNDS,
+  saveWidths,
+} from "../split";
 
 /**
  * A project tab.
@@ -28,6 +38,29 @@ export function ProjectView({
   const [panes, setPanes] = useState(() => initialPaneState("chat"));
   const [card, setCard] = useState<Card | null>(null);
   const [problems, setProblems] = useState<string[]>([]);
+  // What the user chose. Never overwritten by fitting — see split.ts.
+  const [preferred, setPreferred] = useState(loadWidths);
+  const [available, setAvailable] = useState(Number.POSITIVE_INFINITY);
+  const columnsRef = useRef<HTMLDivElement | null>(null);
+
+  // Persist per machine — layout preference is local state, not project data.
+  useEffect(() => {
+    saveWidths(preferred);
+  }, [preferred]);
+
+  useEffect(() => {
+    const el = columnsRef.current;
+    if (!el) return;
+    const measure = () => setAvailable(el.clientWidth || Number.POSITIVE_INFINITY);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  // Narrowing the window must not crush the centre; the side columns give way,
+  // and widen again when there is room, because the preference survived.
+  const widths = fit(preferred.left, preferred.right, available);
 
   // Read once and cached in Rust (D11). No agent is involved in showing a
   // project's state — that is the point of the card.
@@ -92,13 +125,25 @@ export function ProjectView({
         </nav>
       </header>
 
-      <div className="flex min-h-0 flex-1">
-        <aside className="flex w-60 shrink-0 flex-col border-r border-line bg-deep">
+      <div ref={columnsRef} className="flex min-h-0 flex-1">
+        <aside
+          style={{ width: widths.left }}
+          className="flex shrink-0 flex-col bg-deep"
+        >
           <h2 className="shrink-0 px-3 pt-3 pb-1 text-[10px] tracking-[0.16em] text-ink-faint uppercase">
             Files
           </h2>
           <FileTree cwd={project.path} />
         </aside>
+
+        <Splitter
+          side="left"
+          width={widths.left}
+          bounds={LEFT_BOUNDS}
+          onResize={(left) => setPreferred((w) => ({ ...w, left }))}
+          onReset={() => setPreferred((w) => ({ ...w, left: DEFAULT_LEFT }))}
+          label="File tree width"
+        />
 
         <div className="relative min-h-0 flex-1">
         {/* Both panes are hidden with CSS rather than unmounted — see
@@ -127,7 +172,16 @@ export function ProjectView({
         )}
         </div>
 
-        <div className="hidden w-96 shrink-0 lg:block">
+        <Splitter
+          side="right"
+          width={widths.right}
+          bounds={RIGHT_BOUNDS}
+          onResize={(right) => setPreferred((w) => ({ ...w, right }))}
+          onReset={() => setPreferred((w) => ({ ...w, right: DEFAULT_RIGHT }))}
+          label="Panel width"
+        />
+
+        <div style={{ width: widths.right }} className="shrink-0">
           <Panel cwd={project.path} card={card} problems={problems} />
         </div>
       </div>

@@ -25,6 +25,8 @@ src/
 │  ├─ types.test.ts        the ICM flagging rule, mirrored from Rust
 │  ├─ tabs.ts              tab semantics, pure
 │  ├─ tabs.test.ts
+│  ├─ split.ts             column widths and constraints, pure
+│  ├─ split.test.ts
 │  ├─ panes.ts             Chat|Terminal sub-tab rules, pure
 │  ├─ panes.test.ts
 │  ├─ agent.ts             normalized events + transcript reducer, pure
@@ -41,6 +43,7 @@ src/
 │  │  ├─ ProjectCard.tsx   branch, changes, stack, commit, milestones
 │  │  ├─ Panel.tsx         Activity | Diff, with a persistent error log
 │  │  ├─ FileTree.tsx      lazy tree, one directory at a time
+│  │  ├─ Splitter.tsx      draggable column separator
 │  │  └─ Terminal.tsx      xterm.js — the only file that touches it
 │  └─ styles/
 │     └─ index.css         Tailwind v4 @theme — there is no tailwind.config.js
@@ -178,6 +181,10 @@ src-tauri/src/
   That contract is read by GIT HUD out of *other people's* repos, so changing
   the parser without changing the contract breaks a promise made to every one
   of them. There is a test asserting GIT HUD's own milestones satisfy it.
+- **A chosen width and a displayed width are different things.** `fit` only
+  shrinks, so storing its result as the preference makes a transient narrow
+  container collapse the columns permanently. Keep what was chosen; derive what
+  fits.
 - **The card is read once and cached** (D11). A markdown parser in the render
   path would make a malformed file a rendering bug instead of a data error.
 - **A missing or malformed milestone file degrades.** Absence is a state, not a

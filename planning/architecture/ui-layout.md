@@ -20,6 +20,30 @@ There is no privileged surface.
 - **Centre** — a sub-tab pair, **Chat | Terminal**, one visible at a time.
 - **Right** — the interchangeable panel.
 
+## Resizable columns
+
+The project tab's three columns — tree, panes, panel — are dragged from the
+separators between them. The separator's hit area is deliberately wider than
+its hairline, the same lesson the tab strip taught: a one-pixel target is a
+target you miss. Double-click resets a column; arrow keys nudge it, because a
+layout only a mouse can change is a layout some people cannot change.
+
+Two constraints are enforced rather than hoped for:
+
+- **A column can never vanish.** Each has a minimum, and a column dragged to
+  nothing is a column you cannot get back.
+- **The centre keeps a usable width.** When the window narrows, the side
+  columns give way — the panel first, since the tree is what you navigate
+  with.
+
+**The user's chosen widths and the widths currently displayed are different
+things.** Fitting only shrinks, so writing its result back as the preference
+would make a briefly-narrow container collapse both columns for good. The
+preference is kept, and what fits is derived from it.
+
+Widths persist per machine (`localStorage`), which is where layout preference
+belongs under D8 — it is local state, not project data.
+
 ## Panel modes
 
 | Mode | Shows |
