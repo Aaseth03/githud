@@ -21,10 +21,19 @@ pub fn args(model: Option<&str>, resume: Option<&str>) -> Vec<String> {
         "stream-json".into(),
         "--verbose".into(),
         // Safe only because the sandbox exists (D19). M3 deliberately left this
-        // unset: writes with no floor beneath them were the thing to avoid.
-        // bwrap confines every edit to the project directory.
+        // unset because writes with no floor beneath them were the thing to
+        // avoid; M4 built the floor, and this is what it was built for.
+        //
+        // `acceptEdits` was tried first and is the wrong shape: it permits
+        // edits but sends every Bash command for approval, and in `--print`
+        // mode there is nobody to approve. The agent could edit a file and
+        // then not run the test that proved the edit worked.
+        //
+        // What still holds: bwrap confines every write to the project, the
+        // PATH shim refuses destructive git and gh, and a `read-only` project
+        // is bound read-only.
         "--permission-mode".into(),
-        "acceptEdits".into(),
+        "bypassPermissions".into(),
     ];
     if let Some(m) = model {
         a.push("--model".into());
@@ -297,11 +306,14 @@ mod tests {
     }
 
     #[test]
-    fn edits_are_accepted_because_the_sandbox_confines_them() {
-        // D19: defensible only with the floor in place. Without bwrap this
-        // would be free file writes with nothing beneath them.
+    fn the_agent_may_act_because_the_sandbox_confines_it() {
+        // D19: defensible only with the floor in place. `acceptEdits` was tried
+        // first and blocked every Bash command, so the agent could edit a file
+        // and not run the test that proved the edit worked.
         let a = args(None, None);
-        assert!(a.windows(2).any(|w| w == ["--permission-mode", "acceptEdits"]));
+        assert!(a
+            .windows(2)
+            .any(|w| w == ["--permission-mode", "bypassPermissions"]));
     }
 
     #[test]

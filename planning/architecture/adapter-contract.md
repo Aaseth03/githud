@@ -102,7 +102,15 @@ inventing a word. That was the specific M3 requirement.
 A `result` line ends a *turn*, not the session. The process keeps running and
 accepts the next message.
 
-### Permission mode — deliberately unset at M3
+### Permission mode — `bypassPermissions` since M4
+
+The agent runs with `--permission-mode bypassPermissions`, which is defensible
+**only** because the sandbox exists. `acceptEdits` was tried and blocks every
+Bash command in `--print` mode, where nothing can approve them. Reasoning and
+what still constrains the agent:
+`../decisions/2026-07-28-D19-sandbox-scope.md`.
+
+### The M3 position, for the record — deliberately unset
 
 GIT HUD passes **no `--permission-mode`**, so the CLI's own default applies.
 
