@@ -1,4 +1,10 @@
-import { MAIN_TAB_KEY, tabKey, type Project, type Tab } from "./types";
+import {
+  MAIN_TAB_KEY,
+  SETTINGS_TAB_KEY,
+  tabKey,
+  type Project,
+  type Tab,
+} from "./types";
 
 /**
  * Tab semantics, kept pure so they can be tested directly rather than by
@@ -34,6 +40,21 @@ export function openProject(state: TabState, project: Project): TabState {
       ? state.tabs
       : [...state.tabs, { kind: "project", key, project }],
     activeKey: key,
+  };
+}
+
+/**
+ * Open settings, or focus it if it is already open.
+ *
+ * One of it, for the same reason one repo has one tab: two settings tabs would
+ * be two views of one machine, and the second would be a copy that can drift.
+ */
+export function openSettings(state: TabState): TabState {
+  const alreadyOpen = state.tabs.some((t) => t.kind === "settings");
+
+  return {
+    tabs: alreadyOpen ? state.tabs : [...state.tabs, { kind: "settings" }],
+    activeKey: SETTINGS_TAB_KEY,
   };
 }
 

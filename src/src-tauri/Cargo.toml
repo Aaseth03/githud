@@ -32,7 +32,30 @@ portable-pty = "0.9"
 # PTY output is arbitrary bytes; base64 keeps escape sequences intact across
 # the IPC boundary, where from_utf8_lossy would corrupt them.
 base64 = "0.22"
+# Voicebox is reached from Rust because the webview cannot reach it at all —
+# WebKitGTK serves the app from an opaque origin and discards the response
+# whatever CORS says. Proven by experiment in Professor's
+# 2026-07-27-webview-http-via-rust decision.
+#
+# `rustls` rather than the system OpenSSL so the sandbox needs nothing extra.
+# Everything this client talks to is 127.0.0.1; there is no outbound path and
+# nothing here can bill.
+reqwest = { version = "0.12", default-features = false, features = ["json", "multipart", "rustls-tls"] }
+tokio = { version = "1", features = ["rt-multi-thread"] }
+
+# Push-to-talk. WebKitGTK ships with media capture off, and the setting lives
+# on the native widget — unreachable from the webview, and not something Tauri
+# turns on. Pinned to the exact version Tauri resolves, because `with_webview`
+# hands back *its* WebView and a different minor is a different type.
+[target.'cfg(unix)'.dependencies]
+# Reaping orphaned sandboxes needs kill(2); nothing else here does.
+libc = "0.2"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+webkit2gtk = "=2.0.2"
 
 [dev-dependencies]
 # The real-root integration test resolves ~/github the same way the app does.
 dirs = "6"
+# Async tests for the Voicebox client.
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

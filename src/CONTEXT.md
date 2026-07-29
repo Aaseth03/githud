@@ -33,6 +33,13 @@ src/
 │  ├─ activity.ts          live agent state for the panel, pure
 │  ├─ activity.test.ts
 │  ├─ agent.test.ts
+│  ├─ voice.ts             what is worth speaking (D15), pure
+│  ├─ voice.test.ts
+│  ├─ audio.ts             devices, the chosen input, what a capture meant, pure
+│  ├─ audio.test.ts
+│  ├─ capture.ts           recording without MediaRecorder — Web Audio → WAV
+│  ├─ capture.test.ts
+│  ├─ useVoice.ts          speech in and out; owned by App, one per app
 │  ├─ hooks/
 │  │  └─ useProjects.ts    calls the scan command; parses nothing
 │  ├─ components/
@@ -47,6 +54,8 @@ src/
 │  │  ├─ FileTree.tsx      lazy tree, one directory at a time
 │  │  ├─ Splitter.tsx      draggable column separator
 │  │  ├─ FileViewer.tsx    read-only file pane, bounded
+│  │  ├─ VoicePill.tsx     Voicebox status, voice choice, MUTE — in the tab strip
+│  │  ├─ Settings.tsx      audio devices, mic test, voice test, webview facts
 │  │  └─ Terminal.tsx      xterm.js — the only file that touches it
 │  └─ styles/
 │     └─ index.css         Tailwind v4 @theme — there is no tailwind.config.js
@@ -67,6 +76,11 @@ src/
    │  │  ├─ event.rs       the normalized vocabulary the UI subscribes to
    │  │  └─ claude.rs      Claude Code adapter + line mapping + tests
    │  ├─ card.rs           the cached project card (D11)
+   │  ├─ audio.rs          what the machine's audio devices actually are
+   │  ├─ mic.rs            webview media permission policy (Linux)
+   │  ├─ reap.rs           orphaned sandboxes, and teardown on a signal
+   │  ├─ voice/
+   │  │  └─ mod.rs         Voicebox client — health, voices, speech, ASR
    │  ├─ git/
    │  │  └─ mod.rs         status, diff, stack guess, lazy tree
    │  ├─ parse/
@@ -95,6 +109,13 @@ src/
 | `src-tauri/src/parse/` | The milestone contract | Never without changing `config/contracts/milestones.md` first |
 | `src-tauri/src/git/` | Status, diff, stack, tree | Anything the card or panels read |
 | `src-tauri/src/card.rs` | Assembling and caching the card | Changing what a project shows cold |
+| `src-tauri/src/voice/` | Voicebox: health, voices, speech, transcription | Anything the app asks of Voicebox |
+| `src-tauri/src/mic.rs` | What the webview may access | Changing device permissions |
+| `src-tauri/src/reap.rs` | Reaping sandboxes a dead app left behind | Anything about process lifetime across a crash |
+| `src-tauri/src/audio.rs` | The machine's real capture and playback devices | Anything about which device is in use |
+| `ui/audio.ts` | The chosen input, and what a capture meant | Changing capture selection or reporting |
+| `ui/capture.ts` | Recording, and the WAV that leaves the webview | Anything about how audio is captured |
+| `ui/voice.ts` | What is worth speaking (D15), health labels | Changing spoken output |
 | `ui/agent.ts` | Event types + transcript reducer | Changing how a conversation is assembled |
 | `ui/panes.ts` | Chat \| Terminal sub-tab rules | Changing when a pane mounts or shows |
 | `src-tauri/src/lib.rs` | Tauri commands | Adding a command the UI can call |
@@ -110,12 +131,14 @@ when a module actually lands.
 
 ```text
 src-tauri/src/
-├─ scan/     repo discovery, registry, project cards        (M1 ✓ · M5)
-├─ pty/      portable-pty sessions — Channel 1              (M2 ✓)
-├─ agent/    adapters + event normalization — Channel 2     (M3 ✓)
-├─ git/      status, branch, diff                           (M5 ✓)
-├─ guard/    bwrap scope + PATH shim generation             (M4 ✓)
-└─ parse/    milestone parser                               (M5)
+├─ scan/     repo discovery, registry, project cards         (M1 ✓ · M5)
+├─ pty/      portable-pty sessions — Channel 1               (M2 ✓)
+├─ agent/    adapters + event normalization — Channel 2      (M3 ✓)
+├─ git/      status, branch, diff                            (M5 ✓)
+├─ guard/    bwrap scope + PATH shim generation              (M4 ✓)
+├─ parse/    milestone parser                                (M5 ✓)
+├─ voice/    Voicebox client — speech, ASR                   (M6 ✓)
+└─ reap.rs   orphaned sandbox sweep + signal teardown        (M6 ✓)
 ```
 
 ## Rules that bite here
@@ -178,6 +201,23 @@ src-tauri/src/
   Never describe the shim as a guarantee.
 - **The agent does not start without bwrap.** A floor that silently is not there
   is worse than no floor, because you would act as though it were.
+- **`--die-with-parent` is not a guarantee, and neither is `ExitRequested`.**
+  The first sets `PR_SET_PDEATHSIG`, which the kernel ties to the *thread* that
+  created the process — and agents are spawned from Tauri worker threads and
+  test threads, which come and go, so the signal fires at the wrong time or
+  never. The second only runs when a window closes, never when the process is
+  signalled, so every `pkill` during development skipped teardown entirely.
+  Five sandboxes accumulated over two days that way, each holding a live Claude
+  session, reparented to `systemd --user` and answering to nobody. `reap.rs`
+  answers both: teardown on the catchable signals, and a sweep at startup that
+  depends on nothing the dying process managed to do. **The sweep is the floor**
+  — it is the only part that survives `SIGKILL` and a crash.
+- **Reaping must never touch a live sibling.** An orphan is a *marked* process
+  whose parent is no longer a `githud` — both halves, always. The mark alone
+  would match a second instance's running session, which M9's parallel sessions
+  make a real case, and killing that would be far worse than the leak. Orphans
+  reparent to `systemd --user` here rather than to pid 1, so the test is what
+  the parent *is*, never its pid.
 - **The shim goes into the agent's environment only.** The terminal is the
   user's (D7). A shared spawn helper would be the easy way to get this wrong.
 - **`parse/` implements `config/contracts/milestones.md`, not the reverse.**
@@ -210,6 +250,126 @@ src-tauri/src/
   visible error, not an empty list.
 - **Never panic on a user's file.** Any parser handed a malformed file in
   someone else's repo returns a structured error.
+- **The webview cannot reach Voicebox at all.** WebKitGTK serves the app from
+  an opaque origin and discards the response whatever CORS says — proven by
+  experiment in Professor before this repo existed. Every Voicebox call goes
+  through Rust. This is not a preference, and a future `fetch()` here will fail
+  in a way that looks like Voicebox being down.
+- **WebKitGTK ships with media capture off.** With `enable-media-stream` unset,
+  `getUserMedia` rejects with `NotAllowedError` — the same error a refusal
+  produces — without ever asking anyone, so the message blames the user for a
+  prompt that was never shown. The setting lives on the native widget and Tauri
+  does not touch it; `mic.rs` does. And a page that can ask *will* ask, so every
+  permission request is answered — an unanswered one never resolves, and the
+  caller hangs instead of failing.
+- **D15 cannot rely on the event type.** The schema separates `assistant.speak`
+  from `assistant.text` so "speak summaries, never code" is structural — but the
+  Claude adapter only ever emits `assistant.text`, because the harness has no
+  notion of a spoken line. Until a project's own ICM files instruct the agent to
+  produce speakable summaries, `voice.ts` strips code, paths, URLs and tables
+  before anything reaches a voice, and declines rather than reading punctuation
+  aloud. Deleting that stripping does not fail a build; it just makes the app
+  read diffs out loud.
+- **A data-carrying enum crossing the boundary must be tagged, and the tag must
+  be tested.** `Health` was declared with `rename_all` and no `tag`, so serde
+  wrote `{"up": {…}}` while `ui/voice.ts` discriminated on a `status` field.
+  `canSpeak` read `undefined`, concluded Voicebox was down, and **every speaker
+  button answered "voicebox unavailable" while Voicebox was working perfectly**
+  — a fault that survived two rounds of hunting for a network problem, because
+  every other path (the Settings speak test, the live Rust tests) bypasses
+  health entirely and worked. `AgentEvent` had `tag = "type"` from M3 and was
+  fine, which is exactly why the omission was invisible by comparison. Both
+  shapes are now pinned by tests that assert the JSON, not the derive.
+  **A type that compiles on both sides and disagrees on the wire is the failure
+  this codebase is least able to see.**
+- **Long speech is split, never truncated.** `trimForSpeech` cut at 600
+  characters and threw the rest away, so a long reply was read to a point and
+  simply stopped — measured on a real message at 555 of 989 speakable
+  characters, ending on the word "one" as it began a numbered list. Nothing
+  said so, and nothing could: the text was gone before it reached a voice.
+  `splitForSpeech` breaks on sentence ends, then line breaks, then words, and
+  a test asserts the chunks rejoin to the original. **A cap that discards is a
+  silent failure wearing a design rationale.** The reason a cap existed —
+  nobody sits through a monologue — is served by MUTE, AUTO off, and clicking
+  ▶ again, all of which stop between chunks.
+- **One voice, one queue, and playback resolves on `ended`.** AUTO speaks every
+  reply as it arrives, and replies arrive faster than they can be spoken — so
+  the player takes the head of a queue and only advances when the audio has
+  actually finished. `play()` resolving on *start* is what would make two
+  replies talk over each other, and the `busy` ref is what stops the effect
+  starting a second player each time the five-second health poll re-runs it.
+  **`pause()` fires no `ended` event**, so `stop()` has to settle the in-flight
+  promise itself or the queue never moves again. Ordering lives in
+  `enqueueSpoken`/`dropSpoken`, pure and tested; `dropSpoken` refuses to drop a
+  head that is not the item that finished, because a manual click replaces the
+  queue while the previous playback is still unwinding.
+- **`offer` ignores AUTO being off, on purpose.** `Chat` offers every assistant
+  entry exactly once whether or not AUTO is on, so switching AUTO on speaks what
+  comes *next* rather than reciting the whole transcript back at you.
+- **Voice status is chrome, and there is exactly one of it.** `useVoice` used to
+  be called inside `Chat`, which meant a health poll per open project tab, a
+  MUTE that only muted the tab it was pressed in, and — the reason it was
+  noticed — **no voice status at all until you opened a project**, because the
+  main tab has no chat pane. It is owned by `App` and rendered in the tab
+  strip's trailing slot, so principle 5's "always visible" includes the tab you
+  land on.
+- **There are two device lists and they are not the same list.** The webview's
+  `enumerateDevices()` is what `getUserMedia` will honour; `pactl` is what the
+  machine has. **When they disagree, the disagreement is the diagnosis** —
+  merging them into one list would hide the only thing worth seeing, and a
+  webview that enumerates nothing at all would then look like a machine with no
+  microphone.
+- **`MediaRecorder` exists in this webview and records nothing.** Proved
+  2026-07-29: the right device opened, the constructor and `start()` both
+  succeeded, `ondataavailable` never fired once, and the result was a zero-byte
+  blob with no error anywhere. Every GStreamer encoder it could want is
+  installed, so this is not a missing plugin — it is an API that is present and
+  hollow, which defeats feature detection. `capture.ts` takes the samples off
+  the Web Audio graph and writes the WAV itself. **Do not reintroduce
+  `MediaRecorder` because it is shorter.**
+- **An empty transcript is two different faults.** Voicebox answers the first
+  transcription after it starts with `{"text": ""}` and a 200, while Whisper
+  loads; the identical request a second later returned the sentence verbatim.
+  Reported as "heard nothing" that sends you to the microphone, which is the
+  wrong place. `/capture/readiness` is what tells them apart, and `transcribe`
+  asks it before concluding anything. Same shape as `model_loaded: false` for
+  speech — **Voicebox is slow to first use on both halves, and neither says so
+  in the obvious place.**
+- **Speech plays from a blob URL, held in a ref.** Two separate ways to get
+  silence with no error, both hit during M6. A `data:` URI carrying a hundred
+  kilobytes of base64 is the fragile path in this webview and fails as a
+  *source refusal*, which reads as Voicebox being at fault after Voicebox has
+  already handed over the audio. And an `Audio` object left in a local is
+  collectable the moment `play()` resolves — which is when playback *starts*,
+  not when it ends. `describeMediaError` turns the element's bare numeric code
+  into the sentence that says which of the two happened.
+- **`media-src` has to be in the CSP.** Spoken replies play from a `data:` URI,
+  and `default-src 'self'` silently blocks every one of them — the app looks
+  like Voicebox is failing when Voicebox has already done its job. `img-src`
+  and `font-src` were listed and `media-src` was not, which is exactly the kind
+  of omission a working test suite never catches.
+- **A capture that yields nothing must say so.** M6 recorded, transcribed to
+  nothing, and hit a `text && onText(text)` guard that discarded it — so a
+  microphone that never opened, one recording a monitor, and one hearing silence
+  were three different faults that all rendered as nothing happening. Every
+  capture now ends in a sentence naming the device, the bytes, and the result;
+  `captureVerdict` is where that lives and it is tested.
+- **A monitor source is not a microphone.** It records what is *playing*, which
+  is either silence or the app hearing itself. `pactl` reports the property and
+  `audio.rs` flags it, because the device name alone does not warn you.
+- **Voicebox has three health states, not two.** Answering-but-unable-to-work is
+  not the same as absent, and reporting it as *down* sends you looking in the
+  wrong place. The real instance failed exactly this way — running, and unable
+  to write its own audio directory.
+- **Voicebox's REST port is 17600.** Its own README says `17493`, which is the
+  container-internal port. Probe before believing either.
+- **A voice carries the engine it is built on, and it must be sent.** Preset
+  profiles refuse any other engine, and the server's default is not one they
+  support. Read the engine from the profile rather than defaulting.
+- **Generation is asynchronous and its status is Server-Sent Events.** Fetching
+  audio immediately gets a 404 that reads like a missing endpoint, and parsing
+  those frames as JSON yields nothing — indistinguishable from "still working",
+  so the wrong reader waits forever.
 - Rust: `snake_case` modules and commands. React: `PascalCase.tsx` components,
   `kebab-case` elsewhere.
 

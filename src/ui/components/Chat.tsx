@@ -13,11 +13,19 @@ import {
   type Isolated,
 } from "../agent";
 import type { Project } from "../types";
+import { usePushToTalk, type VoiceControls } from "../useVoice";
 
 interface Props {
   project: Project;
   /** Is this pane on screen? Focus the composer when it becomes so. */
   visible: boolean;
+  /**
+   * Owned by the app.
+   *
+   * It used to be a `useVoice()` call right here, which meant a health poll per
+   * open project tab and a MUTE that only muted the tab it was pressed in.
+   */
+  voice: VoiceControls;
 }
 
 /**
@@ -27,7 +35,7 @@ interface Props {
  * JSON (D1, D2). The status line under the composer comes from real `tool_call`
  * events, so it names the actual file rather than inventing a word.
  */
-export function Chat({ project, visible }: Props) {
+export function Chat({ project, visible, voice }: Props) {
   const [state, setState] = useState(initialChatState);
   const [draft, setDraft] = useState("");
   const [startError, setStartError] = useState<string | null>(null);
@@ -36,6 +44,10 @@ export function Chat({ project, visible }: Props) {
 
   const id = project.rel_path;
   const readOnly = project.agent === "read-only";
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const talk = usePushToTalk((text) =>
+    setDraft((d) => (d ? `${d} ${text}` : text)),
+  );
 
   useEffect(() => {
     if (readOnly) return;
@@ -70,6 +82,27 @@ export function Chat({ project, visible }: Props) {
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [state.entries.length, state.detail]);
+
+  /**
+   * Offer each new reply to the voice, once.
+   *
+   * Every assistant entry is complete when it appears — `applyEvent` appends a
+   * new one per `assistant_text` rather than growing the last, so there is no
+   * risk of speaking a half-written message.
+   *
+   * Offering happens whether or not AUTO is on, and `offer` ignores it when it
+   * is off. That is deliberate: it means switching AUTO on speaks what comes
+   * *next* rather than reciting everything already on screen.
+   */
+  const offered = useRef(new Set<string>());
+  const offer = voice.offer;
+  useEffect(() => {
+    for (const entry of state.entries) {
+      if (entry.kind !== "assistant" || offered.current.has(entry.id)) continue;
+      offered.current.add(entry.id);
+      offer(entry.id, entry.text);
+    }
+  }, [state.entries, offer]);
 
   useEffect(() => {
     if (visible && !readOnly) inputRef.current?.focus();
@@ -148,6 +181,9 @@ export function Chat({ project, visible }: Props) {
           )}
         </span>
         <span className="flex-1" />
+        {/* The voice pill is chrome now — it lives in the tab strip, where it
+            is visible on the main tab too. Duplicating it here would give two
+            MUTE buttons for one voice. */}
         {state.busy && (
           <button
             onClick={stop}
@@ -180,7 +216,16 @@ export function Chat({ project, visible }: Props) {
           </div>
         )}
         {state.entries.map((entry) => (
-          <EntryView key={entry.id + entry.kind} entry={entry} />
+          <EntryView
+            key={entry.id + entry.kind}
+            entry={entry}
+            speaking={voice.speaking === entry.id}
+            onSpeak={
+              entry.kind === "assistant"
+                ? () => setVoiceError(voice.speak(entry.id, entry.text))
+                : undefined
+            }
+          />
         ))}
         {state.ended && (
           <p className="text-center font-mono text-[10px] text-ink-faint">
@@ -194,12 +239,39 @@ export function Chat({ project, visible }: Props) {
       </div>
 
       <div className="shrink-0 border-t border-line px-4 py-3">
+        {/* `playbackError` arrives after `speak` has already returned: the
+            element gives up asynchronously, and silence with nothing said about
+            it is the failure this whole milestone kept producing. */}
+        {(voiceError || voice.playbackError || talk.error) && (
+          <p className="mb-2 text-[10px] text-warn">
+            {voiceError ?? voice.playbackError ?? talk.error}
+          </p>
+        )}
         {label && (
           <p className="mb-2 font-mono text-[10px] text-signal">
             <span className="mr-1.5 inline-block animate-pulse">●</span>
             {label}
           </p>
         )}
+        <div className="flex items-end gap-2">
+          <button
+            // Held, not toggled (D14). Deterministic start and stop removes
+            // VAD tuning, echo cancellation, and the agent hearing itself.
+            onPointerDown={() => void talk.start()}
+            onPointerUp={talk.stop}
+            onPointerLeave={() => talk.recording && talk.stop()}
+            title="Hold to talk"
+            aria-pressed={talk.recording}
+            className={[
+              "mb-0.5 shrink-0 rounded border px-2.5 py-2 font-mono text-[10px] transition-colors",
+              talk.recording
+                ? "animate-pulse border-danger/50 bg-danger/10 text-danger"
+                : "border-line text-ink-faint hover:border-signal-deep hover:text-signal",
+              "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal",
+            ].join(" ")}
+          >
+            {talk.recording ? "REC" : "HOLD"}
+          </button>
         <textarea
           ref={inputRef}
           value={draft}
@@ -218,12 +290,21 @@ export function Chat({ project, visible }: Props) {
                      text-sm text-ink placeholder:text-ink-faint
                      focus-visible:border-signal-deep focus-visible:outline-none"
         />
+        </div>
       </div>
     </div>
   );
 }
 
-function EntryView({ entry }: { entry: Entry }) {
+function EntryView({
+  entry,
+  speaking,
+  onSpeak,
+}: {
+  entry: Entry;
+  speaking?: boolean;
+  onSpeak?: () => void;
+}) {
   if (entry.kind === "user") {
     return (
       <div className="flex justify-end">
@@ -236,9 +317,30 @@ function EntryView({ entry }: { entry: Entry }) {
 
   if (entry.kind === "assistant") {
     return (
-      <p className="max-w-[92%] text-sm leading-relaxed whitespace-pre-wrap text-ink-dim">
-        {entry.text}
-      </p>
+      <div className="group flex max-w-[92%] items-start gap-2">
+        <p className="text-sm leading-relaxed whitespace-pre-wrap text-ink-dim">
+          {entry.text}
+        </p>
+        {/* Present whether or not Voicebox is up: coming back online should be
+            a click, not a reload (failure-modes.md). */}
+        {onSpeak && (
+          <button
+            onClick={onSpeak}
+            title={speaking ? "Stop speaking" : "Speak this"}
+            aria-label={speaking ? "Stop speaking" : "Speak this message"}
+            className={[
+              "mt-0.5 shrink-0 rounded px-1 text-[11px] transition",
+              speaking
+                ? "text-signal"
+                : "text-ink-faint opacity-0 group-hover:opacity-100 hover:text-signal",
+              "focus-visible:opacity-100 focus-visible:outline-2",
+              "focus-visible:outline-offset-1 focus-visible:outline-signal",
+            ].join(" ")}
+          >
+            {speaking ? "◼" : "▶"}
+          </button>
+        )}
+      </div>
     );
   }
 

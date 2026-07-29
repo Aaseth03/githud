@@ -5,13 +5,17 @@
 //! in the front end (D11).
 
 pub mod agent;
+pub mod audio;
 pub mod card;
 pub mod git;
 pub mod guard;
+pub mod mic;
 pub mod overrides;
 pub mod parse;
 pub mod pty;
+pub mod reap;
 pub mod scan;
+pub mod voice;
 
 use std::path::PathBuf;
 
@@ -229,6 +233,77 @@ fn project_diff(cwd: String) -> git::Diff {
     git::diff(std::path::Path::new(&cwd))
 }
 
+// ── Voice (M6) ───────────────────────────────────────────────────────────────
+//
+// All Voicebox traffic goes through Rust because the webview cannot reach it —
+// see `voice/mod.rs`. Local only; no cloud endpoint is reachable from here.
+
+#[tauri::command]
+async fn voice_health() -> voice::Health {
+    let health = voice::health().await;
+    if let voice::Health::Down { reason } | voice::Health::Impaired { reason } = &health {
+        log::warn!("voicebox {}: {reason}", voice::BASE);
+    }
+    health
+}
+
+/// Whether the speech model is loaded.
+///
+/// Separate from `voice_health` on purpose: Voicebox is perfectly healthy while
+/// its Whisper model is cold, and a cold model returns an empty transcript with
+/// a 200. Folding that into the health pill would call a working server broken.
+#[tauri::command]
+async fn voice_readiness() -> Result<voice::Readiness, String> {
+    voice::readiness()
+        .await
+        .inspect_err(|e| log::warn!("voice_readiness: {e}"))
+}
+
+#[tauri::command]
+async fn voice_voices() -> Result<Vec<voice::Voice>, String> {
+    voice::voices().await.inspect_err(|e| log::warn!("voice_voices: {e}"))
+}
+
+/// Every voice failure is logged verbatim as well as returned.
+///
+/// M6 produced a report of "voicebox unreachable" from the UI while the exact
+/// same call from a test returned playable audio, and nothing on disk could
+/// settle which was true. A message shown once in a corner of a chat pane is
+/// not a record; this is.
+#[tauri::command]
+async fn voice_speak(
+    text: String,
+    voice_id: String,
+    engine: Option<String>,
+) -> Result<voice::Speech, String> {
+    voice::speak(&text, &voice_id, engine.as_deref())
+        .await
+        .inspect_err(|e| log::warn!("voice_speak (voice {voice_id}, engine {engine:?}): {e}"))
+}
+
+/// What audio hardware this machine actually has.
+///
+/// Deliberately separate from the webview's own device list: that one is what
+/// `getUserMedia` honours, this one is what exists. Showing both is what makes
+/// "the microphone captured nothing" a question with an answer.
+#[tauri::command]
+fn audio_devices() -> audio::Devices {
+    audio::devices()
+}
+
+/// Push-to-talk: recorded audio in, text out.
+#[tauri::command]
+async fn voice_transcribe(audio: String, mime: String) -> Result<String, String> {
+    use base64::Engine as _;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(audio)
+        .map_err(|e| format!("bad audio encoding: {e}"))?;
+    log::info!("transcribing {} bytes of {mime}", bytes.len());
+    voice::transcribe(&bytes, &mime)
+        .await
+        .inspect_err(|e| log::warn!("voice_transcribe: {e}"))
+}
+
 /// What is actually running for a project.
 ///
 /// Principle 5: nothing is hidden. The Activity panel should be able to say
@@ -399,6 +474,20 @@ pub fn run() {
     let agents = agent::Agents::new();
     let cards = card::Cards::new();
 
+    // `ExitRequested` fires when a window closes — never when the process is
+    // signalled. Every `pkill` during development therefore skipped teardown
+    // entirely, which is how orphaned sandboxes accumulated. Catchable signals
+    // now run the same cleanup; `SIGKILL` cannot be caught by anything, and is
+    // what the startup sweep is for.
+    reap::on_signal({
+        let terminals = terminals.clone();
+        let agents = agents.clone();
+        move || {
+            terminals.kill_all();
+            agents.stop_all();
+        }
+    });
+
     tauri::Builder::default()
         .manage(terminals.clone())
         .manage(agents.clone())
@@ -410,6 +499,19 @@ pub fn run() {
                         .level(log::LevelFilter::Info)
                         .build(),
                 )?;
+            }
+            // Anything a previous run failed to take with it. The floor, not
+            // the first line: it depends on nothing the dying process managed
+            // to do, which is what makes it work after a SIGKILL or a crash.
+            let reaped = reap::sweep();
+            if reaped > 0 {
+                log::warn!("reaped {reaped} orphaned agent sandbox(es) from a previous run");
+            }
+
+            // Push-to-talk is dead without this, and fails in a way that
+            // blames the user for a prompt they were never shown.
+            if let Some(window) = tauri::Manager::get_webview_window(app, "main") {
+                mic::enable(&window);
             }
             Ok(())
         })
@@ -429,6 +531,12 @@ pub fn run() {
             project_tree,
             read_file,
             project_sessions,
+            voice_health,
+            voice_readiness,
+            voice_voices,
+            voice_speak,
+            voice_transcribe,
+            audio_devices,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

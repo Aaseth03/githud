@@ -40,6 +40,13 @@ pub enum Access {
     ReadOnly,
 }
 
+/// The environment variable that marks a sandbox as this app's.
+///
+/// It appears in the sandbox's own `/proc/<pid>/cmdline`, because it is passed
+/// as a `bwrap` argument — which is exactly what makes an orphan identifiable
+/// from outside without keeping a pid file that a crash would leave stale.
+pub const MARK: &str = "GITHUD_AGENT";
+
 /// Build the `bwrap` argv that wraps a command.
 ///
 /// Pure, so the scope in D19 can be asserted rather than trusted. The returned
@@ -92,6 +99,12 @@ pub fn sandbox(project: &Path, home: &Path, access: Access) -> Vec<String> {
         Access::ReadWrite => a.extend(["--bind".into(), s(project), s(project)]),
         Access::ReadOnly => a.extend(["--ro-bind".into(), s(project), s(project)]),
     }
+
+    // A mark, so an agent sandbox left behind by a dead app can be found and
+    // reaped. `--die-with-parent` below is not sufficient on its own — see
+    // `crate::reap` for why — and an unkillable-because-unidentifiable process
+    // is how five of these accumulated over two days.
+    push(&mut a, &["--setenv", MARK, "1"]);
 
     // No sandbox outlives the app, and no keystroke injection into the tty.
     push(&mut a, &["--die-with-parent", "--new-session"]);

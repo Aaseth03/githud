@@ -9,6 +9,7 @@ import { Panel } from "./Panel";
 import { FileViewer } from "./FileViewer";
 import { ProjectCard } from "./ProjectCard";
 import type { Card } from "../card";
+import type { VoiceControls } from "../useVoice";
 import { Splitter } from "./Splitter";
 import {
   DEFAULT_LEFT,
@@ -31,10 +32,13 @@ import {
 export function ProjectView({
   project,
   visible,
+  voice,
 }: {
   project: Project;
   /** Is this tab the one on screen? A hidden tab must not fit its terminal. */
   visible: boolean;
+  /** Owned by the app, not by the tab — one poll, one MUTE, one voice. */
+  voice: VoiceControls;
 }) {
   const [panes, setPanes] = useState(() => initialPaneState("chat"));
   const [card, setCard] = useState<Card | null>(null);
@@ -170,7 +174,11 @@ export function ProjectView({
         <div
           className={`absolute inset-0 ${panes.active === "chat" ? "" : "hidden"}`}
         >
-          <Chat project={project} visible={visible && panes.active === "chat"} />
+          <Chat
+            project={project}
+            visible={visible && panes.active === "chat"}
+            voice={voice}
+          />
         </div>
 
         {isMounted(panes, "file") && (

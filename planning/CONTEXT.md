@@ -10,6 +10,7 @@ lives in `../src/`.
 planning/
 ├─ CONTEXT.md
 ├─ milestones.md
+├─ handoff.md                          where things stand, for a cold start
 ├─ specs/                              (empty — .gitkeep)
 ├─ architecture/
 │  ├─ event-schema.md
@@ -23,7 +24,9 @@ planning/
 │  ├─ 2026-07-28-m1-shell-scan-tabs.plan.md
 │  ├─ 2026-07-28-m2-embedded-terminal.plan.md
 │  ├─ 2026-07-28-m3-agent-channel.plan.md
-│  └─ 2026-07-29-m5-panels-and-cards.plan.md
+│  ├─ 2026-07-29-m5-panels-and-cards.plan.md
+│  ├─ 2026-07-29-m6-voice.plan.md
+│  └─ 2026-07-29-m6-settings-and-audio-devices.plan.md
 └─ decisions/
    ├─ 2026-07-28-D01-dual-channel.md
    ├─ 2026-07-28-D02-adapters-target-harnesses.md
@@ -43,7 +46,8 @@ planning/
    ├─ 2026-07-28-D16-bwrap-into-v1.md
    ├─ 2026-07-28-D17-vendor-icm.md
    ├─ 2026-07-28-D18-project-kinds.md
-   └─ 2026-07-28-D19-sandbox-scope.md
+   ├─ 2026-07-28-D19-sandbox-scope.md
+   └─ 2026-07-29-D20-speech-is-a-script.md
 ```
 
 `specs/` is real but currently empty — kept with a `.gitkeep` so the map matches
@@ -54,19 +58,21 @@ disk.
 | Path | Contains | When to use |
 |---|---|---|
 | `milestones.md` | The roadmap, and the only place status lives | Deciding or queuing what to build next |
+| `handoff.md` | Where things stand right now, and what needs a human | **Starting a session cold** — read this first |
 | `architecture/` | Stable contracts | Before writing code that touches events, adapters, storage, or guardrails |
 | `decisions/` | Committed decisions (`YYYY-MM-DD-Dnn-title.md`) | Understanding *why*, or recording a new one |
 | `plans/` | Implementation plans (`YYYY-MM-DD-title.plan.md`) | Planning a feature before coding — start from `plans/_TEMPLATE.plan.md` |
 | `specs/` | Feature specs (`feature-name_spec.md`) | Spec'ing a feature in detail |
 
-## Decisions D1–D19
+## Decisions D1–D20
 
 D1–D15 were committed 2026-07-28 out of the design interview; D16–D18 followed
 the same day — D16 when a D7 assumption was tested and failed, D17 when M1 turned
 out to depend on a definition that had no home in the repo, and D18 when M1's
-first run flagged a third-party repo that was never going to carry ICM. **Do not
-re-litigate them.** Supersede one with a new dated record that names what it
-replaces.
+first run flagged a third-party repo that was never going to carry ICM. D20 came
+out of M6 closing, when hearing the app speak made it obvious that *what* to say
+and *how* to say it are different problems. **Do not re-litigate them.**
+Supersede one with a new dated record that names what it replaces.
 
 The pattern is worth noticing: every decision after D15 came from *running the
 thing*, not from planning it.
@@ -92,6 +98,7 @@ thing*, not from planning it.
 | D17 | [ICM travels in the repo](decisions/2026-07-28-D17-vendor-icm.md) — the detection contract and the vendored procedure both live in `config/` |
 | D18 | [Projects have a kind](decisions/2026-07-28-D18-project-kinds.md) — ICM expectation follows from it; detection stays universal |
 | D19 | [The sandbox scope](decisions/2026-07-28-D19-sandbox-scope.md) — what the floor covers, and the D-Bus hole left open on purpose |
+| D20 | [Speech shaping is a script](decisions/2026-07-29-D20-speech-is-a-script.md), not a judgement — deterministic, with the lexicon as data the user owns |
 
 ## Architecture
 
@@ -111,7 +118,9 @@ thing*, not from planning it.
 | 2026-07-28 | [M1 — shell, scan, tabs](plans/2026-07-28-m1-shell-scan-tabs.plan.md) | **Implemented** — validation green |
 | 2026-07-28 | [M2 — embedded terminal](plans/2026-07-28-m2-embedded-terminal.plan.md) | **Done** — validated by hand |
 | 2026-07-28 | [M3 — agent channel](plans/2026-07-28-m3-agent-channel.plan.md) | **Done** — confirmed by hand |
-| 2026-07-29 | [M5 — panels and project cards](plans/2026-07-29-m5-panels-and-cards.plan.md) | **Implemented** — GIT HUD reads its own roadmap |
+| 2026-07-29 | [M5 — panels and project cards](plans/2026-07-29-m5-panels-and-cards.plan.md) | **Done** — confirmed by hand |
+| 2026-07-29 | [M6 — voice](plans/2026-07-29-m6-voice.plan.md) | **Done** — validated by hand |
+| 2026-07-29 | [Settings — audio devices and voice diagnostics](plans/2026-07-29-m6-settings-and-audio-devices.plan.md) | **Done** — it found six bugs, then validated the fixes |
 
 ## Plan contract
 

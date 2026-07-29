@@ -1,13 +1,28 @@
-import { MAIN_TAB_KEY, tabKey, type Tab } from "../types";
+import { MAIN_TAB_KEY, tabKey, tabTitle, type Tab } from "../types";
 
 interface Props {
   tabs: Tab[];
   activeKey: string;
   onSelect: (key: string) => void;
   onClose: (key: string) => void;
+  /**
+   * Pinned to the right of the strip, on every tab.
+   *
+   * Voice status lives here rather than inside the chat pane, because the chat
+   * pane only exists once a project is open — which left the main tab with no
+   * way to tell whether Voicebox was running at all. Principle 5: adapter
+   * status is always visible, and "always" has to include the tab you land on.
+   */
+  trailing?: React.ReactNode;
 }
 
-export function TabStrip({ tabs, activeKey, onSelect, onClose }: Props) {
+export function TabStrip({
+  tabs,
+  activeKey,
+  onSelect,
+  onClose,
+  trailing,
+}: Props) {
   return (
     <div
       role="tablist"
@@ -18,6 +33,7 @@ export function TabStrip({ tabs, activeKey, onSelect, onClose }: Props) {
         const key = tabKey(tab);
         const isActive = key === activeKey;
         const isMain = tab.kind === "main";
+        const title = tabTitle(tab);
         return (
           // The wrapper carries no padding and no visual styling of its own.
           // Everything that *looks* like the tab lives on the button, so the
@@ -28,7 +44,7 @@ export function TabStrip({ tabs, activeKey, onSelect, onClose }: Props) {
               role="tab"
               aria-selected={isActive}
               onClick={() => onSelect(key)}
-              title={tab.kind === "project" ? tab.project.path : "Main"}
+              title={tab.kind === "project" ? tab.project.path : title}
               className={[
                 "relative flex min-h-10 items-center rounded-t border-x border-t",
                 "px-4 py-2.5 text-sm transition-colors",
@@ -52,9 +68,9 @@ export function TabStrip({ tabs, activeKey, onSelect, onClose }: Props) {
 
               <span className="max-w-52 truncate">
                 {isMain ? (
-                  <span className="font-mono tracking-[0.16em]">HUD</span>
+                  <span className="font-mono tracking-[0.16em]">{title}</span>
                 ) : (
-                  tab.project.name
+                  title
                 )}
               </span>
             </button>
@@ -66,8 +82,8 @@ export function TabStrip({ tabs, activeKey, onSelect, onClose }: Props) {
               // propagation.
               <button
                 onClick={() => onClose(key)}
-                aria-label={`Close ${tab.project.name}`}
-                title={`Close ${tab.project.name}`}
+                aria-label={`Close ${title}`}
+                title={`Close ${title}`}
                 className="absolute top-1/2 right-1.5 flex size-6 -translate-y-1/2
                            items-center justify-center rounded text-ink-faint
                            opacity-0 transition group-hover:opacity-100
@@ -86,6 +102,12 @@ export function TabStrip({ tabs, activeKey, onSelect, onClose }: Props) {
         <p className="ml-3 self-center font-mono text-[10px] text-ink-faint">
           select a project to open a tab
         </p>
+      )}
+
+      {trailing && (
+        <div className="ml-auto flex shrink-0 items-center self-center pr-1 pb-1 pl-4">
+          {trailing}
+        </div>
       )}
     </div>
   );

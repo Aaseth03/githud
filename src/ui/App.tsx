@@ -4,6 +4,9 @@ import { Sidebar } from "./components/Sidebar";
 import { TabStrip } from "./components/TabStrip";
 import { MainView } from "./components/MainView";
 import { ProjectView } from "./components/ProjectView";
+import { Settings } from "./components/Settings";
+import { VoicePill } from "./components/VoicePill";
+import { useVoice } from "./useVoice";
 import { useProjects } from "./hooks/useProjects";
 import {
   closeTab,
@@ -11,9 +14,10 @@ import {
   isTabVisible,
   openProject,
   openProjectKeys,
+  openSettings,
   selectTab,
 } from "./tabs";
-import { MAIN_TAB_KEY, type Project } from "./types";
+import { MAIN_TAB_KEY, SETTINGS_TAB_KEY, type Project } from "./types";
 
 export default function App() {
   const { projects, uninitiated, root, loading, error, overridesError, rescan } =
@@ -23,12 +27,29 @@ export default function App() {
   // wires them to events.
   const [tabState, setTabState] = useState(initialTabState);
 
+  /**
+   * One voice for the whole app.
+   *
+   * It used to live inside `Chat`, which meant a health poll per open project
+   * and a MUTE that only muted the tab you pressed it in — and, worse, no voice
+   * status anywhere until you opened a project. Hoisting it makes the pill
+   * chrome, and makes MUTE mean what it says.
+   */
+  const voice = useVoice();
+
   const handleOpen = useCallback((project: Project) => {
     setTabState((s) => openProject(s, project));
   }, []);
 
+  const handleOpenSettings = useCallback(() => {
+    setTabState(openSettings);
+  }, []);
+
   const handleClose = useCallback((key: string) => {
     setTabState((s) => closeTab(s, key));
+    // Settings owns no process. Asking Rust to release one would be harmless
+    // and misleading — the key is not a project id.
+    if (key === SETTINGS_TAB_KEY) return;
     // Closing the tab kills its shell. Without this every closed tab leaks a
     // login shell — invisible until there are forty of them. Closing a tab
     // whose terminal was never opened is a no-op on the Rust side.
@@ -59,6 +80,7 @@ export default function App() {
         activeKey={tabState.activeKey}
         onOpen={handleOpen}
         onRescan={() => void rescan()}
+        onSettings={handleOpenSettings}
       />
 
       <main className="flex min-w-0 flex-1 flex-col">
@@ -67,6 +89,19 @@ export default function App() {
           activeKey={tabState.activeKey}
           onSelect={handleSelect}
           onClose={handleClose}
+          trailing={
+            <VoicePill
+              health={voice.health}
+              voices={voice.voices}
+              voice={voice.voice}
+              muted={voice.muted}
+              auto={voice.auto}
+              pending={voice.pending}
+              onVoice={voice.setVoice}
+              onToggleMute={voice.toggleMute}
+              onToggleAuto={voice.toggleAuto}
+            />
+          }
         />
         {/* Every open tab stays mounted; only one is visible.
             Rendering only the active tab unmounts the others, and an unmounted
@@ -84,6 +119,16 @@ export default function App() {
             <MainView projects={projects} onOpen={handleOpen} />
           </div>
 
+          {tabState.tabs.some((t) => t.kind === "settings") && (
+            <div
+              className={`absolute inset-0 ${
+                isTabVisible(tabState, SETTINGS_TAB_KEY) ? "" : "hidden"
+              }`}
+            >
+              <Settings />
+            </div>
+          )}
+
           {tabState.tabs.map((tab) =>
             tab.kind === "project" ? (
               <div
@@ -95,6 +140,7 @@ export default function App() {
                 <ProjectView
                   project={tab.project}
                   visible={isTabVisible(tabState, tab.key)}
+                  voice={voice}
                 />
               </div>
             ) : null,
