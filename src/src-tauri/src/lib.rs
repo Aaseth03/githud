@@ -8,6 +8,7 @@ pub mod agent;
 pub mod card;
 pub mod git;
 pub mod guard;
+pub mod mic;
 pub mod overrides;
 pub mod parse;
 pub mod pty;
@@ -445,6 +446,11 @@ pub fn run() {
                         .level(log::LevelFilter::Info)
                         .build(),
                 )?;
+            }
+            // Push-to-talk is dead without this, and fails in a way that
+            // blames the user for a prompt they were never shown.
+            if let Some(window) = tauri::Manager::get_webview_window(app, "main") {
+                mic::enable(&window);
             }
             Ok(())
         })
