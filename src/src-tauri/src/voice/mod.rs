@@ -348,8 +348,7 @@ pub fn generation_status(body: &str) -> Option<(&'static str, Option<String>)> {
         .lines()
         .filter_map(|l| l.strip_prefix("data:").or(Some(l)))
         .map(str::trim)
-        .filter(|l| l.starts_with('{'))
-        .next_back()?;
+        .rfind(|l| l.starts_with('{'))?;
 
     let v: serde_json::Value = serde_json::from_str(payload).ok()?;
     let status = v.get("status").and_then(serde_json::Value::as_str)?;
