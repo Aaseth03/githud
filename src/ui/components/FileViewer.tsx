@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { FileContents } from "../card";
+import { highlight } from "../highlight";
 
 /**
  * A file, read-only.
@@ -81,15 +82,46 @@ export function FileViewer({ cwd, path }: { cwd: string; path: string | null }) 
                 <div key={i}>{i + 1}</div>
               ))}
             </span>
-            <code className="block px-3 py-2 text-ink-dim">
-              {file.text.split("\n").map((line, i) => (
-                <div key={i}>{line || " "}</div>
-              ))}
-            </code>
+            <Code text={file.text} path={file.path} />
           </pre>
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * The file's text, highlighted where the language is known.
+ *
+ * Highlighting is done once per file rather than per line: a grammar needs the
+ * whole document for multi-line constructs, and highlighting line-by-line
+ * breaks every block comment and string. The result is split afterwards so the
+ * line-number column stays aligned.
+ */
+function Code({ text, path }: { text: string; path: string }) {
+  const html = useMemo(() => highlight(text, path), [text, path]);
+
+  if (html === null) {
+    return (
+      <code className="block px-3 py-2 text-ink-dim">
+        {text.split("\n").map((line, i) => (
+          <div key={i}>{line || " "}</div>
+        ))}
+      </code>
+    );
+  }
+
+  return (
+    <code className="hljs block px-3 py-2 text-ink-dim">
+      {html.split("\n").map((line, i) => (
+        <div
+          key={i}
+          // Safe: highlight.js escapes the source before adding its own spans,
+          // and there is a test asserting markup in a file cannot survive.
+          dangerouslySetInnerHTML={{ __html: line || "&nbsp;" }}
+        />
+      ))}
+    </code>
   );
 }
 

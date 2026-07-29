@@ -180,6 +180,9 @@ Tauri, last commit, and 5/9 milestones, with no agent session anywhere.
 - [x] **Clicking a file opens it** in a third centre pane, read-only. Bounded
       and honest: a truncated file says so, a binary one is named rather than
       rendered as noise, and the viewer refuses to read outside the project
+- [x] Syntax highlighting, themed from the app's own tokens rather than a stock
+      palette, with no auto-detection — an unknown type renders plain rather
+      than being coloured confidently and wrongly
 - [x] Columns resize by dragging the separators, with a floor under each and a
       usable centre kept
 - [x] Diff panel over the working tree — **split per file**, collapsible, with

@@ -93,3 +93,63 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Syntax highlighting.
+   Written against the app's own tokens rather than importing a highlight.js
+   theme — a stock theme would drag in its own palette and the viewer would
+   stop looking like the rest of the instrument. */
+.hljs-comment,
+.hljs-quote {
+  color: var(--color-ink-faint);
+  font-style: italic;
+}
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-literal,
+.hljs-doctag,
+.hljs-name {
+  color: var(--color-signal);
+}
+.hljs-string,
+.hljs-regexp,
+.hljs-addition,
+.hljs-attribute,
+.hljs-meta .hljs-string {
+  color: var(--color-go);
+}
+.hljs-number,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-link,
+.hljs-variable,
+.hljs-template-variable {
+  color: var(--color-warn);
+}
+.hljs-title,
+.hljs-section,
+.hljs-function .hljs-title,
+.hljs-class .hljs-title {
+  color: var(--color-ink);
+}
+.hljs-type,
+.hljs-built_in,
+.hljs-builtin-name,
+.hljs-params {
+  color: var(--color-ink-dim);
+}
+.hljs-attr,
+.hljs-property,
+.hljs-selector-attr,
+.hljs-selector-class,
+.hljs-selector-id {
+  color: var(--color-signal-deep);
+}
+.hljs-deletion {
+  color: var(--color-danger);
+}
+.hljs-emphasis {
+  font-style: italic;
+}
+.hljs-strong {
+  font-weight: 600;
+}
