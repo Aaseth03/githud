@@ -28,7 +28,8 @@ pub const HOUSE: &str = "hud";
 /// `name` is the file stem rather than a declared field: one source of truth
 /// for the id a project references, and no way for a file to disagree with
 /// itself about what it is called.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Profile {
     pub name: String,
     /// What a human reads. Falls back to the file stem.
@@ -132,7 +133,8 @@ struct Declared {
 ///
 /// Errors surface; they are never swallowed. A profile that vanishes silently
 /// because of a typo would look exactly like a profile nobody wrote.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ProfileError {
     pub name: String,
     pub error: String,
@@ -142,7 +144,8 @@ pub struct ProfileError {
 ///
 /// Both halves, always. One malformed profile must not take the others down —
 /// the same shape the scan uses for a malformed overrides file.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Characters {
     pub profiles: Vec<Profile>,
     pub errors: Vec<ProfileError>,
@@ -622,6 +625,46 @@ mod tests {
         let err = load_frames(&dir, "../../../etc").unwrap_err();
         assert!(err.contains("dir"), "{err}");
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn the_committed_wire_fixture_is_exactly_what_this_module_serializes() {
+        // **This is the M6 `Health` bug's only real defence.** That fault was
+        // not a Rust bug or a TypeScript bug: both sides were internally
+        // consistent and disagreed on the wire, so every test on both sides
+        // passed while `canSpeak` read `undefined` for a month.
+        //
+        // `ui/fixtures/characters.json` is read by `ui/types.test.ts` as the
+        // shape the UI must handle. This test proves the same file is exactly
+        // what Rust emits: deserialize it, serialize it back, and require the
+        // JSON to be identical. Rename a field, drop a tag, or change a
+        // variant name on either side and one of the two tests fails.
+        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../src/ui/fixtures/characters.json");
+        let text = std::fs::read_to_string(&path)
+            .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+
+        let declared: serde_json::Value = serde_json::from_str(&text).unwrap();
+        let parsed: Characters = serde_json::from_str(&text).unwrap_or_else(|e| {
+            panic!("the UI's fixture does not deserialize into Characters: {e}")
+        });
+        let round_tripped = serde_json::to_value(&parsed).unwrap();
+
+        assert_eq!(
+            round_tripped, declared,
+            "the fixture the UI reads is not what Rust writes — update \
+             ui/fixtures/characters.json and ui/types.ts together"
+        );
+
+        // And the parts the UI actually branches on, stated rather than implied.
+        assert_eq!(parsed.profiles.len(), 2);
+        assert_eq!(declared["profiles"][0]["sprite"]["kind"], "procedural");
+        assert_eq!(declared["profiles"][1]["sprite"]["kind"], "frames");
+        assert!(
+            declared["profiles"][0].get("procedural").is_none(),
+            "an externally tagged encoding would nest the variant here — the \
+             exact shape `Health` shipped with through all of M6"
+        );
     }
 
     #[test]

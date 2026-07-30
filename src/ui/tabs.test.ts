@@ -21,6 +21,7 @@ function project(name: string, rel = name): Project {
     kind: "own",
     agent: "read-write",
     note: null,
+    character: null,
   };
 }
 

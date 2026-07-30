@@ -26,7 +26,67 @@ export interface Project {
   agent: AgentAccess;
   /** Why an override exists, so the reason travels with it. */
   note: string | null;
+  /**
+   * The character assigned to this project (D9), by profile name.
+   *
+   * `null` is unassigned and resolves to the house character. A name that no
+   * profile answers to is a *different* state — see `resolveCharacter`.
+   */
+  character: string | null;
 }
+
+/** Mirrors `character::Palette`. Absent means "not themed on that axis". */
+export interface Palette {
+  accent: string | null;
+  glow: string | null;
+  field: string | null;
+}
+
+/** Mirrors `character::Eyes` and `character::Mouth`. */
+export type Eyes = "round" | "wide" | "narrow" | "visor";
+export type MouthShape = "round" | "wide" | "line";
+
+/**
+ * Mirrors `character::Sprite`.
+ *
+ * **Tagged, and the tag is tested against real JSON.** `Health` was declared
+ * without one through all of M6 and every speaker button answered "voicebox
+ * unavailable" while Voicebox worked perfectly — a fault neither side could
+ * see, because both were internally consistent and disagreed only on the wire.
+ */
+export type Sprite =
+  | { kind: "procedural"; eyes: Eyes; mouth: MouthShape }
+  | { kind: "frames"; dir: string };
+
+/** Mirrors `character::Profile`. The name is the filename, never declared. */
+export interface Profile {
+  name: string;
+  display: string;
+  /** The Voicebox voice this character speaks with, if it has an opinion. */
+  voice: string | null;
+  palette: Palette;
+  sprite: Sprite;
+}
+
+/** Mirrors `character::ProfileError`. */
+export interface ProfileError {
+  name: string;
+  error: string;
+}
+
+/**
+ * Mirrors `character::Characters`.
+ *
+ * Both halves always cross together: a profile lost to a typo would otherwise
+ * look exactly like a profile nobody wrote.
+ */
+export interface Characters {
+  profiles: Profile[];
+  errors: ProfileError[];
+}
+
+/** The profile an unassigned project resolves to. Mirrors `character::HOUSE`. */
+export const HOUSE_CHARACTER = "hud";
 
 /**
  * Should a missing ICM layer be surfaced as a badge?

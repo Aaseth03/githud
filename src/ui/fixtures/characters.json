@@ -1,0 +1,39 @@
+{
+  "profiles": [
+    {
+      "name": "hud",
+      "display": "HUD",
+      "voice": null,
+      "palette": {
+        "accent": "#6ee7ff",
+        "glow": "#1e6f85",
+        "field": "#0a0d17"
+      },
+      "sprite": {
+        "kind": "procedural",
+        "eyes": "visor",
+        "mouth": "line"
+      }
+    },
+    {
+      "name": "mia",
+      "display": "MIA",
+      "voice": "a823c0d8-da12-4044-af22-ee903adc2e05",
+      "palette": {
+        "accent": "#a78bfa",
+        "glow": null,
+        "field": null
+      },
+      "sprite": {
+        "kind": "frames",
+        "dir": "mia"
+      }
+    }
+  ],
+  "errors": [
+    {
+      "name": "broken",
+      "error": "palette.accent: `blue` is not a hex colour like #6ee7ff"
+    }
+  ]
+}

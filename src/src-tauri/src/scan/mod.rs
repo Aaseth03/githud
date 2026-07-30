@@ -77,6 +77,13 @@ pub struct Project {
     pub agent: AgentAccess,
     /// Why an override exists, so the reason travels with it.
     pub note: Option<String>,
+    /// The character assigned to this project (D9), by profile name.
+    ///
+    /// `None` means unassigned, which resolves to the house character — a
+    /// distinct state from "assigned to a profile that is missing", because one
+    /// is the normal case and the other is a typo worth surfacing. Resolution
+    /// happens in `ui/character.ts`; the scan only reports what was declared.
+    pub character: Option<String>,
 }
 
 impl Project {
@@ -145,6 +152,7 @@ pub fn scan_with(
         project.agent = agent;
         if let Some(entry) = overrides.get(&project.rel_path) {
             project.note = entry.note.clone();
+            project.character = entry.character.clone();
             if let Some(name) = &entry.name {
                 project.name = name.clone();
             }
@@ -255,6 +263,7 @@ fn describe(root: &Path, path: &Path, depth: usize) -> Project {
         kind: ProjectKind::default(),
         agent: AgentAccess::default(),
         note: None,
+        character: None,
     }
 }
 
@@ -635,6 +644,32 @@ mod tests {
 
         assert_eq!(p.name, "Voicebox");
         assert_eq!(p.note.as_deref(), Some("MIT, third-party."));
+    }
+
+    #[test]
+    fn a_character_assignment_travels_with_the_project() {
+        // The scan reports what was declared and takes no view on whether the
+        // profile exists — resolution is `ui/character.ts`'s job. Reporting a
+        // missing profile as unassigned here would collapse "no character" and
+        // "a character that is not on this machine" into one state, and only
+        // one of those is a typo.
+        let fx = Fixture::new("kind-character");
+        fx.repo("vault");
+        fx.repo("plain");
+        let ov = Overrides::parse(
+            r#"
+            [projects.vault]
+            character = "mia"
+            "#,
+        )
+        .unwrap();
+
+        let result = scan_with(&fx.root, DEFAULT_MAX_DEPTH, &ov, None);
+        let plain = result.projects.iter().find(|p| p.rel_path == "plain").unwrap();
+        let vault = result.projects.iter().find(|p| p.rel_path == "vault").unwrap();
+
+        assert_eq!(vault.character.as_deref(), Some("mia"));
+        assert_eq!(plain.character, None, "unassigned is a state, not a default");
     }
 
     #[test]

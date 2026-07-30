@@ -41,8 +41,11 @@ src/
 │  ├─ capture.test.ts
 │  ├─ sprite.ts            what the mouth does, from the audio itself, pure
 │  ├─ sprite.test.ts
+│  ├─ character.ts         project → profile → accent → voice (D9), pure
+│  ├─ character.test.ts
 │  ├─ fixtures/
-│  │  └─ voicebox-speech.wav  2.5s of real Voicebox output — silence, speech, a pause, speech
+│  │  ├─ voicebox-speech.wav  2.5s of real Voicebox output — silence, speech, a pause, speech
+│  │  └─ characters.json      the character wire shape, asserted from both sides
 │  ├─ useVoice.ts          speech in and out; owned by App, one per app
 │  ├─ hooks/
 │  │  └─ useProjects.ts    calls the scan command; parses nothing
@@ -124,6 +127,7 @@ src/
 | `ui/capture.ts` | Recording, and the WAV that leaves the webview | Anything about how audio is captured |
 | `ui/voice.ts` | What is worth speaking (D15), health labels | Changing spoken output |
 | `ui/sprite.ts` | The amplitude envelope and what the mouth does with it | Anything about how a character moves |
+| `ui/character.ts` | Resolving a project to a profile, its accent and its voice | Anything about which character a project gets |
 | `ui/agent.ts` | Event types + transcript reducer | Changing how a conversation is assembled |
 | `ui/panes.ts` | Chat \| Terminal sub-tab rules | Changing when a pane mounts or shows |
 | `src-tauri/src/lib.rs` | Tauri commands | Adding a command the UI can call |
@@ -379,6 +383,21 @@ src-tauri/src/
   audio immediately gets a 404 that reads like a missing endpoint, and parsing
   those frames as JSON yields nothing — indistinguishable from "still working",
   so the wrong reader waits forever.
+- **`ui/fixtures/characters.json` is asserted from both sides, and that is the
+  point.** Rust deserializes it, re-serializes it, and requires the JSON to be
+  identical; TypeScript reads the same file as its own `Characters` type. Either
+  side renaming a field or dropping a tag fails one of the two. **A type that
+  compiles on both sides and disagrees on the wire is the failure this codebase
+  is least able to see** — one shared artefact both sides must satisfy is the
+  only defence that does not depend on someone remembering.
+- **A missing character and a misspelled one are different states.** Both draw
+  the house character, and only one of them is something to fix, so
+  `resolveCharacter` returns which happened. Collapsing them would make a typo
+  in `projects.toml` indistinguishable from an unassigned project.
+- **A character accents the instrument; it cannot repaint it.** `accentOf`
+  returns exactly three custom properties and structurally cannot express
+  `--color-surface` or `--color-ink`. That is what stops a profile theming the
+  app into unreadability, and it is a type rather than a convention.
 - **Voicebox generates at 24 kHz; `capture.ts` writes 16 kHz.** They are both
   16-bit mono PCM and it is tempting to treat one as the other. A hardcoded rate
   would put the mouth progressively further behind the voice with every second
