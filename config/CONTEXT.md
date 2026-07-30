@@ -16,6 +16,14 @@ config/
 ├─ projects.toml               declared overrides only
 ├─ characters/                 character profiles (D9) — resolved centrally, never per-repo
 │  ├─ hud.toml                 the house character; what an unassigned project resolves to
+│  ├─ hud/                     HUD's layered parts (D21)
+│  │  ├─ SOURCE.md             model, seed, prompt, cut lines — so it is regenerable
+│  │  ├─ reference.png         the chosen candidate, front-facing and neutral
+│  │  ├─ reference.json        seams and feature positions, measured once
+│  │  ├─ shadow.png            the ground ellipse; stays put while the body breathes
+│  │  ├─ body.png              torso and limbs, with stock above the neck seam
+│  │  ├─ head.png              dome and visor, eyes removed so they can be vectors
+│  │  └─ antenna.png           stalk and ball, with stock below its seam
 │  └─ mia.toml                 the vault's character (D5)
 ├─ contracts/
 │  ├─ milestones.md            the cross-project milestone file format
@@ -54,6 +62,16 @@ than the method; the skill is how a workspace gets *built*. Do not merge them.
   `accent`, `glow` and `field`. Surfaces, lines and ink stay the cockpit tokens
   in `../src/ui/styles/index.css`, because a readability guarantee that a TOML
   file can revoke is not a guarantee.
+- **A part carries what is hidden behind it.** Every layered part reaches past its
+  seam — the `stock` in `../ops/scripts/character-decompose.py` — because a part
+  cut to its visible silhouette tears open the instant it rotates. This is also
+  Live2D's requirement, which is why satisfying it now keeps that upgrade free
+  (D21). The head's stock is deliberately shallow: the body already carries stock
+  upward behind it, so a head lean exposes body, which is correct, while deep head
+  stock *covers* the body and buried HUD's collar.
+- **A character's eyes and mouth are not in its artwork.** They are drawn as
+  vectors over the visor so a blink and a spoken syllable are continuous rather
+  than a swap between frames — stepped motion is what reads as mechanical (D21).
 - **`characters/hud.toml` is not optional.** It is what an unassigned project and
   the main tab resolve to, and there is no built-in face in the binary. If it is
   missing the app says so rather than inventing a character — a character

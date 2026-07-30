@@ -50,7 +50,8 @@ planning/
    ├─ 2026-07-28-D18-project-kinds.md
    ├─ 2026-07-28-D19-sandbox-scope.md
    ├─ 2026-07-29-D20-speech-is-a-script.md
-   └─ 2026-07-30-D21-character-is-layered-parts.md
+   ├─ 2026-07-30-D21-character-is-layered-parts.md
+   └─ 2026-07-30-D22-python-in-tooling.md
 ```
 
 `specs/` holds the detail a decision record deliberately does not carry.
@@ -69,7 +70,7 @@ later does not mean re-doing the comparison.
 | `plans/` | Implementation plans (`YYYY-MM-DD-title.plan.md`) | Planning a feature before coding — start from `plans/_TEMPLATE.plan.md` |
 | `specs/` | Feature specs (`feature-name_spec.md`) | Spec'ing a feature in detail, or recording an option deferred rather than dropped |
 
-## Decisions D1–D21
+## Decisions D1–D22
 
 D1–D15 were committed 2026-07-28 out of the design interview; D16–D18 followed
 the same day — D16 when a D7 assumption was tested and failed, D17 when M1 turned
@@ -81,16 +82,22 @@ rendering, which is the only way anyone could have known it read as a
 placeholder. **Do not re-litigate them.** Supersede one with a new dated record
 that names what it replaces.
 
+D22 amends D4 rather than superseding it: Python was blanket-banned, M7.5 needs
+it because ComfyUI is Python, and D4's own escape hatch — *reopen the record
+rather than sneak in as a script* — is the route that was taken.
+
 The pattern is worth noticing: every decision after D15 came from *running the
 thing*, not from planning it. D21 is the clearest case — the procedural face was
-not a wrong turn, it was the experiment that produced the decision.
+not a wrong turn, it was the experiment that produced the decision. D22 is the
+second pattern worth naming: **a record that tells you how to overturn it does
+its job on the day it is overturned.**
 
 | # | Decision |
 |---|---|
 | D1 | [Dual channel](decisions/2026-07-28-D01-dual-channel.md) — raw PTY terminal + normalized agent event stream |
 | D2 | [Adapters target harnesses](decisions/2026-07-28-D02-adapters-target-harnesses.md), not models |
 | D3 | [Stack](decisions/2026-07-28-D03-stack.md) — Tauri + Rust; React + Vite + TS + Tailwind; xterm.js |
-| D4 | [No Python, no UV](decisions/2026-07-28-D04-no-python.md) |
+| D4 | [No Python, no UV](decisions/2026-07-28-D04-no-python.md) — **amended by D22**; the app constraint stands, the blanket does not |
 | D5 | [Main tab routes](decisions/2026-07-28-D05-main-tab-routes.md); it does not write code |
 | D6 | [Agent branch isolation](decisions/2026-07-28-D06-agent-branch-isolation.md) — commits freely on its own branch, never shared history |
 | D7 | [Three guardrail layers](decisions/2026-07-28-D07-three-guardrail-layers.md) — shim → bwrap → remote protection. **Amended by D16; Layer 3 does not exist** |
@@ -108,6 +115,7 @@ not a wrong turn, it was the experiment that produced the decision.
 | D19 | [The sandbox scope](decisions/2026-07-28-D19-sandbox-scope.md) — what the floor covers, and the D-Bus hole left open on purpose |
 | D20 | [Speech shaping is a script](decisions/2026-07-29-D20-speech-is-a-script.md), not a judgement — deterministic, with the lexicon as data the user owns |
 | D21 | [The character is layered parts driven by a script](decisions/2026-07-30-D21-character-is-layered-parts.md), authored to Live2D's spec so the ceiling stays reachable |
+| D22 | [Python is allowed in tooling](decisions/2026-07-30-D22-python-in-tooling.md), and stays out of the app — amends D4 |
 
 ## Architecture
 
