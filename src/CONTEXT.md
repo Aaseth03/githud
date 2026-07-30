@@ -48,7 +48,8 @@ src/
 │  │  └─ characters.json      the character wire shape, asserted from both sides
 │  ├─ useVoice.ts          speech in and out; owned by App, one per app
 │  ├─ hooks/
-│  │  └─ useProjects.ts    calls the scan command; parses nothing
+│  │  ├─ useProjects.ts    calls the scan command; parses nothing
+│  │  └─ useCharacters.ts  loads every profile once, for the whole app
 │  ├─ components/
 │  │  ├─ Sidebar.tsx
 │  │  ├─ TabStrip.tsx
@@ -61,6 +62,7 @@ src/
 │  │  ├─ FileTree.tsx      lazy tree, one directory at a time
 │  │  ├─ Splitter.tsx      draggable column separator
 │  │  ├─ FileViewer.tsx    read-only file pane, bounded
+│  │  ├─ CharacterStage.tsx  the character — procedural face or frame set, and the rAF loop
 │  │  ├─ VoicePill.tsx     Voicebox status, voice choice, MUTE — in the tab strip
 │  │  ├─ Settings.tsx      audio devices, mic test, voice test, webview facts
 │  │  └─ Terminal.tsx      xterm.js — the only file that touches it
@@ -390,6 +392,14 @@ src-tauri/src/
   compiles on both sides and disagrees on the wire is the failure this codebase
   is least able to see** — one shared artefact both sides must satisfy is the
   only defence that does not depend on someone remembering.
+- **The character's animation loop never goes through React.** `App` owns the
+  voice and every open tab stays mounted, so a level in state would re-render
+  every terminal wrapper and every transcript sixty times a second while the app
+  talks. `useVoice` exposes the in-flight speech as a **ref**, and
+  `CharacterStage` runs its own `requestAnimationFrame` writing one CSS custom
+  property. The loop starts only while something is sounding: no sound, no cost.
+  Frame sets are all mounted and toggled by opacity for the same reason —
+  swapping a `src` would decode an image inside the loop.
 - **A missing character and a misspelled one are different states.** Both draw
   the house character, and only one of them is something to fix, so
   `resolveCharacter` returns which happened. Collapsing them would make a typo

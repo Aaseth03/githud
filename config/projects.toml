@@ -43,3 +43,7 @@ note  = "MIT, third-party. Used and updated, not authored. A real fix belongs in
 [projects.AI-Dashboard]
 kind = "deprecated"
 note = "Superseded by GIT HUD. Kept for reference; not developed."
+
+[projects."Obsidian/HOME_AI_VAULT"]
+character = "mia"
+note = "The vault. MIA is its character (D5)."

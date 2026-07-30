@@ -85,6 +85,93 @@ body {
   background-clip: content-box;
 }
 
+/* The character (M7).
+
+   Everything that moves is a `transform` or an `opacity`, so the whole figure
+   stays on the compositor — and the only thing driving it is `--mouth`, which
+   the stage's animation frame writes directly onto the element. Nothing here
+   re-renders React, and nothing here animates a layout property.
+
+   A profile may set `--accent`, `--accent-glow` and `--accent-field`, and
+   nothing else. Surfaces, lines and ink stay the tokens above, which is what
+   stops a character theming the app into unreadability. */
+.character-stage {
+  --mouth: 0;
+}
+
+.character-field {
+  background-image:
+    radial-gradient(
+      ellipse 70% 60% at 50% 42%,
+      color-mix(in oklab, var(--accent-field, #0a0d17) 92%, transparent),
+      transparent 72%
+    ),
+    radial-gradient(
+      ellipse 50% 40% at 50% 100%,
+      color-mix(in oklab, var(--accent-glow, #1e6f85) 22%, transparent),
+      transparent 70%
+    );
+}
+
+/* The halo brightens with the voice rather than pulsing on a timer. */
+.character-glow {
+  background: radial-gradient(
+    circle at 50% 50%,
+    color-mix(in oklab, var(--accent, #6ee7ff) 34%, transparent),
+    transparent 62%
+  );
+  opacity: calc(0.18 + var(--mouth) * 0.5);
+  transform: scale(calc(0.94 + var(--mouth) * 0.12));
+  will-change: opacity, transform;
+}
+
+/* Idle drift: the character is alive between replies, not a static asset. */
+.character-figure {
+  animation: character-breathe 5.5s ease-in-out infinite;
+}
+
+@keyframes character-breathe {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-2.5%) scale(1.012);
+  }
+}
+
+.character-svg {
+  overflow: visible;
+}
+
+/* The mouth. `transform-box: fill-box` makes the origin the shape's own centre
+   rather than the SVG's, so it opens downward and upward evenly instead of
+   sliding off its face. */
+.character-mouth {
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: scaleY(calc(0.14 + var(--mouth) * 1.5));
+  will-change: transform;
+}
+
+.character-eyes {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: character-blink 6.4s ease-in-out infinite;
+}
+
+/* A blink is two frames of a long cycle: mostly open, briefly not. */
+@keyframes character-blink {
+  0%,
+  92%,
+  100% {
+    transform: scaleY(1);
+  }
+  95% {
+    transform: scaleY(0.08);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

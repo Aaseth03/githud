@@ -8,6 +8,8 @@ import { Settings } from "./components/Settings";
 import { VoicePill } from "./components/VoicePill";
 import { useVoice } from "./useVoice";
 import { useProjects } from "./hooks/useProjects";
+import { useCharacters } from "./hooks/useCharacters";
+import { accentOf, characterFor, resolveCharacter } from "./character";
 import {
   closeTab,
   initialTabState,
@@ -36,6 +38,13 @@ export default function App() {
    * chrome, and makes MUTE mean what it says.
    */
   const voice = useVoice();
+
+  /**
+   * Profiles are central (D9), so they are loaded once here and resolved per
+   * tab — never fetched inside a tab, which would be the same answer N times.
+   */
+  const { characters, error: charactersError } = useCharacters();
+  const house = resolveCharacter(characters, null);
 
   const handleOpen = useCallback((project: Project) => {
     setTabState((s) => openProject(s, project));
@@ -89,6 +98,13 @@ export default function App() {
           activeKey={tabState.activeKey}
           onSelect={handleSelect}
           onClose={handleClose}
+          accents={Object.fromEntries(
+            tabState.tabs.flatMap((t) =>
+              t.kind === "project"
+                ? [[t.key, accentOf(characterFor(characters, t.project).profile)["--accent"]]]
+                : [],
+            ),
+          )}
           trailing={
             <VoicePill
               health={voice.health}
@@ -116,7 +132,17 @@ export default function App() {
               isTabVisible(tabState, MAIN_TAB_KEY) ? "" : "hidden"
             }`}
           >
-            <MainView projects={projects} onOpen={handleOpen} />
+            <MainView
+              projects={projects}
+              onOpen={handleOpen}
+              character={{
+                ...house,
+                // A failed load and an empty directory are different faults;
+                // the command's error outranks "hud.toml is missing".
+                problem: charactersError ?? house.problem,
+              }}
+              voice={voice}
+            />
           </div>
 
           {tabState.tabs.some((t) => t.kind === "settings") && (
@@ -141,6 +167,7 @@ export default function App() {
                   project={tab.project}
                   visible={isTabVisible(tabState, tab.key)}
                   voice={voice}
+                  character={characterFor(characters, tab.project)}
                 />
               </div>
             ) : null,
