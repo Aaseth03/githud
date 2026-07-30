@@ -14,7 +14,7 @@ edits would silently fork the method and break the update path below.
 
 ## Why it is here rather than installed
 
-M8's new-project flow is *interview → icm-architect → `git init` → private
+M12's new-project flow is *interview → icm-architect → `git init` → private
 remote*. Installed in one harness's skills directory, that step exists on one
 machine, for one agent, and silently evaporates everywhere else — which would
 make the flow non-reproducible exactly when a new machine or a second adapter
@@ -42,7 +42,7 @@ path rewriting is needed.
 
 Where a harness *does* have a native skill mechanism, pointing it at this
 directory is fine — but the vendored copy stays the source of truth, and the
-installed copy is never the thing M8 depends on.
+installed copy is never the thing M12 depends on.
 
 ## Contents
 

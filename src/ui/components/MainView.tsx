@@ -1,20 +1,36 @@
 import { shouldFlagIcm, type Project } from "../types";
+import { CharacterStage } from "./CharacterStage";
+import type { Resolved } from "../character";
+import type { VoiceControls } from "../useVoice";
+import { useCharacterState } from "../hooks/useCharacterState";
 
 /**
  * The main tab: the routing point.
  *
  * D5 — it routes, it does not write code. There is deliberately no input here
- * and there never will be one that acts on a repo. The character and chat land
- * in this column at M6/M7; until then the space stays honestly empty rather
- * than filled with a mock.
+ * and there never will be one that acts on a repo.
+ *
+ * The character is centred on the galaxy field
+ * (`planning/architecture/ui-layout.md`). This tab belongs to no project, so it
+ * shows the house character — which is a profile like any other, not a special
+ * case in the code.
  */
 export function MainView({
   projects,
   onOpen,
+  character,
+  voice,
 }: {
   projects: Project[];
   onOpen: (p: Project) => void;
+  /** The house character — what an unassigned project resolves to. */
+  character: Resolved;
+  voice: VoiceControls;
 }) {
+  // The main tab owns no agent, so the house character has nothing to attend to
+  // — it breathes, blinks, and speaks. Passing null rather than inventing a
+  // project id keeps it from reacting to somebody else's work.
+  const state = useCharacterState(null, voice.speaking !== null);
   // Counts consider your own projects only. Including third-party or
   // superseded repos would restore exactly the noise D18 removes.
   const own = projects.filter((p) => p.kind === "own");
@@ -33,7 +49,17 @@ export function MainView({
           Every repo, enterable. Pick one from the left.
         </p>
 
-        <div className="mt-12 grid grid-cols-4 gap-px overflow-hidden rounded-lg border border-line bg-line">
+        <div className="mt-8 flex justify-center">
+          <CharacterStage
+            profile={character.profile}
+            live={voice.live}
+            speaking={voice.speaking !== null}
+            state={state}
+            problem={character.problem}
+          />
+        </div>
+
+        <div className="mt-10 grid grid-cols-4 gap-px overflow-hidden rounded-lg border border-line bg-line">
           <Stat label="Repos" value={String(projects.length)} />
           <Stat
             label="ICM ready"

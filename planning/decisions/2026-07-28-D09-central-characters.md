@@ -1,6 +1,8 @@
 # D9 — Character profiles are central, not per-repo
 
-**Date:** 2026-07-28 · **Status:** Committed, revisitable
+**Date:** 2026-07-28 · **Status:** Committed, revisitable. **Location amended by
+[D23](2026-07-30-D23-characters-are-a-workspace.md)** — profiles moved to
+`characters/profiles/`; *central, never per-repo* is unchanged and load-bearing.
 
 ## Context
 Each project gets its own character, voice, and theme so the room you are in is

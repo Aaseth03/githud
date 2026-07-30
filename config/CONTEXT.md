@@ -14,7 +14,6 @@ honours.
 config/
 ├─ CONTEXT.md
 ├─ projects.toml               declared overrides only
-├─ characters/                 (empty — .gitkeep; profiles arrive at M7)
 ├─ contracts/
 │  ├─ milestones.md            the cross-project milestone file format
 │  └─ icm.md                   what counts as an ICM workspace, and how it is detected
@@ -27,10 +26,10 @@ config/
 | Path | Contains | When to use |
 |---|---|---|
 | `projects.toml` | Per-project overrides — **`kind`**, agent access, note, display name, adapter, model, character | Declaring something the scan cannot derive: chiefly whether a repo is yours (D18) |
-| `characters/` | `<name>.toml` — sprite set, voice id, theme | Adding or editing a character (M7) |
+| — | Characters moved to `../characters/` (D23). The *assignment* stays here, because it is a fact about a project | Assigning a character: `character = "<name>"` |
 | `contracts/milestones.md` | The milestone format the Rust parser reads out of *any* repo | Changing the format, or writing the parser |
 | `contracts/icm.md` | The L0/L1 detection contract `scan::detect_icm` implements | Changing what GIT HUD badges as non-conformant |
-| `skills/icm-architect/` | How to *build* a conformant workspace — vendored, harness-neutral | The M8 new-project flow; restructuring a repo |
+| `skills/icm-architect/` | How to *build* a conformant workspace — vendored, harness-neutral | The M12 new-project flow; restructuring a repo |
 
 **`contracts/icm.md` and `skills/icm-architect/` answer different questions.**
 The contract is what GIT HUD *recognises* and is deliberately more permissive
@@ -50,3 +49,7 @@ than the method; the skill is how a workspace gets *built*. Do not merge them.
   both.
 - **Nothing derived goes here.** No registry, no transcripts, no adapter
   availability. Those are machine-local by definition.
+- **Characters are not here** (D23). `../characters/` is a workspace because it
+  holds work — a pipeline, a parts contract, provenance — and this directory holds
+  none. What stays is the *assignment*: `character = "<name>"` is a fact about a
+  project, like `kind`.

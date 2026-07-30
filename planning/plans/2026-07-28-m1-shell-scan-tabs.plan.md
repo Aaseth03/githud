@@ -43,7 +43,7 @@
   HOME_AI_VAULT` is depth 2 and must be found. The vault is the specific case
   that makes a naive depth-1 scan wrong.
 - **A `.git` file counts, not just a directory** — that is what a git *worktree*
-  looks like, and M8 adds worktrees. Cheap now, avoids a confusing bug later.
+  looks like, and M12 adds worktrees. Cheap now, avoids a confusing bug later.
 - **Registry writing is deferred to M5.** M1 scans on demand. D11 caching needs
   the project card, which does not exist until M5; adding a cache now would be
   speculative.

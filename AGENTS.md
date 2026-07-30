@@ -63,7 +63,7 @@ Never read the whole repo.
 4. Dates are ISO `YYYY-MM-DD`, everywhere, in filenames and in prose.
 5. Derived state is never committed. See
    `planning/decisions/2026-07-28-D08-split-store.md`.
-6. Decisions D1–D15 in `planning/decisions/` are committed. Do not re-litigate
+6. Decisions in `planning/decisions/` are committed. Do not re-litigate
    them; supersede one with a new dated record that says what it replaces.
 
 ## Naming conventions
@@ -109,6 +109,7 @@ into other files.
 | `planning/architecture/guardrails.md` | The allow/deny list and its three layers |
 | `config/contracts/milestones.md` | The cross-project milestone file format |
 | `planning/decisions/*.md` | Committed decisions |
+| `characters/parts_spec.md` | What a layered character's part set must contain |
 
 ## Where to go next
 

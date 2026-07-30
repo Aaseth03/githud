@@ -6,6 +6,14 @@ interface Props {
   onSelect: (key: string) => void;
   onClose: (key: string) => void;
   /**
+   * The accent colour of each tab's character, keyed by tab key.
+   *
+   * The room is legible from the strip before you enter it — which is most of
+   * what "visibly distinct rooms" means when only one tab is on screen at a
+   * time. A tab with no entry simply uses the app's own signal colour.
+   */
+  accents?: Record<string, string>;
+  /**
    * Pinned to the right of the strip, on every tab.
    *
    * Voice status lives here rather than inside the chat pane, because the chat
@@ -21,6 +29,7 @@ export function TabStrip({
   activeKey,
   onSelect,
   onClose,
+  accents,
   trailing,
 }: Props) {
   return (
@@ -34,6 +43,9 @@ export function TabStrip({
         const isActive = key === activeKey;
         const isMain = tab.kind === "main";
         const title = tabTitle(tab);
+        // Falls back to the instrument's own signal colour, so a tab whose
+        // character has not resolved looks unthemed rather than uncoloured.
+        const accent = accents?.[key] ?? "var(--color-signal)";
         return (
           // The wrapper carries no padding and no visual styling of its own.
           // Everything that *looks* like the tab lives on the button, so the
@@ -58,15 +70,28 @@ export function TabStrip({
               ].join(" ")}
             >
               {/* The active tab is lit along its top edge — the strip reads at
-                  a glance without relying on fill alone. */}
+                  a glance without relying on fill alone. Lit in the character's
+                  colour, so the room is legible before you enter it. */}
               {isActive && (
                 <span
                   aria-hidden
-                  className="absolute inset-x-0 top-0 h-px bg-signal shadow-[0_0_10px_var(--color-signal)]"
+                  className="absolute inset-x-0 top-0 h-px"
+                  style={{ background: accent, boxShadow: `0 0 10px ${accent}` }}
                 />
               )}
 
-              <span className="max-w-52 truncate">
+              <span className="flex max-w-52 items-center gap-2 truncate">
+                {/* A dot on every tab, not only the active one: the point is to
+                    tell rooms apart without visiting them. */}
+                {!isMain && (
+                  <span
+                    aria-hidden
+                    className={`size-1.5 shrink-0 rounded-full transition-opacity ${
+                      isActive ? "opacity-100" : "opacity-60"
+                    }`}
+                    style={{ background: accent }}
+                  />
+                )}
                 {isMain ? (
                   <span className="font-mono tracking-[0.16em]">{title}</span>
                 ) : (

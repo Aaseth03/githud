@@ -14,7 +14,6 @@ export function VoicePill({
   muted,
   auto,
   pending,
-  onVoice,
   onToggleMute,
   onToggleAuto,
 }: {
@@ -26,11 +25,11 @@ export function VoicePill({
   auto: boolean;
   /** Replies still waiting their turn. */
   pending: number;
-  onVoice: (id: string) => void;
   onToggleMute: () => void;
   onToggleAuto: () => void;
 }) {
   const tone = healthTone(health);
+  const current = voices.find((v) => v.id === voice)?.name ?? null;
   const dot =
     tone === "go" ? "bg-go" : tone === "warn" ? "bg-warn" : "bg-line-bright";
 
@@ -44,21 +43,18 @@ export function VoicePill({
         <span className="font-mono text-[10px] text-ink-faint">voice</span>
       </span>
 
-      {voices.length > 0 && (
-        <select
-          value={voice ?? ""}
-          onChange={(e) => onVoice(e.target.value)}
-          className="rounded border border-line bg-surface px-1.5 py-0.5 font-mono
-                     text-[10px] text-ink-dim focus-visible:border-signal-deep
-                     focus-visible:outline-none"
-          title="Voice"
+      {/* **No voice chooser here.** Voices became per-character at M7, so a
+          global picker in the tab strip chose something almost nothing used — the
+          fallback for characters with no voice of their own. That belongs in
+          Settings beside the characters it falls back for. The pill keeps status,
+          AUTO, MUTE and the backlog, which are chrome; a selector is not. */}
+      {current && (
+        <span
+          className="font-mono text-[10px] text-ink-faint"
+          title="The voice a character with no voice of its own falls back to — set it in Settings"
         >
-          {voices.map((v) => (
-            <option key={v.id} value={v.id}>
-              {v.name}
-            </option>
-          ))}
-        </select>
+          {current}
+        </span>
       )}
 
       <button

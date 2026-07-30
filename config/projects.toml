@@ -17,7 +17,7 @@
 #   name       display name, when the folder name is not what you want to read
 #   adapter    preferred harness — the machine still decides what actually runs
 #   model      preferred model for that adapter
-#   character  a profile name from config/characters/ (M7)
+#   character  a profile name from ../characters/profiles/ (D9, D23)
 #   hidden     true to keep a scanned repo out of the sidebar
 #
 # The table key is the repo path relative to ~/github. Quote it if it nests:
@@ -43,3 +43,11 @@ note  = "MIT, third-party. Used and updated, not authored. A real fix belongs in
 [projects.AI-Dashboard]
 kind = "deprecated"
 note = "Superseded by GIT HUD. Kept for reference; not developed."
+
+[projects.githud]
+character = "hud"
+note = "GIT HUD's own persona. Every other project resolves to `default` until it picks one."
+
+[projects."Obsidian/HOME_AI_VAULT"]
+character = "mia"
+note = "The vault. MIA is its character (D5)."

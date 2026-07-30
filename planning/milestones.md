@@ -291,16 +291,163 @@ during the outage was spoken once it came back.
       when health goes down and that would silently lose replies
 
 ### M7 — Character
+**Status:** done
+**Validation:** two projects, two characters, two voices, visibly distinct rooms —
+assignable and audible from Settings without editing a file. **Confirmed by hand
+2026-07-30.**
+
+*The original line also required "reads as alive rather than as a placeholder".
+That is deliberately **not** claimed here: running it is what established the
+machinery was never the missing part, and the aesthetic judgement moved to
+[M9](#m9--avatar) with the user's decision. Leaving the clause in and ticking it
+would be marking a milestone done against a validation nobody passed.*
+
+Rescoped 2026-07-30 by [D21](decisions/2026-07-30-D21-character-is-layered-parts.md),
+after the first procedural face ran and answered the question it was built to
+ask: it works, and it reads as a placeholder. **Stepped motion is what makes
+something look mechanical**, so the liveliness budget goes into continuous
+transforms and into reacting to real events — not into a third-party runtime.
+
+- [x] Character profiles as committed TOML, resolved centrally (D9)
+- [x] Amplitude envelope read from the audio itself — pure, tested against real
+      Voicebox output, and it closes the mouth during a pause mid-reply
+- [x] The wire shape pinned from both sides against one shared fixture
+- [x] Per-project character assignment, read path
+- [x] Themes — accent on the stage, the header rule and every tab pill; a
+      character accents the instrument and structurally cannot repaint it
+- [x] A procedural face as the floor, so no character is ever missing
+- [x] **Layered parts** (D21) — one PNG per part, animated by script:
+      breathing, head bob and lean, blink by layer swap, mouth from the
+      envelope, and spring-driven lag so hair follows the head rather than
+      moving with it
+- [x] **Art authored to Live2D's PSD spec** — every part drawn complete
+      including the occluded regions, so `sprite.kind = "live2d"` stays
+      available later without redrawing anything
+- [x] **Temperament as committed data** — idle energy, bob, blink rate, spring
+      stiffness, lean. A calm character and a jittery one are the same code and
+      different numbers the user edits
+- [x] **Five states off the existing event stream**: idle, listening, thinking,
+      speaking, alarmed. No new events and no model in the loop — `activity.ts`
+      already reduces everything this needs
+- [x] A WebGL probe in Settings, so whether this webview could ever run Live2D
+      or Rive is a fact rather than an assumption
+- [x] One character made by hand, end to end — it exists to prove the parts
+      spec before M10 automates it. **It also proved the spec was wrong twice**:
+      stock is asymmetric (the part behind a seam carries it, the part in front
+      barely does), and a binary cut keeps the backdrop in every edge pixel
+- [x] Character/voice config screen that picks from Voicebox's profiles API —
+      voice *creation* stays in Voicebox, and it was not rebuilt. A voice is
+      written into the **character's** profile, because one character assigned to
+      two projects must sound the same in both
+- [x] Assignment written back into `config/projects.toml` with its comment block
+      intact — `toml_edit`, one added line, temporary file and rename so a crash
+      cannot leave the file that governs agent write access half-written
+- [x] **The default is the default.** GIT HUD's own persona was standing in as
+      the fallback, so every unconfigured project wore it. A project that has not
+      chosen a character has not chosen one; `default` is procedural and `hud` is
+      assigned to the `githud` project like any other
+- [x] Seen running, by hand, and the aesthetic verdict taken: the machinery works
+      and the character still reads as an artifact. **That verdict is what M8 and
+      M9 exist for** — it is a finding, not a failure of this milestone
+
+### M8 — App direction
 **Status:** not-started
-**Validation:** two projects, two characters, two voices, visibly distinct rooms.
+**Validation:** a screenshot a stranger would call *designed* rather than
+*default* — and the user's own words for it are "a place I want to be", judged by
+eye, in the app, on his machine.
 
-- [ ] Amplitude-driven sprite frames
-- [ ] Per-project character assignment
-- [ ] Themes
-- [ ] Character/voice config screen that picks from Voicebox's profiles API —
-      voice *creation* stays in Voicebox, do not rebuild it
+The app is currently cyan-on-near-black, which is the single most generic
+technical register there is: spaceship bridge. The user's ask is **homey and
+technical** — a place suited for development that he wants to be in.
 
-### M8 — Speech shaping
+Its own milestone, and **before the avatar**, because a character's room has to
+sit inside the app's world. Designing the room first means designing it twice.
+
+The reference the user gave is worth internalising: [Refero](https://styles.refero.design)
+catalogues styles as *"editorial tech journal on warm"*, *"soft daylight
+notebook"*, *"serif analytics on warm paper"* — every one of those names **a
+material and a light**. GIT HUD has neither. That is the gap, not the palette.
+
+- [ ] A named direction, chosen by the user rather than assumed — one sentence
+      that a stranger could hold in mind while judging every screen
+- [ ] Material and light: where illumination comes from, what surfaces are made
+      of. Currently nothing answers either
+- [ ] A palette with warmth in it, and semantic rather than decorative colour
+- [ ] A real type pairing, chosen deliberately — one voice for prose, one for
+      machine values, and a reason for both
+- [ ] Texture: grain, paper, or none, decided rather than defaulted to flat
+- [ ] Motion language — what eases, how fast, and what it means. Referenced
+      against [motionsites.ai](https://motionsites.ai)
+- [ ] Contrast and legibility re-proven after the repaint. **The cockpit tokens
+      are load-bearing** — a character accents them and cannot repaint them
+      (D21), so warming the app is a change to the tokens themselves and every
+      accent has to still read against the new surfaces
+- [ ] Applied across every surface: sidebar, tab strip, chat, terminal chrome,
+      panel, cards, Settings. A half-repainted app looks worse than an unpainted
+      one
+
+### M9 — Avatar
+**Status:** not-started
+**Validation:** the user looks at it and says it feels like *someone*. No test
+can stand in for that, and nothing here should pretend otherwise.
+
+M7 built the machinery: layered parts, springs, a blink, five states, an
+amplitude-driven mouth. Running it answered the question it was built to ask —
+**the machinery is not what was missing.** HUD reads as an artifact because the
+artwork is a reference sheet: symmetrical, dead-front-facing, T-pose, evenly lit,
+floating centred in an empty box. That is how you photograph a specimen.
+
+Four things, all script, **no AI in the render path** (D20's constraint applied to
+motion, and the reason a character costs nothing to run).
+
+- [ ] **Gaze.** The largest "someone is there" cue and the cheapest — the eyes are
+      already vectors. Pupils track the cursor; look at you while push-to-talk is
+      held; glance toward the panel when a tool runs; drift, unfocused, while
+      thinking. Blended between sources, never snapped
+- [ ] **Re-pose, three-quarter and bust-framed.** Turned slightly, weight off
+      centre, head tilted, framed chest-up and large rather than full-body small.
+      The single change that most removes the reference-sheet look. Needs new art
+      and a re-cut, and the art is still authored to Live2D's PSD rules (D21)
+- [ ] **A room, strictly behind the character.** Per-character, so HUD's room and
+      MIA's are different places. Depth from **parallax against head motion**,
+      not from clutter. The user's constraint, and it is a good one: *clean, not
+      taking attention, and nothing in front of the character obstructing the
+      view.* No desk, no foreground props — every layer sits behind
+- [ ] **Richer idle.** Weight shifts, an occasional glance around, double-blinks,
+      and **anticipation** — a lean that starts before speech rather than with it.
+      Anticipation is what makes motion read as intent instead of reaction
+- [ ] Pure and tested in the same shape as `motion.ts`, which already proves this
+      is provable: springs, schedules and state are functions of a clock
+- [ ] The `procedural` floor still works, unchanged. A fresh clone with no art
+      renders something (D21)
+
+### M10 — Character creation pipeline
+**Status:** not-started
+**Validation:** one prompt produces a complete, valid character folder that the
+app renders without a code change — and the same seed produces it again.
+
+Split out of M7 deliberately. Automating a parts spec that nothing has rendered
+yet would be automating a guess, so M7 makes one character by hand first and
+this milestone automates what that proved.
+
+Local only, against the ComfyUI install already on this machine. **Nothing paid
+and nothing at runtime** — the app ships PNGs and a script, so no API bill and
+no model in the render path. D20's constraint on speech, applied to art.
+
+- [ ] `character-preview` — a prompt yields candidate portraits, front-facing
+      and neutral. Nothing downstream runs until a reference actually feels
+      right, because every part inherits from it
+- [ ] `character-parts` — the chosen reference drives the full layer set, with
+      occluded regions filled per D21, background removed, fixed canvas and
+      anchors so every part registers
+- [ ] `character-assemble` — writes `config/characters/<name>/` and a
+      `profile.toml` scaffold, then **validates against the parts spec**, so a
+      half-finished set fails loudly instead of rendering as a character with
+      no mouth
+- [ ] Seeds committed with the character, so the same input reproduces it
+- [ ] Scripted, not prompted (D13) — it drives ComfyUI's HTTP API headlessly
+
+### M11 — Speech shaping
 **Status:** not-started
 **Validation:** a spoken paragraph containing `JSON`, `HTTP`, a numbered list, a
 file path and an acronym the lexicon does not know reads aloud the way a person
@@ -346,7 +493,7 @@ like one rather than like a screen reader.
       point is that it can be proved without listening to it
 - [ ] Integrated with M7's character, so delivery and identity are one thing
 
-### M9 — Parallel and portable
+### M12 — Parallel and portable
 **Status:** not-started
 **Validation:** two concurrent sessions on one repo; a second adapter runs a real
 task; a new project is born end to end.

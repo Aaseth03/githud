@@ -16,7 +16,8 @@ githud/
 ├─ src/                   The Tauri application (Rust core + React UI)
 ├─ docs/                  Guides for humans — build, run, package
 ├─ ops/                   Scripts and operational procedure
-└─ config/                Committed app data — contracts, overrides, characters
+├─ characters/            Character profiles, their parts, and the pipeline that makes them
+└─ config/                Committed app data — contracts and project overrides
 ```
 
 ## Routing
@@ -33,7 +34,8 @@ githud/
 | Build, run, or package the app | `docs/` | `guides/build-and-run.md` |
 | Write documentation for a human | `docs/` | `CONTEXT.md` |
 | Create a repo, run a maintenance script, touch the shim | `ops/` | `CONTEXT.md` |
-| Change the milestone format, a character, or a project override | `config/` | `CONTEXT.md` |
+| Add or change a character, or make one | `characters/` | `CONTEXT.md` |
+| Change the milestone format or a project override | `config/` | `CONTEXT.md` |
 
 ## The one thing to get right before writing code
 

@@ -39,9 +39,20 @@ src/
 │  ├─ audio.test.ts
 │  ├─ capture.ts           recording without MediaRecorder — Web Audio → WAV
 │  ├─ capture.test.ts
+│  ├─ sprite.ts            what the mouth does, from the audio itself, pure
+│  ├─ sprite.test.ts
+│  ├─ character.ts         project → profile → accent → voice (D9), pure
+│  ├─ character.test.ts
+│  ├─ motion.ts            springs, blink, breathing, the five states — pure
+│  ├─ motion.test.ts
+│  ├─ fixtures/
+│  │  ├─ voicebox-speech.wav  2.5s of real Voicebox output — silence, speech, a pause, speech
+│  │  └─ characters.json      the character wire shape, asserted from both sides
 │  ├─ useVoice.ts          speech in and out; owned by App, one per app
 │  ├─ hooks/
-│  │  └─ useProjects.ts    calls the scan command; parses nothing
+│  │  ├─ useProjects.ts    calls the scan command; parses nothing
+│  │  ├─ useCharacters.ts  loads every profile once, for the whole app
+│  │  └─ useCharacterState.ts  a posture, reduced from the agent stream
 │  ├─ components/
 │  │  ├─ Sidebar.tsx
 │  │  ├─ TabStrip.tsx
@@ -54,6 +65,8 @@ src/
 │  │  ├─ FileTree.tsx      lazy tree, one directory at a time
 │  │  ├─ Splitter.tsx      draggable column separator
 │  │  ├─ FileViewer.tsx    read-only file pane, bounded
+│  │  ├─ CharacterStage.tsx  the character — layered parts, procedural face or frames, and the rAF loop
+│  │  ├─ CharacterSection.tsx  Settings: assign a character, give it a voice, WebGL facts
 │  │  ├─ VoicePill.tsx     Voicebox status, voice choice, MUTE — in the tab strip
 │  │  ├─ Settings.tsx      audio devices, mic test, voice test, webview facts
 │  │  └─ Terminal.tsx      xterm.js — the only file that touches it
@@ -76,6 +89,8 @@ src/
    │  │  ├─ event.rs       the normalized vocabulary the UI subscribes to
    │  │  └─ claude.rs      Claude Code adapter + line mapping + tests
    │  ├─ card.rs           the cached project card (D11)
+   │  ├─ character/
+   │  │  └─ mod.rs         character profiles (D9) — parse, load, frame sets
    │  ├─ audio.rs          what the machine's audio devices actually are
    │  ├─ mic.rs            webview media permission policy (Linux)
    │  ├─ reap.rs           orphaned sandboxes, and teardown on a signal
@@ -109,6 +124,7 @@ src/
 | `src-tauri/src/parse/` | The milestone contract | Never without changing `config/contracts/milestones.md` first |
 | `src-tauri/src/git/` | Status, diff, stack, tree | Anything the card or panels read |
 | `src-tauri/src/card.rs` | Assembling and caching the card | Changing what a project shows cold |
+| `src-tauri/src/character/` | Profile parsing, loading, frame sets (D9) | Changing what a character may declare |
 | `src-tauri/src/voice/` | Voicebox: health, voices, speech, transcription | Anything the app asks of Voicebox |
 | `src-tauri/src/mic.rs` | What the webview may access | Changing device permissions |
 | `src-tauri/src/reap.rs` | Reaping sandboxes a dead app left behind | Anything about process lifetime across a crash |
@@ -116,6 +132,10 @@ src/
 | `ui/audio.ts` | The chosen input, and what a capture meant | Changing capture selection or reporting |
 | `ui/capture.ts` | Recording, and the WAV that leaves the webview | Anything about how audio is captured |
 | `ui/voice.ts` | What is worth speaking (D15), health labels | Changing spoken output |
+| `ui/sprite.ts` | The amplitude envelope and what the mouth does with it | Anything about how a character moves |
+| `ui/character.ts` | Resolving a project to a profile, its accent and its voice | Anything about which character a project gets |
+| `ui/motion.ts` | Springs, blink scheduling, breathing, the five state poses | Anything about how a character *moves* |
+| `src-tauri/src/overrides/` | Reading **and writing** `projects.toml` | Changing what can be declared, or how it is saved |
 | `ui/agent.ts` | Event types + transcript reducer | Changing how a conversation is assembled |
 | `ui/panes.ts` | Chat \| Terminal sub-tab rules | Changing when a pane mounts or shows |
 | `src-tauri/src/lib.rs` | Tauri commands | Adding a command the UI can call |
@@ -138,7 +158,8 @@ src-tauri/src/
 ├─ guard/    bwrap scope + PATH shim generation              (M4 ✓)
 ├─ parse/    milestone parser                                (M5 ✓)
 ├─ voice/    Voicebox client — speech, ASR                   (M6 ✓)
-└─ reap.rs   orphaned sandbox sweep + signal teardown        (M6 ✓)
+├─ reap.rs   orphaned sandbox sweep + signal teardown        (M6 ✓)
+└─ character/ profiles, palettes, frame sets                 (M7)
 ```
 
 ## Rules that bite here
@@ -214,7 +235,7 @@ src-tauri/src/
   — it is the only part that survives `SIGKILL` and a crash.
 - **Reaping must never touch a live sibling.** An orphan is a *marked* process
   whose parent is no longer a `githud` — both halves, always. The mark alone
-  would match a second instance's running session, which M9's parallel sessions
+  would match a second instance's running session, which M12's parallel sessions
   make a real case, and killing that would be far worse than the leak. Orphans
   reparent to `systemd --user` here rather than to pid 1, so the test is what
   the parent *is*, never its pid.
@@ -370,6 +391,119 @@ src-tauri/src/
   audio immediately gets a 404 that reads like a missing endpoint, and parsing
   those frames as JSON yields nothing — indistinguishable from "still working",
   so the wrong reader waits forever.
+- **`ui/fixtures/characters.json` is asserted from both sides, and that is the
+  point.** Rust deserializes it, re-serializes it, and requires the JSON to be
+  identical; TypeScript reads the same file as its own `Characters` type. Either
+  side renaming a field or dropping a tag fails one of the two. **A type that
+  compiles on both sides and disagrees on the wire is the failure this codebase
+  is least able to see** — one shared artefact both sides must satisfy is the
+  only defence that does not depend on someone remembering.
+- **A native `<option>` popup inherits the page's `color` but not its background.**
+  With near-white ink on a light GTK popup that is white on white, and it was
+  unreadable in all four selects at once — a whole-app fault that presents as a
+  component fault. `select` and `option` both set colour *and* background
+  explicitly in `ui/styles/index.css`; there is no inheriting one and letting the
+  platform choose the other.
+- **A component must not re-fetch state its owner already holds.** `Settings`
+  called `useProjects()` and `useCharacters()` itself, so saving reloaded
+  *Settings* while every open tab kept the old answer until restart — a change
+  written to disk that looked like it had not applied. Same failure as the
+  `useVoice` hoist, and the same fix: one owner, everyone else takes a prop.
+- **A selector is not status.** The tab strip's voice chooser became obsolete the
+  moment voices went per-character: it was choosing the *fallback* for characters
+  with no voice of their own, which belongs in Settings beside the characters it
+  falls back for. The pill keeps health, AUTO, MUTE and the backlog, and now names
+  the fallback read-only.
+- **The writer of a file lives beside its reader.** `overrides::assign_character`
+  and `character::set_voice` sit in the same modules as the parsers that read
+  them back, and share their tests — a writer that drifts from its reader
+  produces a file the app cannot load. Both **edit** rather than re-serialize:
+  `projects.toml` and every profile carry the commentary explaining what each key
+  means, and a round-trip through `toml` leaves a correct file that has lost the
+  reason it exists. Both write to a temporary file and rename, because
+  `projects.toml` decides whether the agent may write in a project (D18) and a
+  half-written one is the worst thing a save could produce.
+- **An unassigned project is not a project assigned to `default`.** The Settings
+  dropdown's empty value clears the key rather than writing the default's name —
+  writing it would add a line that declares nothing, and `projects.toml` is only
+  for what the scan cannot derive (D10).
+- **A voice belongs to the character, not the project.** Assign one character to
+  two projects and it must sound the same in both, so the voice is written into
+  the profile. A `Spoken` item carries the voice it should be said in, because the
+  queue can hold replies from two projects at once and by the time the second is
+  spoken the app's selection may have moved.
+- **Liveliness is the motion model, not the renderer.** A Live2D model with a
+  lazy idle loop is as dead as a PNG, and the first procedural face proved the
+  converse — it was competent and read as a placeholder because its motion was
+  stepped. What reads as alive is *continuous* motion with lag in it: breathing
+  on two incommensurable periods so it never visibly repeats, a head that arrives
+  at a pose rather than snapping to it, and an antenna chasing the head's
+  **current** angle rather than its target, so it is always a beat behind. Chase
+  the target and both arrive together and the antenna looks welded on.
+- **The springs are critically damped, and that is a decision.** An under-damped
+  spring wobbles, which reads as a bug rather than as weight; an over-damped one
+  is indistinguishable from a slow lerp. And `dt` is clamped: a backgrounded tab
+  resumes with a `dt` of seconds, and integrating that unclamped makes the
+  character flinch every time you return to the window.
+- **The blink is deterministic and is not a metronome.** `Math.random()` cannot
+  be tested and "it looked different that time" is not something anyone should
+  debug — but a *regular* blink reads as a machine, so the schedule is a hash of
+  the blink index with gaps within ±40%. Nonsense input opens the eyes rather
+  than closing them: a character stuck with its eyes shut reads as broken, where
+  one that never blinks only reads as still.
+- **The mouth is the one thing that is never smoothed.** Everything else runs
+  through a spring; the mouth comes straight from the audio's envelope, because
+  the entire point is that it tracks what is actually sounding.
+- **There are no CSS keyframes on the character.** A CSS animation and a JS
+  transform on the same element fight, and the loser is whichever ran last. The
+  loop owns `transform` on the figure, the head, the antenna, the eyes and the
+  mouth; the stylesheet owns colour and `transform-box`. `prefers-reduced-motion`
+  therefore needs its own rule, because the global animation override cannot
+  reach a transform written from JavaScript.
+- **The startle settles; the error log does not.** A character alarmed until the
+  next turn would be wrong about the present on a session that errors and then
+  goes quiet. The *record* persists in the Activity panel, which is where
+  principle 5 lives — the character is a reaction, and reactions decay.
+- **A part set is validated on load, and never falls back.** One part at another
+  size puts every feature fraction somewhere else on it — a head two pixels off
+  its neck. Falling back to `procedural` would render *a* character and look like
+  it worked, which is how an afternoon goes into looking for a bug in a palette.
+- **The character's animation loop never goes through React.** `App` owns the
+  voice and every open tab stays mounted, so a level in state would re-render
+  every terminal wrapper and every transcript sixty times a second while the app
+  talks. `useVoice` exposes the in-flight speech as a **ref**, and
+  `CharacterStage` runs its own `requestAnimationFrame` writing one CSS custom
+  property. The loop starts only while something is sounding: no sound, no cost.
+  Frame sets are all mounted and toggled by opacity for the same reason —
+  swapping a `src` would decode an image inside the loop.
+- **A missing character and a misspelled one are different states.** Both draw
+  the house character, and only one of them is something to fix, so
+  `resolveCharacter` returns which happened. Collapsing them would make a typo
+  in `projects.toml` indistinguishable from an unassigned project.
+- **A character accents the instrument; it cannot repaint it.** `accentOf`
+  returns exactly three custom properties and structurally cannot express
+  `--color-surface` or `--color-ink`. That is what stops a profile theming the
+  app into unreadability, and it is a type rather than a convention.
+- **Voicebox generates at 24 kHz; `capture.ts` writes 16 kHz.** They are both
+  16-bit mono PCM and it is tempting to treat one as the other. A hardcoded rate
+  would put the mouth progressively further behind the voice with every second
+  and report nothing — measured, not assumed: `ui/fixtures/voicebox-speech.wav`
+  is real output kept precisely so the rate is read rather than believed.
+- **The WAV chunk walk is not decoration.** `data` sits at offset 44 in
+  everything Voicebox emits today, and hardcoding that is the obvious shortcut.
+  A `LIST` chunk from a future version would then be read as PCM — and metadata
+  interpreted as audio is loud noise, so the mouth would flap through silence
+  with nothing to say why.
+- **The mouth is driven by a precomputed envelope, never by an `AnalyserNode`.**
+  Routing the playing element through a `MediaElementAudioSourceNode` diverts
+  its output, and an analyser not connected onward to `destination` makes
+  playback *silent with no error* — the fifth member of a family this webview
+  already has four of. Reading the samples up front fails the other way: the
+  worst case is a mouth moving on invented data.
+- **A synthetic envelope announces itself.** Audio that cannot be parsed still
+  animates, because a character frozen mid-sentence reads as a crash. But a
+  mouth on invented data must never be indistinguishable from a mouth on real
+  audio — only one of those is a fault, and only if it is visible.
 - Rust: `snake_case` modules and commands. React: `PascalCase.tsx` components,
   `kebab-case` elsewhere.
 

@@ -8,6 +8,9 @@ import { FileTree } from "./FileTree";
 import { Panel } from "./Panel";
 import { FileViewer } from "./FileViewer";
 import { ProjectCard } from "./ProjectCard";
+import { CharacterStage } from "./CharacterStage";
+import { accentOf, voiceFor, type Resolved } from "../character";
+import { useCharacterState } from "../hooks/useCharacterState";
 import type { Card } from "../card";
 import type { VoiceControls } from "../useVoice";
 import { Splitter } from "./Splitter";
@@ -33,12 +36,15 @@ export function ProjectView({
   project,
   visible,
   voice,
+  character,
 }: {
   project: Project;
   /** Is this tab the one on screen? A hidden tab must not fit its terminal. */
   visible: boolean;
   /** Owned by the app, not by the tab — one poll, one MUTE, one voice. */
   voice: VoiceControls;
+  /** Whose room this is (D9), resolved centrally by the app. */
+  character: Resolved;
 }) {
   const [panes, setPanes] = useState(() => initialPaneState("chat"));
   const [card, setCard] = useState<Card | null>(null);
@@ -46,6 +52,18 @@ export function ProjectView({
   const [openFile, setOpenFile] = useState<string | null>(null);
   // What the user chose. Never overwritten by fitting — see split.ts.
   const [preferred, setPreferred] = useState(loadWidths);
+  // A third reader of the agent stream — a posture, where agent.ts reduces a
+  // transcript and activity.ts reduces panel state. No new events, no model.
+  const [listening, setListening] = useState(false);
+  const characterState = useCharacterState(
+    project.rel_path,
+    voice.speaking !== null,
+    listening,
+  );
+  // The room's own voice, if its character has one this machine can speak with.
+  // Two projects with two characters is two voices — which is half of what M7
+  // validates on.
+  const roomVoice = voiceFor(character.profile, voice.voices, voice.voice);
   const [available, setAvailable] = useState(Number.POSITIVE_INFINITY);
   const columnsRef = useRef<HTMLDivElement | null>(null);
 
@@ -83,8 +101,12 @@ export function ProjectView({
   }, [project.rel_path, project.path]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <header className="starfield border-b border-line px-8 pt-8 pb-5">
+    // The accent is scoped to the tab, so two open projects are two rooms.
+    <div
+      className="flex h-full min-h-0 flex-col"
+      style={accentOf(character.profile) as React.CSSProperties}
+    >
+      <header className="starfield border-b-2 border-b-[var(--accent)]/45 px-8 pt-8 pb-5">
         <h1 className="text-2xl font-light tracking-wide text-ink">
           {project.name}
         </h1>
@@ -156,6 +178,21 @@ export function ProjectView({
               setPanes((p) => showPane(p, "file"));
             }}
           />
+
+          {/* The character shrinks to a small window beneath the tree
+              (`planning/architecture/ui-layout.md`). It sits below on purpose:
+              the tree is what you navigate with, so it gets the height. */}
+          <div className="shrink-0 border-t border-line">
+            <CharacterStage
+              profile={character.profile}
+              live={voice.live}
+              speaking={voice.speaking !== null}
+              state={characterState}
+              problem={character.problem}
+              visible={visible}
+              size="inset"
+            />
+          </div>
         </aside>
 
         <Splitter
@@ -178,6 +215,8 @@ export function ProjectView({
             project={project}
             visible={visible && panes.active === "chat"}
             voice={voice}
+            roomVoice={roomVoice}
+            onListening={setListening}
           />
         </div>
 

@@ -22,6 +22,23 @@ import {
   toBase64,
   type CaptureSession,
 } from "./capture";
+import { envelopeOf, type Envelope } from "./sprite";
+
+/**
+ * What is sounding right now, for anything that has to move with it.
+ *
+ * **A ref, deliberately, and never state.** `App` owns this hook and every open
+ * tab stays mounted, so a level in React state would re-render every terminal
+ * wrapper and every transcript sixty times a second while the app talks. The
+ * character reads this from its own animation frame and writes one CSS
+ * property; React re-renders when `speaking` changes, which is once a message.
+ */
+export interface LiveSpeech {
+  /** The element actually playing — `currentTime` is the clock. */
+  audio: HTMLAudioElement;
+  /** Loudness over time for the chunk in that element. */
+  envelope: Envelope;
+}
 
 const MUTE_KEY = "githud.voice.muted";
 const VOICE_KEY = "githud.voice.id";
@@ -79,6 +96,8 @@ export function useVoice() {
    */
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const urlRef = useRef<string | null>(null);
+  /** The element and its envelope, for whatever is drawing a mouth. */
+  const live = useRef<LiveSpeech | null>(null);
   const [playbackError, setPlaybackError] = useState<string | null>(null);
 
   // Poll, because Voicebox can go away mid-session and the app is required to
@@ -125,6 +144,9 @@ export function useVoice() {
   const stop = useCallback(() => {
     audioRef.current?.pause();
     audioRef.current = null;
+    // The mouth closes with the sound. Leaving this set would freeze a
+    // character mid-vowel against an element that is never going to advance.
+    live.current = null;
     if (urlRef.current) URL.revokeObjectURL(urlRef.current);
     urlRef.current = null;
     setQueue([]);
@@ -152,16 +174,26 @@ export function useVoice() {
         { text, voiceId, engine },
       );
 
+      const bytes = fromBase64(speech.audio);
+
+      // Read the samples before playing rather than tapping the graph during
+      // playback. A `MediaElementAudioSourceNode` diverts the element's output,
+      // and an analyser not connected onward to `destination` plays *silently
+      // with no error* — this webview has four of those already. Worst case
+      // here is a mouth moving on invented data, and it says when it is.
+      const envelope = envelopeOf(bytes);
+
       // A blob URL, not a `data:` URI. A hundred kilobytes of base64 in a URL
       // is the fragile path in this webview, and it fails as a *source*
       // refusal — which reads like Voicebox being at fault when Voicebox has
       // already handed over the audio.
-      const blob = new Blob([fromBase64(speech.audio)], { type: speech.mime });
+      const blob = new Blob([bytes], { type: speech.mime });
       const url = URL.createObjectURL(blob);
       urlRef.current = url;
 
       const audio = new Audio(url);
       audioRef.current = audio;
+      live.current = { audio, envelope };
 
       await new Promise<void>((resolve) => {
         let settled = false;
@@ -169,6 +201,8 @@ export function useVoice() {
           if (settled) return;
           settled = true;
           finish.current = null;
+          // Between chunks there is nothing sounding, so nothing to move to.
+          if (live.current?.audio === audio) live.current = null;
           URL.revokeObjectURL(url);
           resolve();
         };
@@ -197,19 +231,23 @@ export function useVoice() {
       // D15: strip what should never be read aloud before it reaches a voice.
       // A message that is all code is skipped rather than blocking the queue.
       const chunks = prepareSpeech(item.markdown);
-      if (chunks.length === 0 || !voice) return;
+      // The character's voice if it has one and this machine has it; otherwise
+      // whatever the app is set to. `character.ts::voiceFor` decides that, and
+      // the caller has already applied it — here it is simply honoured.
+      const chosen = item.voice ?? voice;
+      if (chunks.length === 0 || !chosen) return;
 
       setSpeaking(item.key);
       setPlaybackError(null);
       cancelled.current = false;
       try {
-        const engine = voices.find((v) => v.id === voice)?.engine ?? null;
+        const engine = voices.find((v) => v.id === chosen)?.engine ?? null;
         // A long reply is several requests, spoken back to back. It stays one
         // queue item so the transcript still highlights one message and an
         // offer is still deduplicated by one key.
         for (const text of chunks) {
           if (cancelled.current) break;
-          await speakChunk(text, voice, engine);
+          await speakChunk(text, chosen, engine);
         }
       } catch (e) {
         setPlaybackError(
@@ -250,9 +288,9 @@ export function useVoice() {
    * backlog, because the caller has already offered and moved past them.
    */
   const offer = useCallback(
-    (key: string, markdown: string) => {
+    (key: string, markdown: string, inVoice?: string | null) => {
       if (!auto) return;
-      setQueue((q) => enqueueSpoken(q, { key, markdown }));
+      setQueue((q) => enqueueSpoken(q, { key, markdown, voice: inVoice }));
     },
     [auto],
   );
@@ -265,20 +303,20 @@ export function useVoice() {
    * the button had done nothing.
    */
   const speak = useCallback(
-    (key: string, markdown: string): string | null => {
+    (key: string, markdown: string, inVoice?: string | null): string | null => {
       if (speaking === key) {
         stop();
         return null;
       }
       if (muted) return "muted";
       if (!canSpeak(health)) return "voicebox unavailable";
-      if (!voice) return "no voice selected";
+      if (!(inVoice ?? voice)) return "no voice selected";
       if (!prepareSpeech(markdown)) {
         return "nothing to say — that message is all code";
       }
 
       stop();
-      setQueue([{ key, markdown }]);
+      setQueue([{ key, markdown, voice: inVoice }]);
       return null;
     },
     [health, muted, speaking, stop, voice],
@@ -306,6 +344,11 @@ export function useVoice() {
       });
     },
     speaking,
+    /**
+     * What is sounding right now — read from an animation frame, never
+     * rendered. See `LiveSpeech`.
+     */
+    live,
     /** How many replies are still waiting. Nothing is hidden, including a backlog. */
     pending: queue.length,
     speak,
