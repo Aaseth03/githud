@@ -43,6 +43,15 @@ export interface Spoken {
   /** The message this is, so the same one is never queued twice. */
   key: string;
   markdown: string;
+  /**
+   * The voice this one is spoken in, when the character has an opinion.
+   *
+   * Carried on the item rather than read at playback, because the queue can hold
+   * replies from two different projects at once — and by the time the second is
+   * spoken the app's selected voice may have moved on. A reply is spoken in the
+   * voice of the room it came from.
+   */
+  voice?: string | null;
 }
 
 /**

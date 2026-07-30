@@ -26,6 +26,22 @@ interface Props {
    * open project tab and a MUTE that only muted the tab it was pressed in.
    */
   voice: VoiceControls;
+  /**
+   * The voice this project's replies are spoken in.
+   *
+   * Resolved by `character.ts::voiceFor` — the character's own if it has one and
+   * this machine's Voicebox has it, otherwise the app's selection. `null` means
+   * no preference, which is not the same as silence.
+   */
+  roomVoice?: string | null;
+  /**
+   * Push-to-talk is held.
+   *
+   * Reported upward rather than hoisted: the capture's callback writes *this*
+   * component's draft, so moving the hook would mean moving the draft with it.
+   * The character wants only the boolean — it is what makes it look at you.
+   */
+  onListening?: (listening: boolean) => void;
 }
 
 /**
@@ -35,7 +51,7 @@ interface Props {
  * JSON (D1, D2). The status line under the composer comes from real `tool_call`
  * events, so it names the actual file rather than inventing a word.
  */
-export function Chat({ project, visible, voice }: Props) {
+export function Chat({ project, visible, voice, roomVoice, onListening }: Props) {
   const [state, setState] = useState(initialChatState);
   const [draft, setDraft] = useState("");
   const [startError, setStartError] = useState<string | null>(null);
@@ -48,6 +64,10 @@ export function Chat({ project, visible, voice }: Props) {
   const talk = usePushToTalk((text) =>
     setDraft((d) => (d ? `${d} ${text}` : text)),
   );
+
+  useEffect(() => {
+    onListening?.(talk.recording);
+  }, [talk.recording, onListening]);
 
   useEffect(() => {
     if (readOnly) return;
@@ -100,9 +120,9 @@ export function Chat({ project, visible, voice }: Props) {
     for (const entry of state.entries) {
       if (entry.kind !== "assistant" || offered.current.has(entry.id)) continue;
       offered.current.add(entry.id);
-      offer(entry.id, entry.text);
+      offer(entry.id, entry.text, roomVoice);
     }
-  }, [state.entries, offer]);
+  }, [state.entries, offer, roomVoice]);
 
   useEffect(() => {
     if (visible && !readOnly) inputRef.current?.focus();
@@ -222,7 +242,7 @@ export function Chat({ project, visible, voice }: Props) {
             speaking={voice.speaking === entry.id}
             onSpeak={
               entry.kind === "assistant"
-                ? () => setVoiceError(voice.speak(entry.id, entry.text))
+                ? () => setVoiceError(voice.speak(entry.id, entry.text, roomVoice))
                 : undefined
             }
           />

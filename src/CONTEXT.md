@@ -65,7 +65,8 @@ src/
 │  │  ├─ FileTree.tsx      lazy tree, one directory at a time
 │  │  ├─ Splitter.tsx      draggable column separator
 │  │  ├─ FileViewer.tsx    read-only file pane, bounded
-│  │  ├─ CharacterStage.tsx  the character — procedural face or frame set, and the rAF loop
+│  │  ├─ CharacterStage.tsx  the character — layered parts, procedural face or frames, and the rAF loop
+│  │  ├─ CharacterSection.tsx  Settings: assign a character, give it a voice, WebGL facts
 │  │  ├─ VoicePill.tsx     Voicebox status, voice choice, MUTE — in the tab strip
 │  │  ├─ Settings.tsx      audio devices, mic test, voice test, webview facts
 │  │  └─ Terminal.tsx      xterm.js — the only file that touches it
@@ -134,6 +135,7 @@ src/
 | `ui/sprite.ts` | The amplitude envelope and what the mouth does with it | Anything about how a character moves |
 | `ui/character.ts` | Resolving a project to a profile, its accent and its voice | Anything about which character a project gets |
 | `ui/motion.ts` | Springs, blink scheduling, breathing, the five state poses | Anything about how a character *moves* |
+| `src-tauri/src/overrides/` | Reading **and writing** `projects.toml` | Changing what can be declared, or how it is saved |
 | `ui/agent.ts` | Event types + transcript reducer | Changing how a conversation is assembled |
 | `ui/panes.ts` | Chat \| Terminal sub-tab rules | Changing when a pane mounts or shows |
 | `src-tauri/src/lib.rs` | Tauri commands | Adding a command the UI can call |
@@ -396,6 +398,24 @@ src-tauri/src/
   compiles on both sides and disagrees on the wire is the failure this codebase
   is least able to see** — one shared artefact both sides must satisfy is the
   only defence that does not depend on someone remembering.
+- **The writer of a file lives beside its reader.** `overrides::assign_character`
+  and `character::set_voice` sit in the same modules as the parsers that read
+  them back, and share their tests — a writer that drifts from its reader
+  produces a file the app cannot load. Both **edit** rather than re-serialize:
+  `projects.toml` and every profile carry the commentary explaining what each key
+  means, and a round-trip through `toml` leaves a correct file that has lost the
+  reason it exists. Both write to a temporary file and rename, because
+  `projects.toml` decides whether the agent may write in a project (D18) and a
+  half-written one is the worst thing a save could produce.
+- **An unassigned project is not a project assigned to `default`.** The Settings
+  dropdown's empty value clears the key rather than writing the default's name —
+  writing it would add a line that declares nothing, and `projects.toml` is only
+  for what the scan cannot derive (D10).
+- **A voice belongs to the character, not the project.** Assign one character to
+  two projects and it must sound the same in both, so the voice is written into
+  the profile. A `Spoken` item carries the voice it should be said in, because the
+  queue can hold replies from two projects at once and by the time the second is
+  spoken the app's selection may have moved.
 - **Liveliness is the motion model, not the renderer.** A Live2D model with a
   lazy idle loop is as dead as a PNG, and the first procedural face proved the
   converse — it was competent and read as a placeholder because its motion was

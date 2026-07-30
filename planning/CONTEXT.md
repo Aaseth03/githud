@@ -140,7 +140,7 @@ its job on the day it is overturned.**
 | 2026-07-29 | [M5 — panels and project cards](plans/2026-07-29-m5-panels-and-cards.plan.md) | **Done** — confirmed by hand |
 | 2026-07-29 | [M6 — voice](plans/2026-07-29-m6-voice.plan.md) | **Done** — validated by hand |
 | 2026-07-29 | [Settings — audio devices and voice diagnostics](plans/2026-07-29-m6-settings-and-audio-devices.plan.md) | **Done** — it found six bugs, then validated the fixes |
-| 2026-07-30 | [M7 — character](plans/2026-07-30-m7-character.plan.md) | **In progress** — rescoped by D21 once the first face ran |
+| 2026-07-30 | [M7 — character](plans/2026-07-30-m7-character.plan.md) | **Done** — rescoped by D21 once the first face ran; its verdict became M8 and M9 |
 
 ## Plan contract
 

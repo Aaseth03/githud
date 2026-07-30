@@ -9,7 +9,7 @@ import { Panel } from "./Panel";
 import { FileViewer } from "./FileViewer";
 import { ProjectCard } from "./ProjectCard";
 import { CharacterStage } from "./CharacterStage";
-import { accentOf, type Resolved } from "../character";
+import { accentOf, voiceFor, type Resolved } from "../character";
 import { useCharacterState } from "../hooks/useCharacterState";
 import type { Card } from "../card";
 import type { VoiceControls } from "../useVoice";
@@ -54,7 +54,16 @@ export function ProjectView({
   const [preferred, setPreferred] = useState(loadWidths);
   // A third reader of the agent stream — a posture, where agent.ts reduces a
   // transcript and activity.ts reduces panel state. No new events, no model.
-  const characterState = useCharacterState(project.rel_path, voice.speaking !== null);
+  const [listening, setListening] = useState(false);
+  const characterState = useCharacterState(
+    project.rel_path,
+    voice.speaking !== null,
+    listening,
+  );
+  // The room's own voice, if its character has one this machine can speak with.
+  // Two projects with two characters is two voices — which is half of what M7
+  // validates on.
+  const roomVoice = voiceFor(character.profile, voice.voices, voice.voice);
   const [available, setAvailable] = useState(Number.POSITIVE_INFINITY);
   const columnsRef = useRef<HTMLDivElement | null>(null);
 
@@ -206,6 +215,8 @@ export function ProjectView({
             project={project}
             visible={visible && panes.active === "chat"}
             voice={voice}
+            roomVoice={roomVoice}
+            onListening={setListening}
           />
         </div>
 

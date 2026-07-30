@@ -151,7 +151,7 @@ export default function App() {
                 isTabVisible(tabState, SETTINGS_TAB_KEY) ? "" : "hidden"
               }`}
             >
-              <Settings />
+              <Settings voice={voice} />
             </div>
           )}
 

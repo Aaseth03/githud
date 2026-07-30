@@ -1,6 +1,6 @@
 # Plan: M7 — Character
 
-**Date:** 2026-07-30 · **Executes:** M7 · **Status:** In progress, revised
+**Date:** 2026-07-30 · **Executes:** M7 · **Status:** Done. Revised
 2026-07-30 by [D21](../decisions/2026-07-30-D21-character-is-layered-parts.md)
 
 > **Revision.** Phases 1–3 are done and unchanged: profiles, the amplitude
@@ -279,6 +279,11 @@ oxlint green.
 
 **And the part no test can assert:** between replies the character is *alive* —
 breathing, blinking, hair settling after it moves — and while the agent works it
-is visibly attending rather than idling. If it reads as a mascot pasted next to
-the app rather than as something present in it, the milestone is not done,
-whatever the suite says.
+is visibly attending rather than idling.
+
+**That last clause was not met, and finding out is what this plan was for.** The
+machinery does everything above and the character still reads as an artifact,
+because the artwork is a reference sheet rather than a portrait. The verdict
+produced two milestones — M8 for the app's visual direction, M9 for the avatar —
+and it could only have come from running the thing. Same pattern as every
+decision after D15.

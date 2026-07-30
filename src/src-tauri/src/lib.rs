@@ -510,6 +510,72 @@ fn character_parts(dir: String) -> Result<Vec<character::Part>, String> {
     character::load_layers(&characters_dir(), &dir)
 }
 
+/// Assign a character to a project, or clear it.
+///
+/// Writes `config/projects.toml`, because the assignment is a fact about a
+/// *project* (D23) — the character it names is resolved from `characters/`.
+///
+/// **Written via a temporary file and renamed**, so a crash mid-write cannot
+/// leave a truncated overrides file. That file decides whether the agent may
+/// write in a project (D18); a half-written one is the worst thing this command
+/// could produce.
+#[tauri::command]
+fn character_assign(project: String, character: Option<String>) -> Result<(), String> {
+    let path = overrides_path();
+
+    // A missing file is not an error — no overrides is the normal state, and the
+    // first assignment on a fresh machine creates it.
+    let text = match std::fs::read_to_string(&path) {
+        Ok(t) => t,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => return Err(format!("{}: {e}", path.display())),
+    };
+
+    let updated = overrides::assign_character(&text, &project, character.as_deref())?;
+
+    let temp = path.with_extension("toml.tmp");
+    std::fs::write(&temp, &updated).map_err(|e| format!("{}: {e}", temp.display()))?;
+    std::fs::rename(&temp, &path).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+/// Give a character a voice, or clear it.
+///
+/// Written into the character's own profile, because a voice belongs to the
+/// character — the same character in two projects should sound the same in both.
+#[tauri::command]
+fn character_voice(name: String, voice: Option<String>) -> Result<(), String> {
+    let path = character::profile_path(&characters_dir(), &name);
+    let text = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let updated = character::set_voice(&text, voice.as_deref())?;
+
+    // Temporary file then rename, so a crash cannot leave a half-written profile
+    // — which would make the character vanish rather than merely lose its voice.
+    let temp = path.with_extension("toml.tmp");
+    std::fs::write(&temp, &updated).map_err(|e| format!("{}: {e}", temp.display()))?;
+    std::fs::rename(&temp, &path).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+/// Can this webview give a GPU canvas?
+///
+/// Asked from the front end, reported here only so Settings has one place to show
+/// it. Whether Live2D or Rive could ever run in this webview turns on it
+/// (`planning/specs/character-renderers_spec.md`), and the app runs with
+/// `WEBKIT_DISABLE_DMABUF_RENDERER=1` because of the black-window bug — so this
+/// has never actually been established.
+#[tauri::command]
+fn webview_notes() -> Vec<String> {
+    let mut notes = Vec::new();
+    for var in ["WEBKIT_DISABLE_DMABUF_RENDERER", "WEBKIT_DISABLE_COMPOSITING_MODE"] {
+        if let Ok(v) = std::env::var(var) {
+            notes.push(format!("{var}={v}"));
+        }
+    }
+    if notes.is_empty() {
+        notes.push("no WebKit rendering overrides set".into());
+    }
+    notes
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let terminals = pty::Terminals::new();
@@ -582,6 +648,9 @@ pub fn run() {
             characters_list,
             character_frames,
             character_parts,
+            character_assign,
+            character_voice,
+            webview_notes,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

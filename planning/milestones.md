@@ -291,9 +291,16 @@ during the outage was spoken once it came back.
       when health goes down and that would silently lose replies
 
 ### M7 — Character
-**Status:** in-progress
-**Validation:** two projects, two characters, two voices, visibly distinct rooms
-— and the character reads as alive rather than as a placeholder, judged by eye.
+**Status:** done
+**Validation:** two projects, two characters, two voices, visibly distinct rooms —
+assignable and audible from Settings without editing a file. **Confirmed by hand
+2026-07-30.**
+
+*The original line also required "reads as alive rather than as a placeholder".
+That is deliberately **not** claimed here: running it is what established the
+machinery was never the missing part, and the aesthetic judgement moved to
+[M9](#m9--avatar) with the user's decision. Leaving the clause in and ticking it
+would be marking a milestone done against a validation nobody passed.*
 
 Rescoped 2026-07-30 by [D21](decisions/2026-07-30-D21-character-is-layered-parts.md),
 after the first procedural face ran and answered the question it was built to
@@ -309,27 +316,39 @@ transforms and into reacting to real events — not into a third-party runtime.
 - [x] Themes — accent on the stage, the header rule and every tab pill; a
       character accents the instrument and structurally cannot repaint it
 - [x] A procedural face as the floor, so no character is ever missing
-- [ ] **Layered parts** (D21) — one PNG per part, animated by script:
+- [x] **Layered parts** (D21) — one PNG per part, animated by script:
       breathing, head bob and lean, blink by layer swap, mouth from the
       envelope, and spring-driven lag so hair follows the head rather than
       moving with it
-- [ ] **Art authored to Live2D's PSD spec** — every part drawn complete
+- [x] **Art authored to Live2D's PSD spec** — every part drawn complete
       including the occluded regions, so `sprite.kind = "live2d"` stays
       available later without redrawing anything
-- [ ] **Temperament as committed data** — idle energy, bob, blink rate, spring
+- [x] **Temperament as committed data** — idle energy, bob, blink rate, spring
       stiffness, lean. A calm character and a jittery one are the same code and
       different numbers the user edits
-- [ ] **Five states off the existing event stream**: idle, listening, thinking,
+- [x] **Five states off the existing event stream**: idle, listening, thinking,
       speaking, alarmed. No new events and no model in the loop — `activity.ts`
       already reduces everything this needs
-- [ ] A WebGL probe in Settings, so whether this webview could ever run Live2D
+- [x] A WebGL probe in Settings, so whether this webview could ever run Live2D
       or Rive is a fact rather than an assumption
-- [ ] One character made by hand, end to end — it exists to prove the parts
-      spec before M10 automates it
-- [ ] Character/voice config screen that picks from Voicebox's profiles API —
-      voice *creation* stays in Voicebox, do not rebuild it
-- [ ] Assignment written back into `config/projects.toml` with its comment
-      block intact
+- [x] One character made by hand, end to end — it exists to prove the parts
+      spec before M10 automates it. **It also proved the spec was wrong twice**:
+      stock is asymmetric (the part behind a seam carries it, the part in front
+      barely does), and a binary cut keeps the backdrop in every edge pixel
+- [x] Character/voice config screen that picks from Voicebox's profiles API —
+      voice *creation* stays in Voicebox, and it was not rebuilt. A voice is
+      written into the **character's** profile, because one character assigned to
+      two projects must sound the same in both
+- [x] Assignment written back into `config/projects.toml` with its comment block
+      intact — `toml_edit`, one added line, temporary file and rename so a crash
+      cannot leave the file that governs agent write access half-written
+- [x] **The default is the default.** GIT HUD's own persona was standing in as
+      the fallback, so every unconfigured project wore it. A project that has not
+      chosen a character has not chosen one; `default` is procedural and `hud` is
+      assigned to the `githud` project like any other
+- [x] Seen running, by hand, and the aesthetic verdict taken: the machinery works
+      and the character still reads as an artifact. **That verdict is what M8 and
+      M9 exist for** — it is a finding, not a failure of this milestone
 
 ### M8 — App direction
 **Status:** not-started

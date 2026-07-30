@@ -44,7 +44,8 @@ characters/
 | Produce or regenerate a character's parts | `pipeline/character-decompose.py` |
 | Know how an existing character was made | `profiles/<name>/SOURCE.md` |
 | Compare renderer stacks, or pick up a deferred one | `../planning/specs/character-renderers_spec.md` |
-| Assign a character to a project | `../config/projects.toml` — the assignment is a fact about the *project* |
+| Assign a character to a project | Settings → Characters, or `../config/projects.toml` by hand — the assignment is a fact about the *project* |
+| Give a character a voice | Settings → Characters → Voices. Written into the profile, because a voice belongs to the character |
 | Change how a character is drawn or moves | `../src/ui/` — `character.ts`, `sprite.ts`, `components/CharacterStage.tsx` |
 
 ## What a character is

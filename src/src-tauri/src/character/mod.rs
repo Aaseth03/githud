@@ -605,6 +605,32 @@ pub fn profile_path(characters_dir: &Path, name: &str) -> PathBuf {
     characters_dir.join(format!("{name}.toml"))
 }
 
+/// Set or clear a character's `voice`, preserving the rest of the file.
+///
+/// **A voice belongs to the character, not to the project.** Assign the same
+/// character to two projects and it should sound the same in both, so this is
+/// written into the profile rather than into `projects.toml`.
+///
+/// Edited rather than re-serialized, for the same reason as `projects.toml`: these
+/// files carry the commentary explaining what every key means, and a round-trip
+/// through `toml` would leave a correct file that had lost its documentation.
+///
+/// Pure, so the rule is testable without a filesystem.
+pub fn set_voice(text: &str, voice: Option<&str>) -> Result<String, String> {
+    let mut doc = text
+        .parse::<toml_edit::DocumentMut>()
+        .map_err(|e| format!("profile is malformed: {e}"))?;
+
+    match voice {
+        Some(id) => doc["voice"] = toml_edit::value(id),
+        None => {
+            doc.remove("voice");
+        }
+    }
+
+    Ok(doc.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -885,6 +911,54 @@ mod tests {
         let err = load_frames(&dir, "../../../etc").unwrap_err();
         assert!(err.contains("dir"), "{err}");
         std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn setting_a_voice_keeps_the_profile_s_commentary() {
+        // These files document what every key means. A round-trip through `toml`
+        // would leave a correct profile that had lost its explanation.
+        let before = "# HUD — GIT HUD's own persona.\n#\n# Not the default.\n\ndisplay = \"HUD\"\n\n[palette]\naccent = \"#6ee7ff\"\n";
+        let after = set_voice(before, Some("af_heart")).unwrap();
+
+        assert!(after.contains("# HUD — GIT HUD's own persona."));
+        assert!(after.contains("# Not the default."));
+        // `r##"…"##`: a hex colour is a `"` then a `#`, which closes `r#"…"#`.
+        assert!(after.contains(r##"accent = "#6ee7ff""##));
+        assert_eq!(
+            Profile::parse("hud", &after).unwrap().voice.as_deref(),
+            Some("af_heart")
+        );
+    }
+
+    #[test]
+    fn a_voice_can_be_replaced_and_cleared() {
+        let one = set_voice("display = \"HUD\"\n", Some("a")).unwrap();
+        let two = set_voice(&one, Some("b")).unwrap();
+        assert_eq!(two.matches("voice").count(), 1);
+        assert_eq!(Profile::parse("x", &two).unwrap().voice.as_deref(), Some("b"));
+
+        // Cleared means "the app's voice", which is a state a character can mean —
+        // not silence, and not an empty string that would name no voice at all.
+        let none = set_voice(&two, None).unwrap();
+        assert!(!none.contains("voice"), "{none}");
+        assert_eq!(Profile::parse("x", &none).unwrap().voice, None);
+    }
+
+    #[test]
+    fn a_malformed_profile_is_refused_rather_than_rewritten() {
+        let err = set_voice("[palette", Some("a")).unwrap_err();
+        assert!(err.contains("malformed"), "{err}");
+    }
+
+    #[test]
+    fn setting_a_voice_leaves_a_layered_sprite_intact() {
+        // The geometry is nested tables; a careless writer flattens them.
+        let before = "[sprite]\nkind = \"layered\"\ndir = \"hud\"\n\n[sprite.pivot]\nhead = [0.5, 0.6]\n";
+        let after = set_voice(before, Some("v1")).unwrap();
+        let p = Profile::parse("hud", &after).unwrap();
+        assert_eq!(p.layered_dir(), Some("hud"));
+        let Sprite::Layered { pivot, .. } = &p.sprite else { panic!("lost the variant") };
+        assert_eq!(pivot.head, Some([0.5, 0.6]));
     }
 
     #[test]

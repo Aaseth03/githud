@@ -231,19 +231,23 @@ export function useVoice() {
       // D15: strip what should never be read aloud before it reaches a voice.
       // A message that is all code is skipped rather than blocking the queue.
       const chunks = prepareSpeech(item.markdown);
-      if (chunks.length === 0 || !voice) return;
+      // The character's voice if it has one and this machine has it; otherwise
+      // whatever the app is set to. `character.ts::voiceFor` decides that, and
+      // the caller has already applied it — here it is simply honoured.
+      const chosen = item.voice ?? voice;
+      if (chunks.length === 0 || !chosen) return;
 
       setSpeaking(item.key);
       setPlaybackError(null);
       cancelled.current = false;
       try {
-        const engine = voices.find((v) => v.id === voice)?.engine ?? null;
+        const engine = voices.find((v) => v.id === chosen)?.engine ?? null;
         // A long reply is several requests, spoken back to back. It stays one
         // queue item so the transcript still highlights one message and an
         // offer is still deduplicated by one key.
         for (const text of chunks) {
           if (cancelled.current) break;
-          await speakChunk(text, voice, engine);
+          await speakChunk(text, chosen, engine);
         }
       } catch (e) {
         setPlaybackError(
@@ -284,9 +288,9 @@ export function useVoice() {
    * backlog, because the caller has already offered and moved past them.
    */
   const offer = useCallback(
-    (key: string, markdown: string) => {
+    (key: string, markdown: string, inVoice?: string | null) => {
       if (!auto) return;
-      setQueue((q) => enqueueSpoken(q, { key, markdown }));
+      setQueue((q) => enqueueSpoken(q, { key, markdown, voice: inVoice }));
     },
     [auto],
   );
@@ -299,20 +303,20 @@ export function useVoice() {
    * the button had done nothing.
    */
   const speak = useCallback(
-    (key: string, markdown: string): string | null => {
+    (key: string, markdown: string, inVoice?: string | null): string | null => {
       if (speaking === key) {
         stop();
         return null;
       }
       if (muted) return "muted";
       if (!canSpeak(health)) return "voicebox unavailable";
-      if (!voice) return "no voice selected";
+      if (!(inVoice ?? voice)) return "no voice selected";
       if (!prepareSpeech(markdown)) {
         return "nothing to say — that message is all code";
       }
 
       stop();
-      setQueue([{ key, markdown }]);
+      setQueue([{ key, markdown, voice: inVoice }]);
       return null;
     },
     [health, muted, speaking, stop, voice],

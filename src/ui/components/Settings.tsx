@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { CharacterSection, GraphicsSection } from "./CharacterSection";
+import type { VoiceControls } from "../useVoice";
 import { invoke } from "@tauri-apps/api/core";
 import {
   captureConstraints,
@@ -34,7 +36,7 @@ import {
  * knew and was not showing**, which is principle 5 applied to the one surface
  * that had none of it.
  */
-export function Settings() {
+export function Settings({ voice }: { voice: VoiceControls }) {
   return (
     <div className="h-full overflow-y-auto bg-void px-8 py-6">
       <header className="mb-6">
@@ -48,9 +50,11 @@ export function Settings() {
       </header>
 
       <div className="max-w-3xl space-y-6">
+        <CharacterSection voice={voice} />
         <AudioSection />
         <MicrophoneTest />
         <VoiceSection />
+        <GraphicsSection />
         <WebviewSection />
       </div>
     </div>
