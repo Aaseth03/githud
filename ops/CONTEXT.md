@@ -18,7 +18,7 @@ ops/
 
 | Path | Contains | When to use |
 |---|---|---|
-| `scripts/create-private-remote.sh` | Creates a private GitHub repo for a local directory and pushes the first commit | Bringing a new project into `~/github`; also the M10 new-project flow |
+| `scripts/create-private-remote.sh` | Creates a private GitHub repo for a local directory and pushes the first commit | Bringing a new project into `~/github`; also the M12 new-project flow |
 | `scripts/character-decompose.py` | Cuts a character reference into the layered parts the app renders (D21) | Producing or regenerating a character's parts |
 
 ## Rules for scripts here

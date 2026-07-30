@@ -83,7 +83,7 @@ rendering, which is the only way anyone could have known it read as a
 placeholder. **Do not re-litigate them.** Supersede one with a new dated record
 that names what it replaces.
 
-D22 amends D4 rather than superseding it: Python was blanket-banned, M8 needs
+D22 amends D4 rather than superseding it: Python was blanket-banned, M10 needs
 it because ComfyUI is Python, and D4's own escape hatch — *reopen the record
 rather than sneak in as a script* — is the route that was taken.
 

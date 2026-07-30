@@ -66,6 +66,6 @@ worth speaking — summaries, never code. D15 is a filter and says nothing about
 delivery. This record settles *how* what survives that filter is said, and by
 what mechanism.
 
-Implemented by **M9 — speech shaping** (renumbered again on 2026-07-30 when M8 became the character pipeline; originally
+Implemented by **M11 — speech shaping** (renumbered again on 2026-07-30 when M8 became the character pipeline; originally
 the user put it ahead of parallel and portable: character and voice are the
 reward, and shaping is what makes the character sound like one).

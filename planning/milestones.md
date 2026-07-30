@@ -325,13 +325,84 @@ transforms and into reacting to real events — not into a third-party runtime.
 - [ ] A WebGL probe in Settings, so whether this webview could ever run Live2D
       or Rive is a fact rather than an assumption
 - [ ] One character made by hand, end to end — it exists to prove the parts
-      spec before M8 automates it
+      spec before M10 automates it
 - [ ] Character/voice config screen that picks from Voicebox's profiles API —
       voice *creation* stays in Voicebox, do not rebuild it
 - [ ] Assignment written back into `config/projects.toml` with its comment
       block intact
 
-### M8 — Character creation pipeline
+### M8 — App direction
+**Status:** not-started
+**Validation:** a screenshot a stranger would call *designed* rather than
+*default* — and the user's own words for it are "a place I want to be", judged by
+eye, in the app, on his machine.
+
+The app is currently cyan-on-near-black, which is the single most generic
+technical register there is: spaceship bridge. The user's ask is **homey and
+technical** — a place suited for development that he wants to be in.
+
+Its own milestone, and **before the avatar**, because a character's room has to
+sit inside the app's world. Designing the room first means designing it twice.
+
+The reference the user gave is worth internalising: [Refero](https://styles.refero.design)
+catalogues styles as *"editorial tech journal on warm"*, *"soft daylight
+notebook"*, *"serif analytics on warm paper"* — every one of those names **a
+material and a light**. GIT HUD has neither. That is the gap, not the palette.
+
+- [ ] A named direction, chosen by the user rather than assumed — one sentence
+      that a stranger could hold in mind while judging every screen
+- [ ] Material and light: where illumination comes from, what surfaces are made
+      of. Currently nothing answers either
+- [ ] A palette with warmth in it, and semantic rather than decorative colour
+- [ ] A real type pairing, chosen deliberately — one voice for prose, one for
+      machine values, and a reason for both
+- [ ] Texture: grain, paper, or none, decided rather than defaulted to flat
+- [ ] Motion language — what eases, how fast, and what it means. Referenced
+      against [motionsites.ai](https://motionsites.ai)
+- [ ] Contrast and legibility re-proven after the repaint. **The cockpit tokens
+      are load-bearing** — a character accents them and cannot repaint them
+      (D21), so warming the app is a change to the tokens themselves and every
+      accent has to still read against the new surfaces
+- [ ] Applied across every surface: sidebar, tab strip, chat, terminal chrome,
+      panel, cards, Settings. A half-repainted app looks worse than an unpainted
+      one
+
+### M9 — Avatar
+**Status:** not-started
+**Validation:** the user looks at it and says it feels like *someone*. No test
+can stand in for that, and nothing here should pretend otherwise.
+
+M7 built the machinery: layered parts, springs, a blink, five states, an
+amplitude-driven mouth. Running it answered the question it was built to ask —
+**the machinery is not what was missing.** HUD reads as an artifact because the
+artwork is a reference sheet: symmetrical, dead-front-facing, T-pose, evenly lit,
+floating centred in an empty box. That is how you photograph a specimen.
+
+Four things, all script, **no AI in the render path** (D20's constraint applied to
+motion, and the reason a character costs nothing to run).
+
+- [ ] **Gaze.** The largest "someone is there" cue and the cheapest — the eyes are
+      already vectors. Pupils track the cursor; look at you while push-to-talk is
+      held; glance toward the panel when a tool runs; drift, unfocused, while
+      thinking. Blended between sources, never snapped
+- [ ] **Re-pose, three-quarter and bust-framed.** Turned slightly, weight off
+      centre, head tilted, framed chest-up and large rather than full-body small.
+      The single change that most removes the reference-sheet look. Needs new art
+      and a re-cut, and the art is still authored to Live2D's PSD rules (D21)
+- [ ] **A room, strictly behind the character.** Per-character, so HUD's room and
+      MIA's are different places. Depth from **parallax against head motion**,
+      not from clutter. The user's constraint, and it is a good one: *clean, not
+      taking attention, and nothing in front of the character obstructing the
+      view.* No desk, no foreground props — every layer sits behind
+- [ ] **Richer idle.** Weight shifts, an occasional glance around, double-blinks,
+      and **anticipation** — a lean that starts before speech rather than with it.
+      Anticipation is what makes motion read as intent instead of reaction
+- [ ] Pure and tested in the same shape as `motion.ts`, which already proves this
+      is provable: springs, schedules and state are functions of a clock
+- [ ] The `procedural` floor still works, unchanged. A fresh clone with no art
+      renders something (D21)
+
+### M10 — Character creation pipeline
 **Status:** not-started
 **Validation:** one prompt produces a complete, valid character folder that the
 app renders without a code change — and the same seed produces it again.
@@ -357,7 +428,7 @@ no model in the render path. D20's constraint on speech, applied to art.
 - [ ] Seeds committed with the character, so the same input reproduces it
 - [ ] Scripted, not prompted (D13) — it drives ComfyUI's HTTP API headlessly
 
-### M9 — Speech shaping
+### M11 — Speech shaping
 **Status:** not-started
 **Validation:** a spoken paragraph containing `JSON`, `HTTP`, a numbered list, a
 file path and an acronym the lexicon does not know reads aloud the way a person
@@ -403,7 +474,7 @@ like one rather than like a screen reader.
       point is that it can be proved without listening to it
 - [ ] Integrated with M7's character, so delivery and identity are one thing
 
-### M10 — Parallel and portable
+### M12 — Parallel and portable
 **Status:** not-started
 **Validation:** two concurrent sessions on one repo; a second adapter runs a real
 task; a new project is born end to end.

@@ -11,7 +11,7 @@ longer what a character is.
 
 By the end of M7's replanning a character had become: a profile, a directory of
 layered PNG parts, provenance recording the model and seed that produced them
-(D21), a parts contract those PNGs must satisfy, and — from M8 — a generation
+(D21), a parts contract those PNGs must satisfy, and — from M10 — a generation
 pipeline with its own language and its own dependencies (D22). That is four kinds
 of thing with one subject, sitting inside a directory whose stated purpose is
 "committed application data … This directory holds no work."

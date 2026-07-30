@@ -87,7 +87,7 @@ explicit approval.
   points. It is validated on load, because a set missing a mouth must fail
   loudly rather than render as a character that never speaks.
 - Character *creation* becomes a scripted pipeline against the local ComfyUI
-  install — **M8**, deliberately after M7. Automating a parts spec that
+  install — **M10**, deliberately after M7. Automating a parts spec that
   nothing has rendered yet would be automating a guess, so M7 proves the spec
   with one character made by hand.
 - **Nothing paid, and nothing at runtime.** Assets are generated locally on the

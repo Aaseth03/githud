@@ -31,10 +31,12 @@ building, running, or launching. Do not rediscover it.
 | M4 — guardrails | done |
 | M5 — panels and project cards | done — v1 complete |
 | M6 — voice | **done — validated by hand 2026-07-29** |
-| M7 — character | not started — *this is the next build* |
-| M8 — character creation pipeline | not started — split out of M7 (D21) |
-| M9 — speech shaping | not started — carved out of M6's tail (D20) |
-| M10 — parallel and portable | not started |
+| M7 — character | **in progress** — machinery done; config screen and assignment write-back remain |
+| M8 — app direction | not started — *homey and technical*; **before the avatar**, because a room sits inside the app's world |
+| M9 — avatar | not started — pose, gaze, a room behind, richer idle. M7 proved the machinery was not what was missing |
+| M10 — character creation pipeline | not started — split out of M7 (D21) |
+| M11 — speech shaping | not started — carved out of M6's tail (D20) |
+| M12 — parallel and portable | not started |
 
 **`main` is current: PRs #1–#10 merged, M6 included.** Branch off `main` for
 M7 — and verify it by content rather than by the merged label, which is the

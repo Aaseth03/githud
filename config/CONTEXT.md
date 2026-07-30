@@ -29,7 +29,7 @@ config/
 | — | Characters moved to `../characters/` (D23). The *assignment* stays here, because it is a fact about a project | Assigning a character: `character = "<name>"` |
 | `contracts/milestones.md` | The milestone format the Rust parser reads out of *any* repo | Changing the format, or writing the parser |
 | `contracts/icm.md` | The L0/L1 detection contract `scan::detect_icm` implements | Changing what GIT HUD badges as non-conformant |
-| `skills/icm-architect/` | How to *build* a conformant workspace — vendored, harness-neutral | The M10 new-project flow; restructuring a repo |
+| `skills/icm-architect/` | How to *build* a conformant workspace — vendored, harness-neutral | The M12 new-project flow; restructuring a repo |
 
 **`contracts/icm.md` and `skills/icm-architect/` answer different questions.**
 The contract is what GIT HUD *recognises* and is deliberately more permissive

@@ -53,7 +53,7 @@ What is and is not true as a result:
   *floor*. Everything else — the filesystem — is genuinely a floor.
 
 Narrowing this later does not need a redesign: a fine-grained token scoped to
-one repo would restore `gh pr create` without the rest. Revisit at M10, where the
+one repo would restore `gh pr create` without the rest. Revisit at M12, where the
 new-project flow already touches repo creation.
 
 ## Consequences

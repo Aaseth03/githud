@@ -33,7 +33,7 @@ would not be a variant, it would be a second design.
 |---|---|---|---|---|
 | `procedural` | **Shipped** | none | SVG + CSS transforms | The floor. Guarantees no character is ever missing, including on a fresh clone with no art. Reads as a placeholder, which is exactly what it is for. |
 | `frames` | **Shipped** | `mouth-0.png` … | `<img>` opacity swap | Full-frame sprite sequences. Stepped motion, so liveliness costs frames. Kept for anything genuinely frame-authored. |
-| `layered` | **In progress** | one PNG per named part | CSS transforms + springs | D21. Continuous motion, scripted, no dependency, fully automatable pipeline (M8). |
+| `layered` | **In progress** | one PNG per named part | CSS transforms + springs | D21. Continuous motion, scripted, no dependency, fully automatable pipeline (M10). |
 | `live2d` | **Deferred** | `.moc3` + `.model3.json` + textures, from the same PSD | Cubism SDK for Web (WebGL) | The highest ceiling and the best fit on quality. Free below ¥10M annual revenue. Two blockers, both recorded below. |
 | `rive` | **Deferred** | `.riv` | rive-wasm, inlinable | State machines with number inputs; the envelope maps straight onto one. Rejected on dependency cost, not quality. |
 | `spine` | **Excluded** | `.json` + atlas | spine-ts | Paid ($69–$379). Excluded by the standing constraint — nothing paid without explicit approval. |
@@ -55,7 +55,7 @@ Blocked on two things, in order:
    Settings during M7. If WebGL is absent or software-rendered, `live2d` and
    `rive` are both dead and `layered` was the only option all along.
 2. **Rigging is a manual Cubism session per character** and cannot be scripted,
-   which collides with principle 4 and with the M8 pipeline. Viable as a
+   which collides with principle 4 and with the M10 pipeline. Viable as a
    per-character opt-in for a character worth the hand work, not as the default.
 
 **The upgrade needs no new art**, and that is deliberate: D21 requires every

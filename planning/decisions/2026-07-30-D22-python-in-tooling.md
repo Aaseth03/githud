@@ -8,7 +8,7 @@
 D4 said "No Python anywhere in GIT HUD. No UV." It also said any future need must
 reopen this record rather than sneak in as a script — this is that.
 
-M8 drives character generation against the ComfyUI install already on this
+M10 drives character generation against the ComfyUI install already on this
 machine. **ComfyUI is Python, and its workflows are Python and JSON.** The image
 work either side of it — decomposing a reference into layered parts, filling
 occluded regions, validating a parts set — is exactly what Pillow and NumPy are
