@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CharacterSection, GraphicsSection } from "./CharacterSection";
 import type { VoiceControls } from "../useVoice";
+import type { Characters, Project } from "../types";
 import { invoke } from "@tauri-apps/api/core";
 import {
   captureConstraints,
@@ -36,7 +37,22 @@ import {
  * knew and was not showing**, which is principle 5 applied to the one surface
  * that had none of it.
  */
-export function Settings({ voice }: { voice: VoiceControls }) {
+export function Settings({
+  voice,
+  projects,
+  characters,
+  charactersError,
+  onProjectsChanged,
+  onCharactersChanged,
+}: {
+  voice: VoiceControls;
+  /** Owned by `App`, so a save here applies in every open tab. */
+  projects: Project[];
+  characters: Characters;
+  charactersError: string | null;
+  onProjectsChanged: () => Promise<void> | void;
+  onCharactersChanged: () => Promise<void> | void;
+}) {
   return (
     <div className="h-full overflow-y-auto bg-void px-8 py-6">
       <header className="mb-6">
@@ -50,7 +66,14 @@ export function Settings({ voice }: { voice: VoiceControls }) {
       </header>
 
       <div className="max-w-3xl space-y-6">
-        <CharacterSection voice={voice} />
+        <CharacterSection
+          voice={voice}
+          projects={projects}
+          characters={characters}
+          loadError={charactersError}
+          onProjectsChanged={onProjectsChanged}
+          onCharactersChanged={onCharactersChanged}
+        />
         <AudioSection />
         <MicrophoneTest />
         <VoiceSection />

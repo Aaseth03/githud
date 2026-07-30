@@ -43,7 +43,8 @@ export default function App() {
    * Profiles are central (D9), so they are loaded once here and resolved per
    * tab — never fetched inside a tab, which would be the same answer N times.
    */
-  const { characters, error: charactersError } = useCharacters();
+  const { characters, error: charactersError, reload: reloadCharacters } =
+    useCharacters();
   const house = resolveCharacter(characters, null);
 
   const handleOpen = useCallback((project: Project) => {
@@ -113,7 +114,6 @@ export default function App() {
               muted={voice.muted}
               auto={voice.auto}
               pending={voice.pending}
-              onVoice={voice.setVoice}
               onToggleMute={voice.toggleMute}
               onToggleAuto={voice.toggleAuto}
             />
@@ -151,7 +151,14 @@ export default function App() {
                 isTabVisible(tabState, SETTINGS_TAB_KEY) ? "" : "hidden"
               }`}
             >
-              <Settings voice={voice} />
+              <Settings
+                voice={voice}
+                projects={projects}
+                characters={characters}
+                charactersError={charactersError}
+                onProjectsChanged={rescan}
+                onCharactersChanged={reloadCharacters}
+              />
             </div>
           )}
 

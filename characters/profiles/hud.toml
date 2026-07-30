@@ -9,6 +9,7 @@
 # hud/SOURCE.md for how this one was made.
 
 display = "HUD"
+voice = "5b9b5f35-7a13-4ebe-b11c-320026db0033"
 
 [palette]
 accent = "#6ee7ff"

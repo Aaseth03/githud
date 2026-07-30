@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { useCharacters } from "../hooks/useCharacters";
-import { useProjects } from "../hooks/useProjects";
 import { resolveCharacter, voiceFor } from "../character";
-import { HOUSE_CHARACTER, type Profile } from "../types";
+import { HOUSE_CHARACTER, type Characters, type Profile, type Project } from "../types";
 import type { VoiceControls } from "../useVoice";
 
 /**
@@ -17,9 +15,31 @@ import type { VoiceControls } from "../useVoice";
  * about a *project* (D23). The character it names is resolved from
  * `characters/profiles/` (D9).
  */
-export function CharacterSection({ voice }: { voice: VoiceControls }) {
-  const { projects, rescan } = useProjects();
-  const { characters, error: loadError, reload } = useCharacters();
+export function CharacterSection({
+  voice,
+  projects,
+  characters,
+  loadError,
+  onProjectsChanged,
+  onCharactersChanged,
+}: {
+  voice: VoiceControls;
+  /**
+   * Passed in, **never fetched here.**
+   *
+   * Calling `useProjects()` and `useCharacters()` in this component gave it its
+   * own copy of both, so saving reloaded *Settings* and the running tabs kept the
+   * old answer until the app restarted — a change that had been written to disk
+   * and looked like it had not applied. Same shape as the `useVoice` hoist: one
+   * owner, and everyone else takes a prop.
+   */
+  projects: Project[];
+  characters: Characters;
+  loadError: string | null;
+  onProjectsChanged: () => Promise<void> | void;
+  onCharactersChanged: () => Promise<void> | void;
+}) {
+  const [saved, setSaved] = useState<string | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [spoke, setSpoke] = useState<string | null>(null);
@@ -28,19 +48,24 @@ export function CharacterSection({ voice }: { voice: VoiceControls }) {
     async (relPath: string, name: string | null) => {
       setSaving(relPath);
       setError(null);
+      setSaved(null);
       try {
         await invoke("character_assign", { project: relPath, character: name });
         // Re-read rather than patching local state: `projects.toml` is the source
         // of truth and a UI that believes its own optimistic write will disagree
         // with the file the moment a write partly fails.
-        await rescan();
+        //
+        // This is the app's owner reloading, so every open tab re-resolves — the
+        // change applies where you can see it, not only here.
+        await onProjectsChanged();
+        setSaved(relPath);
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e));
       } finally {
         setSaving(null);
       }
     },
-    [rescan],
+    [onProjectsChanged],
   );
 
   return (
@@ -49,7 +74,8 @@ export function CharacterSection({ voice }: { voice: VoiceControls }) {
         Characters
       </h2>
       <p className="mt-1 text-[11px] text-ink-faint">
-        Who lives in each project. Profiles come from{" "}
+        Changes save and apply immediately — there is nothing to confirm. Who
+        lives in each project: profiles come from{" "}
         <code className="text-ink-dim">characters/profiles/</code>; the assignment
         is written to <code className="text-ink-dim">config/projects.toml</code>.
         Voices come from Voicebox — create them there, pick them here.
@@ -118,6 +144,13 @@ export function CharacterSection({ voice }: { voice: VoiceControls }) {
                 <span className="font-mono text-[10px] text-warn">{resolved.problem}</span>
               )}
 
+              {saving === p.rel_path && (
+                <span className="font-mono text-[10px] text-ink-faint">saving…</span>
+              )}
+              {saved === p.rel_path && saving === null && (
+                <span className="font-mono text-[10px] text-go">applied</span>
+              )}
+
               <button
                 onClick={() => {
                   const said = voice.speak(
@@ -141,9 +174,18 @@ export function CharacterSection({ voice }: { voice: VoiceControls }) {
 
       {spoke && <p className="mt-3 font-mono text-[11px] text-warn">{spoke}</p>}
 
-      <VoicePerCharacter characters={characters.profiles} voice={voice} onSaved={reload} />
+      <VoicePerCharacter
+        characters={characters.profiles}
+        voice={voice}
+        onSaved={onCharactersChanged}
+      />
     </section>
   );
+}
+
+/** Await a reload callback whether or not it returns a promise. */
+async function onCharactersReload(reload: () => Promise<void> | void) {
+  await reload();
 }
 
 /**
@@ -160,9 +202,10 @@ function VoicePerCharacter({
 }: {
   characters: Profile[];
   voice: VoiceControls;
-  onSaved: () => void;
+  onSaved: () => Promise<void> | void;
 }) {
   const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState<string | null>(null);
 
   return (
     <div className="mt-5 border-t border-line pt-4">
@@ -171,9 +214,30 @@ function VoicePerCharacter({
       </h3>
       <p className="mt-1 text-[11px] text-ink-faint">
         A character may be a look without being a voice — unset falls through to
-        the app's selection, and so does a voice this machine's Voicebox does not
+        the fallback below, and so does a voice this machine's Voicebox does not
         have.
       </p>
+
+      <div className="mt-3 flex items-center gap-3 rounded border border-line/70 bg-surface/40 px-2 py-1.5">
+        <span className="w-40 shrink-0 text-xs text-ink-dim">Fallback voice</span>
+        <select
+          value={voice.voice ?? ""}
+          onChange={(e) => voice.setVoice(e.target.value || null)}
+          className="rounded border border-line bg-surface px-2 py-1 text-xs text-ink
+                     focus-visible:outline-2 focus-visible:outline-offset-1
+                     focus-visible:outline-signal"
+        >
+          <option value="">— none —</option>
+          {voice.voices.map((v) => (
+            <option key={v.id} value={v.id}>
+              {v.name}
+            </option>
+          ))}
+        </select>
+        <span className="font-mono text-[10px] text-ink-faint">
+          used by any character with no voice of its own
+        </span>
+      </div>
 
       {error && <p className="mt-2 font-mono text-[11px] text-danger">{error}</p>}
 
@@ -184,11 +248,16 @@ function VoicePerCharacter({
             <select
               value={c.voice ?? ""}
               onChange={(e) => {
+                setError(null);
+                setSaved(null);
                 void invoke("character_voice", {
                   name: c.name,
                   voice: e.target.value || null,
                 })
-                  .then(onSaved)
+                  .then(async () => {
+                    await onCharactersReload(onSaved);
+                    setSaved(c.name);
+                  })
                   .catch((err: unknown) =>
                     setError(err instanceof Error ? err.message : String(err)),
                   );
@@ -206,8 +275,11 @@ function VoicePerCharacter({
             </select>
             {c.voice && !voice.voices.some((v) => v.id === c.voice) && (
               <span className="font-mono text-[10px] text-warn">
-                not on this machine — using the app's
+                not on this machine — using the fallback
               </span>
+            )}
+            {saved === c.name && (
+              <span className="font-mono text-[10px] text-go">applied</span>
             )}
           </div>
         ))}

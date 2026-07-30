@@ -65,6 +65,27 @@ body {
     );
 }
 
+/* **A native `<option>` popup inherits the page's `color` and not its
+   background.** With near-white ink on a light GTK popup that is white on white,
+   and it was unreadable in all four selects at once — a whole-app fault that
+   looks like a component fault. Both halves have to be stated explicitly; there
+   is no inheriting one and letting the platform pick the other. */
+select {
+  color: var(--color-ink);
+  background-color: var(--color-surface);
+}
+
+option {
+  color: var(--color-ink);
+  background-color: var(--color-surface);
+}
+
+option:checked,
+option:hover {
+  color: var(--color-void);
+  background-color: var(--color-signal);
+}
+
 /* Scrollbars that belong to the instrument rather than to the OS. */
 * {
   scrollbar-width: thin;

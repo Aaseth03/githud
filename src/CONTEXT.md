@@ -398,6 +398,22 @@ src-tauri/src/
   compiles on both sides and disagrees on the wire is the failure this codebase
   is least able to see** — one shared artefact both sides must satisfy is the
   only defence that does not depend on someone remembering.
+- **A native `<option>` popup inherits the page's `color` but not its background.**
+  With near-white ink on a light GTK popup that is white on white, and it was
+  unreadable in all four selects at once — a whole-app fault that presents as a
+  component fault. `select` and `option` both set colour *and* background
+  explicitly in `ui/styles/index.css`; there is no inheriting one and letting the
+  platform choose the other.
+- **A component must not re-fetch state its owner already holds.** `Settings`
+  called `useProjects()` and `useCharacters()` itself, so saving reloaded
+  *Settings* while every open tab kept the old answer until restart — a change
+  written to disk that looked like it had not applied. Same failure as the
+  `useVoice` hoist, and the same fix: one owner, everyone else takes a prop.
+- **A selector is not status.** The tab strip's voice chooser became obsolete the
+  moment voices went per-character: it was choosing the *fallback* for characters
+  with no voice of their own, which belongs in Settings beside the characters it
+  falls back for. The pill keeps health, AUTO, MUTE and the backlog, and now names
+  the fallback read-only.
 - **The writer of a file lives beside its reader.** `overrides::assign_character`
   and `character::set_voice` sit in the same modules as the parsers that read
   them back, and share their tests — a writer that drifts from its reader
