@@ -11,7 +11,8 @@ planning/
 ├─ CONTEXT.md
 ├─ milestones.md
 ├─ handoff.md                          where things stand, for a cold start
-├─ specs/                              (empty — .gitkeep)
+├─ specs/
+│  └─ character-renderers_spec.md      the sprite.kind registry, and what the deferred stacks wait on
 ├─ architecture/
 │  ├─ event-schema.md
 │  ├─ adapter-contract.md
@@ -52,8 +53,10 @@ planning/
    └─ 2026-07-30-D21-character-is-layered-parts.md
 ```
 
-`specs/` is real but currently empty — kept with a `.gitkeep` so the map matches
-disk.
+`specs/` holds the detail a decision record deliberately does not carry.
+`character-renderers_spec.md` is where the deferred character stacks — Live2D,
+Rive, Spine — are written down with what each is blocked on, so returning to one
+later does not mean re-doing the comparison.
 
 ## Routing
 
@@ -64,7 +67,7 @@ disk.
 | `architecture/` | Stable contracts | Before writing code that touches events, adapters, storage, or guardrails |
 | `decisions/` | Committed decisions (`YYYY-MM-DD-Dnn-title.md`) | Understanding *why*, or recording a new one |
 | `plans/` | Implementation plans (`YYYY-MM-DD-title.plan.md`) | Planning a feature before coding — start from `plans/_TEMPLATE.plan.md` |
-| `specs/` | Feature specs (`feature-name_spec.md`) | Spec'ing a feature in detail |
+| `specs/` | Feature specs (`feature-name_spec.md`) | Spec'ing a feature in detail, or recording an option deferred rather than dropped |
 
 ## Decisions D1–D21
 
