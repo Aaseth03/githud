@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CharacterSection, GraphicsSection } from "./CharacterSection";
+import { Select } from "./Select";
 import type { VoiceControls } from "../useVoice";
 import type { Characters, Project } from "../types";
 import { invoke } from "@tauri-apps/api/core";
@@ -229,20 +230,19 @@ function AudioSection() {
           microphone test below and refresh.
         </p>
       )}
-      <select
+      <Select
+        label="push-to-talk input device"
         value={chosen}
-        onChange={(e) => choose(e.target.value)}
-        className="w-full rounded border border-line bg-surface px-2 py-1.5 font-mono
-                   text-[11px] text-ink-dim focus-visible:border-signal-deep
-                   focus-visible:outline-none"
-      >
-        <option value="">system default ({webInputs.length} available)</option>
-        {webInputs.map((d) => (
-          <option key={d.deviceId} value={d.deviceId}>
-            {d.label || d.deviceId}
-          </option>
-        ))}
-      </select>
+        onChange={choose}
+        className="w-full font-mono text-[11px] text-ink-dim"
+        choices={[
+          { value: "", label: `system default (${webInputs.length} available)` },
+          ...webInputs.map((d) => ({
+            value: d.deviceId,
+            label: d.label || d.deviceId,
+          })),
+        ]}
+      />
       <p className="mt-1.5 text-[11px] text-ink-faint">
         {webOutputs.length} output{webOutputs.length === 1 ? "" : "s"} visible to
         the webview.

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { resolveCharacter, voiceFor } from "../character";
+import { Select } from "./Select";
 import { HOUSE_CHARACTER, type Characters, type Profile, type Project } from "../types";
 import type { VoiceControls } from "../useVoice";
 
@@ -108,26 +109,22 @@ export function CharacterSection({
                 {p.name}
               </span>
 
-              <select
+              <Select
+                label={`character for ${p.name}`}
                 value={p.character ?? ""}
                 disabled={saving === p.rel_path}
-                onChange={(e) => void assign(p.rel_path, e.target.value || null)}
-                className="rounded border border-line bg-surface px-2 py-1 text-xs text-ink
-                           focus-visible:outline-2 focus-visible:outline-offset-1
-                           focus-visible:outline-signal disabled:opacity-50"
-              >
-                {/* An empty value is not a character called "default" — it is the
-                    absence of an assignment, which is what resolves to the
-                    default. Conflating them would write a redundant line. */}
-                <option value="">— unassigned ({HOUSE_CHARACTER}) —</option>
-                {characters.profiles
-                  .filter((c) => c.name !== HOUSE_CHARACTER)
-                  .map((c) => (
-                    <option key={c.name} value={c.name}>
-                      {c.display}
-                    </option>
-                  ))}
-              </select>
+                onChange={(v) => void assign(p.rel_path, v || null)}
+                className="w-52 text-xs text-ink"
+                choices={[
+                  // An empty value is not a character called "default" — it is
+                  // the absence of an assignment, which is what resolves to the
+                  // default. Conflating them would write a redundant line.
+                  { value: "", label: `— unassigned (${HOUSE_CHARACTER}) —` },
+                  ...characters.profiles
+                    .filter((c) => c.name !== HOUSE_CHARACTER)
+                    .map((c) => ({ value: c.name, label: c.display })),
+                ]}
+              />
 
               <span
                 aria-hidden
@@ -220,20 +217,16 @@ function VoicePerCharacter({
 
       <div className="mt-3 flex items-center gap-3 rounded border border-line/70 bg-surface/40 px-2 py-1.5">
         <span className="w-40 shrink-0 text-xs text-ink-dim">Fallback voice</span>
-        <select
+        <Select
+          label="fallback voice"
           value={voice.voice ?? ""}
-          onChange={(e) => voice.setVoice(e.target.value || null)}
-          className="rounded border border-line bg-surface px-2 py-1 text-xs text-ink
-                     focus-visible:outline-2 focus-visible:outline-offset-1
-                     focus-visible:outline-signal"
-        >
-          <option value="">— none —</option>
-          {voice.voices.map((v) => (
-            <option key={v.id} value={v.id}>
-              {v.name}
-            </option>
-          ))}
-        </select>
+          onChange={(v) => voice.setVoice(v || null)}
+          className="w-52 text-xs text-ink"
+          choices={[
+            { value: "", label: "— none —" },
+            ...voice.voices.map((v) => ({ value: v.id, label: v.name })),
+          ]}
+        />
         <span className="font-mono text-[10px] text-ink-faint">
           used by any character with no voice of its own
         </span>
@@ -245,14 +238,15 @@ function VoicePerCharacter({
         {characters.map((c) => (
           <div key={c.name} className="flex items-center gap-3 py-1">
             <span className="w-40 shrink-0 truncate text-xs text-ink-dim">{c.display}</span>
-            <select
+            <Select
+              label={`voice for ${c.display}`}
               value={c.voice ?? ""}
-              onChange={(e) => {
+              onChange={(picked) => {
                 setError(null);
                 setSaved(null);
                 void invoke("character_voice", {
                   name: c.name,
-                  voice: e.target.value || null,
+                  voice: picked || null,
                 })
                   .then(async () => {
                     await onCharactersReload(onSaved);
@@ -262,17 +256,12 @@ function VoicePerCharacter({
                     setError(err instanceof Error ? err.message : String(err)),
                   );
               }}
-              className="rounded border border-line bg-surface px-2 py-1 text-xs text-ink
-                         focus-visible:outline-2 focus-visible:outline-offset-1
-                         focus-visible:outline-signal"
-            >
-              <option value="">— the app's voice —</option>
-              {voice.voices.map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.name}
-                </option>
-              ))}
-            </select>
+              className="w-52 text-xs text-ink"
+              choices={[
+                { value: "", label: "— the app's voice —" },
+                ...voice.voices.map((v) => ({ value: v.id, label: v.name })),
+              ]}
+            />
             {c.voice && !voice.voices.some((v) => v.id === c.voice) && (
               <span className="font-mono text-[10px] text-warn">
                 not on this machine — using the fallback
