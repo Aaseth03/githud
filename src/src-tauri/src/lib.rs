@@ -7,6 +7,7 @@
 pub mod agent;
 pub mod audio;
 pub mod card;
+pub mod character;
 pub mod git;
 pub mod guard;
 pub mod mic;
@@ -52,17 +53,26 @@ fn scan_projects() -> Result<ScanResult, String> {
     Ok(scan::scan_with(&root, DEFAULT_MAX_DEPTH, &overrides, error))
 }
 
-/// `config/projects.toml`, the committed half of the split store (D8).
+/// `config/`, the committed half of the split store (D8).
 ///
 /// Resolved relative to the repo during development. It becomes a bundled
 /// resource path when the app ships; that belongs with packaging, not here.
-fn overrides_path() -> PathBuf {
+fn config_dir() -> PathBuf {
     if let Ok(explicit) = std::env::var("GITHUD_CONFIG_DIR") {
-        return PathBuf::from(explicit).join("projects.toml");
+        return PathBuf::from(explicit);
     }
     // src-tauri/ → src/ → repo root → config/
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../config/projects.toml")
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../config")
+}
+
+/// The declared overrides (D10, D18).
+fn overrides_path() -> PathBuf {
+    config_dir().join("projects.toml")
+}
+
+/// Where character profiles live, centrally and never per-repo (D9).
+fn characters_dir() -> PathBuf {
+    config_dir().join("characters")
 }
 
 /// The absolute path being scanned, so the UI can show it rather than guess.
@@ -468,6 +478,24 @@ fn agent_available() -> bool {
     agent::Adapter::ClaudeCode.available()
 }
 
+// ── Characters (D9) ──────────────────────────────────────────────────────────
+
+/// Every profile in `config/characters/`, and every one that failed to load.
+///
+/// Both halves cross together. A profile that vanished because of a typo would
+/// otherwise look exactly like a profile nobody wrote — and the config screen is
+/// the only place that difference can be seen.
+#[tauri::command]
+fn characters_list() -> character::Characters {
+    character::load_all(&characters_dir())
+}
+
+/// The PNG frame set a profile points at, in mouth order.
+#[tauri::command]
+fn character_frames(dir: String) -> Result<Vec<character::Frame>, String> {
+    character::load_frames(&characters_dir(), &dir)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let terminals = pty::Terminals::new();
@@ -537,6 +565,8 @@ pub fn run() {
             voice_speak,
             voice_transcribe,
             audio_devices,
+            characters_list,
+            character_frames,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

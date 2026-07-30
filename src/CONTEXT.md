@@ -39,6 +39,10 @@ src/
 │  ├─ audio.test.ts
 │  ├─ capture.ts           recording without MediaRecorder — Web Audio → WAV
 │  ├─ capture.test.ts
+│  ├─ sprite.ts            what the mouth does, from the audio itself, pure
+│  ├─ sprite.test.ts
+│  ├─ fixtures/
+│  │  └─ voicebox-speech.wav  2.5s of real Voicebox output — silence, speech, a pause, speech
 │  ├─ useVoice.ts          speech in and out; owned by App, one per app
 │  ├─ hooks/
 │  │  └─ useProjects.ts    calls the scan command; parses nothing
@@ -76,6 +80,8 @@ src/
    │  │  ├─ event.rs       the normalized vocabulary the UI subscribes to
    │  │  └─ claude.rs      Claude Code adapter + line mapping + tests
    │  ├─ card.rs           the cached project card (D11)
+   │  ├─ character/
+   │  │  └─ mod.rs         character profiles (D9) — parse, load, frame sets
    │  ├─ audio.rs          what the machine's audio devices actually are
    │  ├─ mic.rs            webview media permission policy (Linux)
    │  ├─ reap.rs           orphaned sandboxes, and teardown on a signal
@@ -109,6 +115,7 @@ src/
 | `src-tauri/src/parse/` | The milestone contract | Never without changing `config/contracts/milestones.md` first |
 | `src-tauri/src/git/` | Status, diff, stack, tree | Anything the card or panels read |
 | `src-tauri/src/card.rs` | Assembling and caching the card | Changing what a project shows cold |
+| `src-tauri/src/character/` | Profile parsing, loading, frame sets (D9) | Changing what a character may declare |
 | `src-tauri/src/voice/` | Voicebox: health, voices, speech, transcription | Anything the app asks of Voicebox |
 | `src-tauri/src/mic.rs` | What the webview may access | Changing device permissions |
 | `src-tauri/src/reap.rs` | Reaping sandboxes a dead app left behind | Anything about process lifetime across a crash |
@@ -116,6 +123,7 @@ src/
 | `ui/audio.ts` | The chosen input, and what a capture meant | Changing capture selection or reporting |
 | `ui/capture.ts` | Recording, and the WAV that leaves the webview | Anything about how audio is captured |
 | `ui/voice.ts` | What is worth speaking (D15), health labels | Changing spoken output |
+| `ui/sprite.ts` | The amplitude envelope and what the mouth does with it | Anything about how a character moves |
 | `ui/agent.ts` | Event types + transcript reducer | Changing how a conversation is assembled |
 | `ui/panes.ts` | Chat \| Terminal sub-tab rules | Changing when a pane mounts or shows |
 | `src-tauri/src/lib.rs` | Tauri commands | Adding a command the UI can call |
@@ -138,7 +146,8 @@ src-tauri/src/
 ├─ guard/    bwrap scope + PATH shim generation              (M4 ✓)
 ├─ parse/    milestone parser                                (M5 ✓)
 ├─ voice/    Voicebox client — speech, ASR                   (M6 ✓)
-└─ reap.rs   orphaned sandbox sweep + signal teardown        (M6 ✓)
+├─ reap.rs   orphaned sandbox sweep + signal teardown        (M6 ✓)
+└─ character/ profiles, palettes, frame sets                 (M7)
 ```
 
 ## Rules that bite here
@@ -370,6 +379,26 @@ src-tauri/src/
   audio immediately gets a 404 that reads like a missing endpoint, and parsing
   those frames as JSON yields nothing — indistinguishable from "still working",
   so the wrong reader waits forever.
+- **Voicebox generates at 24 kHz; `capture.ts` writes 16 kHz.** They are both
+  16-bit mono PCM and it is tempting to treat one as the other. A hardcoded rate
+  would put the mouth progressively further behind the voice with every second
+  and report nothing — measured, not assumed: `ui/fixtures/voicebox-speech.wav`
+  is real output kept precisely so the rate is read rather than believed.
+- **The WAV chunk walk is not decoration.** `data` sits at offset 44 in
+  everything Voicebox emits today, and hardcoding that is the obvious shortcut.
+  A `LIST` chunk from a future version would then be read as PCM — and metadata
+  interpreted as audio is loud noise, so the mouth would flap through silence
+  with nothing to say why.
+- **The mouth is driven by a precomputed envelope, never by an `AnalyserNode`.**
+  Routing the playing element through a `MediaElementAudioSourceNode` diverts
+  its output, and an analyser not connected onward to `destination` makes
+  playback *silent with no error* — the fifth member of a family this webview
+  already has four of. Reading the samples up front fails the other way: the
+  worst case is a mouth moving on invented data.
+- **A synthetic envelope announces itself.** Audio that cannot be parsed still
+  animates, because a character frozen mid-sentence reads as a crash. But a
+  mouth on invented data must never be indistinguishable from a mouth on real
+  audio — only one of those is a fault, and only if it is visible.
 - Rust: `snake_case` modules and commands. React: `PascalCase.tsx` components,
   `kebab-case` elsewhere.
 

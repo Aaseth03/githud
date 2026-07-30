@@ -1,0 +1,37 @@
+# The house character.
+#
+# What a project with no `character` key in ../projects.toml resolves to, and
+# what the main tab shows — the main tab belongs to no project, so it gets this
+# one. There is no built-in face in the binary: if this file is missing, the app
+# says so rather than inventing a character (D9).
+#
+# Keys, all optional:
+#   display          what a human reads; defaults to the filename
+#   voice            a Voicebox voice id — pick it in Settings, not by hand
+#   palette.accent   the character's signal colour: stage, tab pill, focus ring
+#   palette.glow     the halo behind the sprite while it speaks
+#   palette.field    the wash the stage sits on
+#   sprite.kind      procedural | frames
+#   sprite.eyes      round | wide | narrow | visor      (procedural)
+#   sprite.mouth     round | wide | line                (procedural)
+#   sprite.dir       a folder under config/characters/  (frames)
+#
+# A character accents the instrument; it does not repaint it. Surfaces, lines
+# and ink stay the cockpit tokens in src/ui/styles/index.css, so no profile can
+# theme the app into unreadability.
+#
+# An absent colour means "not themed on that axis" — the app's own colour is
+# used. A colour that is present and malformed is an error, because a typo that
+# renders as unthemed is indistinguishable from having meant it.
+
+display = "HUD"
+
+[palette]
+accent = "#6ee7ff"
+glow   = "#1e6f85"
+field  = "#0a0d17"
+
+[sprite]
+kind  = "procedural"
+eyes  = "visor"
+mouth = "line"
