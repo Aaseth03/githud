@@ -1,6 +1,20 @@
 # Plan: M7 — Character
 
-**Date:** 2026-07-30 · **Executes:** M7 · **Status:** Draft
+**Date:** 2026-07-30 · **Executes:** M7 · **Status:** In progress, revised
+2026-07-30 by [D21](../decisions/2026-07-30-D21-character-is-layered-parts.md)
+
+> **Revision.** Phases 1–3 are done and unchanged: profiles, the amplitude
+> envelope, and the wire shape pinned from both sides. Phases 4–5 shipped a
+> **procedural** face and its placement, which did its job — it ran, and it
+> answered the question it existed to ask. It reads as a placeholder.
+>
+> D21 replaces the renderer, not the foundation. The envelope, the profile
+> contract, the resolution rules and the accent plumbing all survive untouched;
+> what changes is what draws the character and what makes it move. The
+> procedural face stays as the floor, so a fresh clone with no art still has
+> something on the main tab.
+>
+> The old phases 6–7 (assignment write-back, docs) are now 9–10.
 
 Every plan opens with this contract. It exists so that the repo-wide convention
 in `../../AGENTS.md` — *update the `CONTEXT.md` of any directory you add to* —
@@ -16,7 +30,9 @@ more than this.
 
 | Doc | Kind | Why |
 |---|---|---|
+| `../decisions/2026-07-30-D21-character-is-layered-parts.md` | Decision — working material | **Read first.** What a character is made of, what makes it move, and why the art is authored to a spec we do not yet render |
 | `../decisions/2026-07-28-D09-central-characters.md` | Decision — working material | Profiles live in `config/characters/`, never in the project they represent. The whole storage shape follows from this |
+| `../decisions/2026-07-28-D13-mechanical-work-is-scripted.md` | Decision — working material | Why the motion is a script and the pipeline is a script, and why neither may reach for a model |
 | `../decisions/2026-07-28-D08-split-store.md` | Decision — working material | Why the *assignment* is written to `config/` and the layout preference is not |
 | `../decisions/2026-07-28-D18-project-kinds.md` | Decision — working material | The precedent this follows: a declared fact the scan cannot derive, resolved centrally |
 | `../decisions/2026-07-28-D15-speak-summaries-only.md` | Decision — working material | The mouth is driven by what is actually spoken, which is already filtered |
@@ -137,65 +153,77 @@ build.
 Each phase is independently checkable, and each ends green before the next
 starts. Phases 1–3 are provable in tests; phase 4 onward needs eyes.
 
-1. **The profile, in Rust.** `character/mod.rs`: parse a profile from TOML,
+1. **✅ The profile, in Rust.** `character/mod.rs`: parse a profile from TOML,
    resolve a palette, validate the sprite kind, load every profile in
    `config/characters/`. Pure and Tauri-free like `overrides/` and `scan/`.
    A malformed profile is a named error, never a panic and never a silent
-   default. Commands: `characters_list`, `character_frames`. Ships two profiles
-   plus the house one, so "two visibly distinct rooms" has something to be.
-   *Checkable:* `cargo test` — parse, palette fallback, unknown-field rejection,
-   a missing directory being a state rather than a failure.
+   default.
 
-2. **The envelope, in TypeScript.** `sprite.ts`: `envelopeOf(bytes)` →
-   `Float32Array` of RMS per bucket, `mouthAt(envelope, seconds)` → 0‥1,
-   `frameAt` → which frame index a level selects, and `syntheticEnvelope` for the
-   fallback. Pure, no DOM.
-   *Checkable:* `vitest` — a hand-built WAV of known shape produces a known
-   envelope; silence produces zeros; a truncated header produces the fallback and
-   reports why; `mouthAt` past the end returns closed rather than reading off the
-   array.
+2. **✅ The envelope, in TypeScript.** `sprite.ts` — pure, and tested against
+   real Voicebox bytes. Found what it existed to find: **Voicebox generates at
+   24 kHz where `capture.ts` writes 16 kHz.**
 
-3. **The boundary, pinned.** `ui/types.ts` gains the profile types and
-   **asserts them against real JSON**, not against the derive. This is the M6
-   `Health` lesson applied before it can bite: a profile is a struct with an
-   enum in it, and an untagged enum crossing this boundary is the fault this
-   codebase is least able to see.
-   *Checkable:* a test that fails if the Rust shape changes without the TS shape
-   changing.
+3. **✅ The boundary, pinned.** One fixture, `ui/fixtures/characters.json`,
+   round-tripped by Rust and read by TypeScript as its own type. The M6 `Health`
+   lesson applied before it could bite.
 
-4. **The stage.** `CharacterStage.tsx` — the procedural SVG face, the rAF loop
-   writing `--mouth`, idle drift, blink, and the diagnostic line that names a
-   synthetic envelope when one is in use. Frame-set rendering behind the same
-   component, chosen by the profile.
-   *Checkable:* the app runs, the house character breathes on the main tab, and
-   the mouth moves in time with a spoken reply.
+4. **✅ The stage, procedurally.** `CharacterStage.tsx`, the rAF loop writing
+   `--mouth`, and the diagnostic line. **This phase's real output was the
+   finding**: it works and it reads as a placeholder, which is what produced
+   D21. Kept as the floor.
 
-5. **Placement and theme.** Centred on the main tab with chat beneath it;
-   shrunk beneath the file tree in a project tab (`ui-layout.md`). Accent
-   plumbed to the tab pill, the project header rule and the focus ring.
-   *Checkable:* two open project tabs are visibly different rooms from the tab
-   strip alone.
+5. **✅ Placement and theme.** Per `ui-layout.md`. Accent on the stage, the
+   header rule and every tab pill.
 
-6. **Assignment and the config screen.** `toml_edit` write-back, the
+6. **The parts spec, and the layered renderer.** A `layered` sprite kind: one
+   PNG per part, loaded through the existing `character_frames` path widened to
+   named parts. The spec is a contract — fixed canvas, named layers, declared
+   anchors — validated on load, because a set missing a mouth must fail loudly
+   rather than render as a character that never speaks. Art authored to Live2D's
+   PSD rules per D21, including the occluded regions.
+   *Checkable:* `cargo test` on the spec validation; the app renders a real
+   character in place of the procedural one.
+
+7. **Motion, and temperament.** The part that decides whether this milestone
+   lands: breathing, head bob and lean, blink by layer swap, mouth from the
+   envelope, and **spring-driven lag** so hair follows the head a beat late
+   rather than moving with it. Every rule a pure function in `motion.ts` —
+   the spring integrator, the blink scheduler, the state transitions — and the
+   numbers driving them come from the profile's `[temperament]`, not from the
+   binary.
+   *Checkable:* `vitest` on the spring and the scheduler (a spring must settle,
+   never oscillate forever; a blink must be deterministic given a seed); by eye,
+   the character is alive between replies rather than static.
+
+8. **Five states off the existing stream.** idle · listening · thinking ·
+   speaking · alarmed, reduced from what `activity.ts` already knows. No new
+   events, no new source of truth, no model in the loop. Plus the **WebGL probe
+   in Settings**, so whether this webview could ever host Live2D or Rive becomes
+   a fact.
+   *Checkable:* pure tests on the state reducer; by eye, the character leans in
+   while a tool call runs and startles on an error.
+
+9. **Assignment and the config screen.** `toml_edit` write-back, the
    `character_assign` command, and the Settings section: project → character,
-   character → voice from `voice_voices`, and a speak preview. A voice chosen
-   for a character overrides the global voice for that project's replies.
-   *Checkable:* assign a character in Settings, confirm `git diff config/projects.toml`
-   shows one added line and the comment header untouched.
+   character → voice from `voice_voices`, and a speak preview.
+   *Checkable:* assign a character in Settings, confirm `git diff
+   config/projects.toml` shows one added line and the comment header untouched.
 
-7. **Docs and counts.** `src/CONTEXT.md` rules, three `CONTEXT.md` trees,
-   `milestones.md` status, `handoff.md` rewritten. Test counts re-run before
-   they are written down.
+10. **Docs and counts.** `src/CONTEXT.md` rules, the `CONTEXT.md` trees,
+    `milestones.md` status, `handoff.md` rewritten. Test counts re-run before
+    they are written down.
 
 ### Risks
 
 | Risk | Cheapest way to find out early |
 |---|---|
-| Voicebox's WAV is not the layout `capture.ts` writes — a different bit depth, a `LIST` chunk before `data`, or IEEE float rather than PCM | Phase 2 first test is against **bytes captured from a real `voice_speak`**, not a synthetic WAV. Do this before building the parser, not after |
-| `audio.currentTime` in this webview is coarse or does not advance smoothly, making the mouth jump | Phase 4, first thing: log `currentTime` deltas across one rAF second. If it is coarse, interpolate between buckets — the envelope is already a curve |
-| A procedural face looks like a placeholder rather than a character, and the reward milestone lands flat | This is the real risk and it is aesthetic, so it goes to the user early: get one face on screen in phase 4 and ask before building the second and third |
-| `toml_edit` reformats something subtly on write | Phase 6 checks with `git diff`, and the assertion is one added line. A diff bigger than that fails the phase |
-| A 60 Hz loop over an open project tab with a live terminal drops frames | The loop writes one CSS property on one element and runs only while `speaking !== null`. If it still costs, cap it at 30 Hz — the mouth does not need 60 |
+| ~~Voicebox's WAV is not the layout `capture.ts` writes~~ | **Happened.** 24 kHz against 16 kHz, caught by testing against real bytes before writing the parser |
+| ~~A procedural face reads as a placeholder~~ | **Happened, by design.** It was built to be run and judged, and it produced D21 |
+| The layered character still does not read as alive, because parts alone are not the answer — motion is | Phase 7 is where the milestone is won or lost, so it is separated from phase 6 rather than bundled. Get one character breathing with springs before generating a second, exactly as with the procedural face |
+| The generated art cannot be cleanly separated into parts with occluded regions filled, making the Live2D upgrade path fictional | Prove it on **one** character by hand in phase 6, before M7.5 automates anything. If occlusion fill turns out to be impractical, that is a D21 amendment and better found now than after five characters exist |
+| `audio.currentTime` in this webview is coarse, making the mouth tick | `mouthAt` already interpolates between buckets. If it still ticks, the spring in phase 7 smooths it — the mouth can be driven through the same integrator as everything else |
+| A 60 Hz loop over an open project tab with a live terminal drops frames | The loop writes CSS properties on one element and runs only while something is sounding or settling. Springs stop being integrated once they are at rest, so an idle character costs one breath animation in CSS and no JS at all |
+| `toml_edit` reformats something subtly on write | Phase 9 checks with `git diff`, and the assertion is one added line. A diff bigger than that fails the phase |
 | Character voice and global voice fight over the player | One queue, one player, unchanged from M6. The character's voice selects the *voice id for a request*; it does not get its own player. Anything else reintroduces two voices talking over each other |
 
 ## Outputs
@@ -219,7 +247,12 @@ written.
 | `../../src/ui/types.ts` | Changed | Profile types, asserted against real JSON |
 | `../../src/ui/types.test.ts` | Changed | The boundary-shape assertions |
 | `../../src/ui/useVoice.ts` | Changed | Expose the in-flight speech as a ref, and accept a per-project voice override |
-| `../../src/ui/components/CharacterStage.tsx` | New | The stage — procedural face or frame set, and the rAF loop |
+| `../../src/ui/components/CharacterStage.tsx` | New | The stage — layered parts, procedural face or frame set, and the rAF loop |
+| `../../src/ui/motion.ts` | New | Springs, blink scheduling, the state machine. Pure |
+| `../../src/ui/motion.test.ts` | New | Per-rule tests — a spring settles, a blink is deterministic |
+| `../../src/ui/parts.ts` | New | The parts spec: names, anchors, what a valid set is. Pure |
+| `../../src/ui/parts.test.ts` | New | An incomplete set fails loudly rather than rendering |
+| `../../config/characters/<name>/` | New | One character made by hand — the artefact that proves the spec |
 | `../../src/ui/components/MainView.tsx` | Changed | The house character, centred |
 | `../../src/ui/components/ProjectView.tsx` | Changed | The character beneath the tree, and the accent rule |
 | `../../src/ui/components/TabStrip.tsx` | Changed | Accent on the per-tab pill |
@@ -243,3 +276,9 @@ written.
 reply in each: two visibly different rooms, two voices, and a mouth that moves
 with the audio and closes when it stops — with `cargo test`, `vitest`, clippy and
 oxlint green.
+
+**And the part no test can assert:** between replies the character is *alive* —
+breathing, blinking, hair settling after it moves — and while the agent works it
+is visibly attending rather than idling. If it reads as a mascot pasted next to
+the app rather than as something present in it, the milestone is not done,
+whatever the suite says.

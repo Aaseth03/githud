@@ -26,7 +26,8 @@ planning/
 │  ├─ 2026-07-28-m3-agent-channel.plan.md
 │  ├─ 2026-07-29-m5-panels-and-cards.plan.md
 │  ├─ 2026-07-29-m6-voice.plan.md
-│  └─ 2026-07-29-m6-settings-and-audio-devices.plan.md
+│  ├─ 2026-07-29-m6-settings-and-audio-devices.plan.md
+│  └─ 2026-07-30-m7-character.plan.md
 └─ decisions/
    ├─ 2026-07-28-D01-dual-channel.md
    ├─ 2026-07-28-D02-adapters-target-harnesses.md
@@ -47,7 +48,8 @@ planning/
    ├─ 2026-07-28-D17-vendor-icm.md
    ├─ 2026-07-28-D18-project-kinds.md
    ├─ 2026-07-28-D19-sandbox-scope.md
-   └─ 2026-07-29-D20-speech-is-a-script.md
+   ├─ 2026-07-29-D20-speech-is-a-script.md
+   └─ 2026-07-30-D21-character-is-layered-parts.md
 ```
 
 `specs/` is real but currently empty — kept with a `.gitkeep` so the map matches
@@ -64,18 +66,21 @@ disk.
 | `plans/` | Implementation plans (`YYYY-MM-DD-title.plan.md`) | Planning a feature before coding — start from `plans/_TEMPLATE.plan.md` |
 | `specs/` | Feature specs (`feature-name_spec.md`) | Spec'ing a feature in detail |
 
-## Decisions D1–D20
+## Decisions D1–D21
 
 D1–D15 were committed 2026-07-28 out of the design interview; D16–D18 followed
 the same day — D16 when a D7 assumption was tested and failed, D17 when M1 turned
 out to depend on a definition that had no home in the repo, and D18 when M1's
 first run flagged a third-party repo that was never going to carry ICM. D20 came
 out of M6 closing, when hearing the app speak made it obvious that *what* to say
-and *how* to say it are different problems. **Do not re-litigate them.**
-Supersede one with a new dated record that names what it replaces.
+and *how* to say it are different problems. D21 came out of M7's first face
+rendering, which is the only way anyone could have known it read as a
+placeholder. **Do not re-litigate them.** Supersede one with a new dated record
+that names what it replaces.
 
 The pattern is worth noticing: every decision after D15 came from *running the
-thing*, not from planning it.
+thing*, not from planning it. D21 is the clearest case — the procedural face was
+not a wrong turn, it was the experiment that produced the decision.
 
 | # | Decision |
 |---|---|
@@ -99,6 +104,7 @@ thing*, not from planning it.
 | D18 | [Projects have a kind](decisions/2026-07-28-D18-project-kinds.md) — ICM expectation follows from it; detection stays universal |
 | D19 | [The sandbox scope](decisions/2026-07-28-D19-sandbox-scope.md) — what the floor covers, and the D-Bus hole left open on purpose |
 | D20 | [Speech shaping is a script](decisions/2026-07-29-D20-speech-is-a-script.md), not a judgement — deterministic, with the lexicon as data the user owns |
+| D21 | [The character is layered parts driven by a script](decisions/2026-07-30-D21-character-is-layered-parts.md), authored to Live2D's spec so the ceiling stays reachable |
 
 ## Architecture
 
@@ -121,6 +127,7 @@ thing*, not from planning it.
 | 2026-07-29 | [M5 — panels and project cards](plans/2026-07-29-m5-panels-and-cards.plan.md) | **Done** — confirmed by hand |
 | 2026-07-29 | [M6 — voice](plans/2026-07-29-m6-voice.plan.md) | **Done** — validated by hand |
 | 2026-07-29 | [Settings — audio devices and voice diagnostics](plans/2026-07-29-m6-settings-and-audio-devices.plan.md) | **Done** — it found six bugs, then validated the fixes |
+| 2026-07-30 | [M7 — character](plans/2026-07-30-m7-character.plan.md) | **In progress** — rescoped by D21 once the first face ran |
 
 ## Plan contract
 

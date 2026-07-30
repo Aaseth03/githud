@@ -291,14 +291,71 @@ during the outage was spoken once it came back.
       when health goes down and that would silently lose replies
 
 ### M7 — Character
-**Status:** not-started
-**Validation:** two projects, two characters, two voices, visibly distinct rooms.
+**Status:** in-progress
+**Validation:** two projects, two characters, two voices, visibly distinct rooms
+— and the character reads as alive rather than as a placeholder, judged by eye.
 
-- [ ] Amplitude-driven sprite frames
-- [ ] Per-project character assignment
-- [ ] Themes
+Rescoped 2026-07-30 by [D21](decisions/2026-07-30-D21-character-is-layered-parts.md),
+after the first procedural face ran and answered the question it was built to
+ask: it works, and it reads as a placeholder. **Stepped motion is what makes
+something look mechanical**, so the liveliness budget goes into continuous
+transforms and into reacting to real events — not into a third-party runtime.
+
+- [x] Character profiles as committed TOML, resolved centrally (D9)
+- [x] Amplitude envelope read from the audio itself — pure, tested against real
+      Voicebox output, and it closes the mouth during a pause mid-reply
+- [x] The wire shape pinned from both sides against one shared fixture
+- [x] Per-project character assignment, read path
+- [x] Themes — accent on the stage, the header rule and every tab pill; a
+      character accents the instrument and structurally cannot repaint it
+- [x] A procedural face as the floor, so no character is ever missing
+- [ ] **Layered parts** (D21) — one PNG per part, animated by script:
+      breathing, head bob and lean, blink by layer swap, mouth from the
+      envelope, and spring-driven lag so hair follows the head rather than
+      moving with it
+- [ ] **Art authored to Live2D's PSD spec** — every part drawn complete
+      including the occluded regions, so `sprite.kind = "live2d"` stays
+      available later without redrawing anything
+- [ ] **Temperament as committed data** — idle energy, bob, blink rate, spring
+      stiffness, lean. A calm character and a jittery one are the same code and
+      different numbers the user edits
+- [ ] **Five states off the existing event stream**: idle, listening, thinking,
+      speaking, alarmed. No new events and no model in the loop — `activity.ts`
+      already reduces everything this needs
+- [ ] A WebGL probe in Settings, so whether this webview could ever run Live2D
+      or Rive is a fact rather than an assumption
+- [ ] One character made by hand, end to end — it exists to prove the parts
+      spec before M7.5 automates it
 - [ ] Character/voice config screen that picks from Voicebox's profiles API —
       voice *creation* stays in Voicebox, do not rebuild it
+- [ ] Assignment written back into `config/projects.toml` with its comment
+      block intact
+
+### M7.5 — Character creation pipeline
+**Status:** not-started
+**Validation:** one prompt produces a complete, valid character folder that the
+app renders without a code change — and the same seed produces it again.
+
+Split out of M7 deliberately. Automating a parts spec that nothing has rendered
+yet would be automating a guess, so M7 makes one character by hand first and
+this milestone automates what that proved.
+
+Local only, against the ComfyUI install already on this machine. **Nothing paid
+and nothing at runtime** — the app ships PNGs and a script, so no API bill and
+no model in the render path. D20's constraint on speech, applied to art.
+
+- [ ] `character-preview` — a prompt yields candidate portraits, front-facing
+      and neutral. Nothing downstream runs until a reference actually feels
+      right, because every part inherits from it
+- [ ] `character-parts` — the chosen reference drives the full layer set, with
+      occluded regions filled per D21, background removed, fixed canvas and
+      anchors so every part registers
+- [ ] `character-assemble` — writes `config/characters/<name>/` and a
+      `profile.toml` scaffold, then **validates against the parts spec**, so a
+      half-finished set fails loudly instead of rendering as a character with
+      no mouth
+- [ ] Seeds committed with the character, so the same input reproduces it
+- [ ] Scripted, not prompted (D13) — it drives ComfyUI's HTTP API headlessly
 
 ### M8 — Speech shaping
 **Status:** not-started
