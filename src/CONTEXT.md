@@ -43,13 +43,16 @@ src/
 │  ├─ sprite.test.ts
 │  ├─ character.ts         project → profile → accent → voice (D9), pure
 │  ├─ character.test.ts
+│  ├─ motion.ts            springs, blink, breathing, the five states — pure
+│  ├─ motion.test.ts
 │  ├─ fixtures/
 │  │  ├─ voicebox-speech.wav  2.5s of real Voicebox output — silence, speech, a pause, speech
 │  │  └─ characters.json      the character wire shape, asserted from both sides
 │  ├─ useVoice.ts          speech in and out; owned by App, one per app
 │  ├─ hooks/
 │  │  ├─ useProjects.ts    calls the scan command; parses nothing
-│  │  └─ useCharacters.ts  loads every profile once, for the whole app
+│  │  ├─ useCharacters.ts  loads every profile once, for the whole app
+│  │  └─ useCharacterState.ts  a posture, reduced from the agent stream
 │  ├─ components/
 │  │  ├─ Sidebar.tsx
 │  │  ├─ TabStrip.tsx
@@ -130,6 +133,7 @@ src/
 | `ui/voice.ts` | What is worth speaking (D15), health labels | Changing spoken output |
 | `ui/sprite.ts` | The amplitude envelope and what the mouth does with it | Anything about how a character moves |
 | `ui/character.ts` | Resolving a project to a profile, its accent and its voice | Anything about which character a project gets |
+| `ui/motion.ts` | Springs, blink scheduling, breathing, the five state poses | Anything about how a character *moves* |
 | `ui/agent.ts` | Event types + transcript reducer | Changing how a conversation is assembled |
 | `ui/panes.ts` | Chat \| Terminal sub-tab rules | Changing when a pane mounts or shows |
 | `src-tauri/src/lib.rs` | Tauri commands | Adding a command the UI can call |
@@ -392,6 +396,42 @@ src-tauri/src/
   compiles on both sides and disagrees on the wire is the failure this codebase
   is least able to see** — one shared artefact both sides must satisfy is the
   only defence that does not depend on someone remembering.
+- **Liveliness is the motion model, not the renderer.** A Live2D model with a
+  lazy idle loop is as dead as a PNG, and the first procedural face proved the
+  converse — it was competent and read as a placeholder because its motion was
+  stepped. What reads as alive is *continuous* motion with lag in it: breathing
+  on two incommensurable periods so it never visibly repeats, a head that arrives
+  at a pose rather than snapping to it, and an antenna chasing the head's
+  **current** angle rather than its target, so it is always a beat behind. Chase
+  the target and both arrive together and the antenna looks welded on.
+- **The springs are critically damped, and that is a decision.** An under-damped
+  spring wobbles, which reads as a bug rather than as weight; an over-damped one
+  is indistinguishable from a slow lerp. And `dt` is clamped: a backgrounded tab
+  resumes with a `dt` of seconds, and integrating that unclamped makes the
+  character flinch every time you return to the window.
+- **The blink is deterministic and is not a metronome.** `Math.random()` cannot
+  be tested and "it looked different that time" is not something anyone should
+  debug — but a *regular* blink reads as a machine, so the schedule is a hash of
+  the blink index with gaps within ±40%. Nonsense input opens the eyes rather
+  than closing them: a character stuck with its eyes shut reads as broken, where
+  one that never blinks only reads as still.
+- **The mouth is the one thing that is never smoothed.** Everything else runs
+  through a spring; the mouth comes straight from the audio's envelope, because
+  the entire point is that it tracks what is actually sounding.
+- **There are no CSS keyframes on the character.** A CSS animation and a JS
+  transform on the same element fight, and the loser is whichever ran last. The
+  loop owns `transform` on the figure, the head, the antenna, the eyes and the
+  mouth; the stylesheet owns colour and `transform-box`. `prefers-reduced-motion`
+  therefore needs its own rule, because the global animation override cannot
+  reach a transform written from JavaScript.
+- **The startle settles; the error log does not.** A character alarmed until the
+  next turn would be wrong about the present on a session that errors and then
+  goes quiet. The *record* persists in the Activity panel, which is where
+  principle 5 lives — the character is a reaction, and reactions decay.
+- **A part set is validated on load, and never falls back.** One part at another
+  size puts every feature fraction somewhere else on it — a head two pixels off
+  its neck. Falling back to `procedural` would render *a* character and look like
+  it worked, which is how an afternoon goes into looking for a bug in a palette.
 - **The character's animation loop never goes through React.** `App` owns the
   voice and every open tab stays mounted, so a level in state would re-render
   every terminal wrapper and every transcript sixty times a second while the app

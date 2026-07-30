@@ -2,80 +2,123 @@ import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { accentOf } from "../character";
 import { frameAt, mouthAt } from "../sprite";
+import {
+  advance,
+  motion,
+  poseOf,
+  targetFor,
+  type CharacterState,
+  type Motion,
+} from "../motion";
 import type { LiveSpeech } from "../useVoice";
-import type { Eyes, MouthShape, Profile } from "../types";
+import type { Eyes, MouthShape, Part, Point, Profile } from "../types";
 
 /**
- * The character, moving with what is actually being said.
+ * The character, moving with what is being said and with what is happening.
  *
  * **The animation loop does not go through React.** `App` owns the voice and
  * every open tab stays mounted, so a level in state would re-render every
  * terminal wrapper and every transcript sixty times a second while the app
- * talks. This runs its own `requestAnimationFrame` while something is sounding
- * and writes one CSS custom property; nothing above it re-renders at all.
+ * talks. This runs its own `requestAnimationFrame` and writes CSS properties
+ * straight onto three elements; nothing above it re-renders at all.
  *
- * The loop is also the only thing that starts it: no sound, no frames, no cost.
+ * All the rules live in `../motion.ts`, pure and tested. This file is the part
+ * that has to touch the DOM, and it is deliberately the only part.
  */
 export function CharacterStage({
   profile,
   live,
   speaking,
+  state,
   problem,
+  visible = true,
   size = "stage",
 }: {
   profile: Profile | null;
   /** What is sounding, read imperatively. See `LiveSpeech`. */
   live: React.RefObject<LiveSpeech | null>;
   speaking: boolean;
+  /** Reduced from the event stream by `useCharacterState`. */
+  state: CharacterState;
   /** A resolution failure, surfaced rather than drawn around. */
   problem: string | null;
+  /** A character in a hidden tab must not burn frames. */
+  visible?: boolean;
   size?: "stage" | "inset";
 }) {
-  const root = useRef<HTMLDivElement>(null);
-  const { frames, error: frameError } = useFrames(profile);
+  const figure = useRef<HTMLDivElement>(null);
+  const headGroup = useRef<HTMLDivElement>(null);
+  const antennaGroup = useRef<HTMLDivElement>(null);
+  const eyesGroup = useRef<SVGGElement>(null);
+  const mouthShape = useRef<SVGGElement>(null);
   const frameEls = useRef<(HTMLImageElement | null)[]>([]);
-  /**
-   * Why the mouth is moving on invented data, when it is.
-   *
-   * State, but it changes at most once per chunk — the loop only calls the
-   * setter when the value actually differs, so this is not a per-frame render.
-   */
+  const springs = useRef<Motion>(motion());
+
+  const { frames, error: frameError } = useFrames(profile);
+  const { parts, error: partsError } = useParts(profile);
   const [synthetic, setSynthetic] = useState<string | null>(null);
 
-  useEffect(() => {
-    const el = root.current;
-    if (!el) return;
+  const temperament = profile?.temperament;
 
-    // Nothing is sounding: close the mouth once and run no loop at all.
-    if (!speaking) {
-      el.style.setProperty("--mouth", "0");
-      showFrame(frameEls.current, 0);
-      setSynthetic(null);
-      return;
-    }
+  useEffect(() => {
+    if (!visible || !temperament) return;
 
     let raf = 0;
-    let shown = -1;
+    let last = performance.now();
+    const startedAt = last;
+    let shownFrame = -1;
     let reported: string | null = null;
 
-    const tick = () => {
-      const now = live.current;
-      // Between chunks there is nothing playing, and a mouth held open across
-      // that gap is the tell for a loop that outlived its audio.
-      const level = now ? mouthAt(now.envelope, now.audio.currentTime) : 0;
-      el.style.setProperty("--mouth", level.toFixed(3));
+    const tick = (now: number) => {
+      const dt = (now - last) / 1000;
+      last = now;
+      const seconds = (now - startedAt) / 1000;
+
+      // Between chunks nothing is playing, and a mouth held open across that gap
+      // is the tell for a loop that outlived its audio.
+      const sounding = live.current;
+      const level =
+        speaking && sounding
+          ? mouthAt(sounding.envelope, sounding.audio.currentTime)
+          : 0;
+
+      springs.current = advance(
+        springs.current,
+        targetFor(state, temperament),
+        dt,
+        temperament,
+      );
+      const pose = poseOf(springs.current, seconds, level, state, temperament);
+
+      if (figure.current) {
+        figure.current.style.setProperty("--mouth", pose.mouth.toFixed(3));
+        figure.current.style.transform =
+          `translateY(${(-pose.rise * 100).toFixed(3)}%) scale(${pose.breathe.toFixed(4)})`;
+      }
+      if (headGroup.current) {
+        headGroup.current.style.transform =
+          `translateY(${(pose.headLean * 100).toFixed(3)}%) rotate(${pose.headTilt.toFixed(3)}deg)`;
+      }
+      if (antennaGroup.current) {
+        antennaGroup.current.style.transform = `rotate(${pose.antennaTilt.toFixed(3)}deg)`;
+      }
+      if (eyesGroup.current) {
+        eyesGroup.current.style.transform = `scaleY(${Math.max(pose.eyes, 0.02).toFixed(3)})`;
+      }
+      if (mouthShape.current) {
+        mouthShape.current.style.transform =
+          `scaleY(${(0.12 + pose.mouth * 1.5).toFixed(3)})`;
+      }
 
       if (frameEls.current.length > 0) {
-        const index = frameAt(level, frameEls.current.length);
-        // Only touch the DOM when the frame actually changes; at 60 Hz across a
-        // three-frame set this is most ticks doing nothing.
-        if (index !== shown) {
+        const index = frameAt(pose.mouth, frameEls.current.length);
+        if (index !== shownFrame) {
           showFrame(frameEls.current, index);
-          shown = index;
+          shownFrame = index;
         }
       }
 
-      const why = now?.envelope.synthetic ?? null;
+      const why = sounding?.envelope.synthetic ?? null;
       if (why !== reported) {
         reported = why;
         setSynthetic(why);
@@ -86,39 +129,60 @@ export function CharacterStage({
 
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [speaking, live, frames.length]);
+  }, [visible, temperament, state, speaking, live, frames.length]);
 
   const inset = size === "inset";
-  const accent = accentOf(profile);
+  const layered = parts.length > 0 ? parts : null;
+  const canvas = layered?.[0];
+  const face = profile?.sprite.kind === "layered" ? profile.sprite.face : null;
+  const pivot = profile?.sprite.kind === "layered" ? profile.sprite.pivot : null;
 
   return (
     <div
       className={`character-stage relative flex flex-col items-center justify-center overflow-hidden ${
-        inset ? "gap-1 p-3" : "gap-4 p-8"
+        inset ? "gap-1 p-3" : "gap-4 p-6"
       }`}
-      style={accent as React.CSSProperties}
-      data-speaking={speaking ? "" : undefined}
+      style={accentOf(profile) as React.CSSProperties}
+      data-state={state}
     >
-      {/* The field this character sits on. Behind everything, and the only
-          thing a profile may repaint. */}
       <div className="character-field pointer-events-none absolute inset-0" />
 
       <div
-        ref={root}
+        ref={figure}
         className="character-figure relative"
-        style={{ ["--mouth" as string]: "0", width: inset ? 84 : 200 }}
+        style={{
+          ["--mouth" as string]: "0",
+          width: inset ? 96 : 240,
+          aspectRatio: canvas ? `${canvas.width} / ${canvas.height}` : "1 / 1",
+        }}
       >
         <div className="character-glow pointer-events-none absolute inset-0" />
-        {frames.length > 0 ? (
+
+        {layered ? (
+          <LayeredFigure
+            parts={layered}
+            face={face}
+            pivot={pivot}
+            headRef={headGroup}
+            antennaRef={antennaGroup}
+            eyesRef={eyesGroup}
+            mouthRef={mouthShape}
+          />
+        ) : frames.length > 0 ? (
           <FrameSet frames={frames} refs={frameEls} />
         ) : (
-          <ProceduralFace profile={profile} />
+          <ProceduralFace
+            profile={profile}
+            headRef={headGroup}
+            eyesRef={eyesGroup}
+            mouthRef={mouthShape}
+          />
         )}
       </div>
 
       {!inset && profile && (
         <div className="relative text-center">
-          <div className="text-sm tracking-[0.24em] text-ink-dim uppercase">
+          <div className="text-[11px] tracking-[0.28em] text-ink-dim uppercase">
             {profile.display}
           </div>
         </div>
@@ -126,18 +190,155 @@ export function CharacterStage({
 
       {/* Nothing is hidden (principle 5). A mouth on invented data must not be
           indistinguishable from a mouth on real audio, and a character that
-          could not be resolved must not just be absent. */}
-      {(problem ?? frameError ?? synthetic) && (
+          could not be resolved must not simply be absent. */}
+      {(problem ?? partsError ?? frameError ?? synthetic) && (
         <p
           className={`relative max-w-full text-center font-mono text-warn ${
             inset ? "text-[9px] leading-tight" : "text-[10px]"
           }`}
-          title={problem ?? frameError ?? `animating on synthetic audio: ${synthetic}`}
+          title={
+            problem ??
+            partsError ??
+            frameError ??
+            `animating on synthetic audio: ${synthetic}`
+          }
         >
-          {problem ?? frameError ?? "synthetic mouth — audio unreadable"}
+          {problem ?? partsError ?? frameError ?? "synthetic mouth — audio unreadable"}
         </p>
       )}
     </div>
+  );
+}
+
+/** `transform-origin` from a pivot fraction, or the element's centre. */
+function origin(p: Point | null | undefined): string {
+  return p ? `${(p[0] * 100).toFixed(2)}% ${(p[1] * 100).toFixed(2)}%` : "50% 60%";
+}
+
+/**
+ * Layered parts, stacked and transformed (D21).
+ *
+ * Each part is a full-canvas PNG so they register by position with no offsets to
+ * get wrong. The head and antenna get their own wrapper purely so each can
+ * rotate about its own declared pivot.
+ */
+function LayeredFigure({
+  parts,
+  face,
+  pivot,
+  headRef,
+  antennaRef,
+  eyesRef,
+  mouthRef,
+}: {
+  parts: Part[];
+  face: import("../types").Face | null;
+  pivot: import("../types").Pivots | null;
+  headRef: React.RefObject<HTMLDivElement | null>;
+  antennaRef: React.RefObject<HTMLDivElement | null>;
+  eyesRef: React.RefObject<SVGGElement | null>;
+  mouthRef: React.RefObject<SVGGElement | null>;
+}) {
+  const at = (name: string) => parts.find((p) => p.name === name);
+  const canvas = parts[0]!;
+
+  return (
+    <div className="absolute inset-0">
+      {/* The shadow stays put: it is contact with the ground, so moving it with
+          the body would read as the character floating. */}
+      {at("shadow") && <Layer part={at("shadow")!} />}
+      {at("body") && <Layer part={at("body")!} />}
+
+      <div
+        ref={headRef}
+        className="character-head-group absolute inset-0"
+        style={{ transformOrigin: origin(pivot?.head) }}
+      >
+        {at("head") && <Layer part={at("head")!} />}
+        {face && (
+          <Face
+            face={face}
+            width={canvas.width}
+            height={canvas.height}
+            eyesRef={eyesRef}
+            mouthRef={mouthRef}
+          />
+        )}
+      </div>
+
+      {at("antenna") && (
+        <div
+          ref={antennaRef}
+          className="character-antenna-group absolute inset-0"
+          style={{ transformOrigin: origin(pivot?.antenna) }}
+        >
+          <Layer part={at("antenna")!} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Layer({ part }: { part: Part }) {
+  return (
+    <img
+      src={part.src}
+      alt=""
+      draggable={false}
+      className="pointer-events-none absolute inset-0 h-full w-full select-none"
+    />
+  );
+}
+
+/**
+ * The eyes and mouth, drawn over the art rather than baked into it.
+ *
+ * This is what makes a blink and a syllable *continuous* — a real number scales
+ * a vector, where swapping between an open and a shut PNG can only step. The
+ * `viewBox` is the part canvas's own pixel size, so the fractions in the profile
+ * land exactly where they were measured and circles stay circular.
+ */
+function Face({
+  face,
+  width,
+  height,
+  eyesRef,
+  mouthRef,
+}: {
+  face: import("../types").Face;
+  width: number;
+  height: number;
+  eyesRef: React.RefObject<SVGGElement | null>;
+  mouthRef: React.RefObject<SVGGElement | null>;
+}) {
+  return (
+    <svg
+      viewBox={`0 0 ${width} ${height}`}
+      className="pointer-events-none absolute inset-0 h-full w-full"
+      aria-hidden
+    >
+      <g ref={eyesRef} className="character-eyes">
+        {face.eyes.map(([x, y], i) => (
+          <ellipse
+            key={i}
+            cx={x * width}
+            cy={y * height}
+            rx={face.eye_r[0] * width}
+            ry={face.eye_r[1] * height}
+            fill={face.ink}
+          />
+        ))}
+      </g>
+      <g ref={mouthRef} className="character-mouth">
+        <ellipse
+          cx={face.mouth[0] * width}
+          cy={face.mouth[1] * height}
+          rx={face.mouth_r[0] * width}
+          ry={face.mouth_r[1] * height}
+          fill={face.ink}
+        />
+      </g>
+    </svg>
   );
 }
 
@@ -177,28 +378,38 @@ function FrameSet({
 }
 
 /**
- * The face, drawn from the palette.
+ * The floor: a face drawn from the palette, with no art at all.
  *
- * The default, and the reason no character is ever missing while art does not
- * exist yet. Everything that moves is a `transform` or an `opacity`, so the
- * whole thing stays on the compositor.
+ * It reads as a placeholder, which is exactly its job — it guarantees no
+ * character is ever missing, including on a fresh clone before any art exists.
+ * D21 replaced it as the *default*, not as the fallback.
  */
-function ProceduralFace({ profile }: { profile: Profile | null }) {
+function ProceduralFace({
+  profile,
+  headRef,
+  eyesRef,
+  mouthRef,
+}: {
+  profile: Profile | null;
+  headRef: React.RefObject<HTMLDivElement | null>;
+  eyesRef: React.RefObject<SVGGElement | null>;
+  mouthRef: React.RefObject<SVGGElement | null>;
+}) {
   const sprite = profile?.sprite;
   const eyes: Eyes = sprite?.kind === "procedural" ? sprite.eyes : "round";
   const mouth: MouthShape = sprite?.kind === "procedural" ? sprite.mouth : "round";
 
   return (
-    <svg viewBox="0 0 100 100" className="character-svg relative w-full" aria-hidden>
-      <defs>
-        <radialGradient id="char-head" cx="50%" cy="38%" r="62%">
-          <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.30" />
-          <stop offset="70%" stopColor="var(--accent-glow)" stopOpacity="0.16" />
-          <stop offset="100%" stopColor="var(--accent-glow)" stopOpacity="0.03" />
-        </radialGradient>
-      </defs>
+    <div ref={headRef} className="absolute inset-0" style={{ transformOrigin: "50% 70%" }}>
+      <svg viewBox="0 0 100 100" className="character-svg relative w-full" aria-hidden>
+        <defs>
+          <radialGradient id="char-head" cx="50%" cy="38%" r="62%">
+            <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.30" />
+            <stop offset="70%" stopColor="var(--accent-glow)" stopOpacity="0.16" />
+            <stop offset="100%" stopColor="var(--accent-glow)" stopOpacity="0.03" />
+          </radialGradient>
+        </defs>
 
-      <g className="character-head">
         <circle cx="50" cy="50" r="38" fill="url(#char-head)" />
         <circle
           cx="50"
@@ -210,16 +421,16 @@ function ProceduralFace({ profile }: { profile: Profile | null }) {
           strokeWidth="1.2"
         />
 
-        <g className="character-eyes">
+        <g ref={eyesRef} className="character-eyes">
           <Eye shape={eyes} side="left" />
           <Eye shape={eyes} side="right" />
         </g>
 
-        <g className="character-mouth">
+        <g ref={mouthRef} className="character-mouth">
           <Mouth shape={mouth} />
         </g>
-      </g>
-    </svg>
+      </svg>
+    </div>
   );
 }
 
@@ -255,12 +466,44 @@ function Mouth({ shape }: { shape: MouthShape }) {
 }
 
 /**
- * Load a profile's PNG frames, if it has any.
+ * Load a layered part set.
  *
- * A frame set that cannot be read is reported rather than silently falling back
- * to the procedural face — a character quietly rendering as something else is
- * how you spend an afternoon looking for a typo in a palette.
+ * A set that fails validation is reported rather than silently falling back to
+ * the procedural face — a character quietly rendering as something else is how
+ * an afternoon goes into looking for a bug in a palette.
  */
+function useParts(profile: Profile | null) {
+  const [parts, setParts] = useState<Part[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const dir = profile?.sprite.kind === "layered" ? profile.sprite.dir : null;
+
+  useEffect(() => {
+    if (!dir) {
+      setParts([]);
+      setError(null);
+      return;
+    }
+    let live = true;
+    void invoke<Part[]>("character_parts", { dir })
+      .then((p) => {
+        if (!live) return;
+        setParts(p);
+        setError(null);
+      })
+      .catch((e: unknown) => {
+        if (!live) return;
+        setParts([]);
+        setError(`parts: ${e instanceof Error ? e.message : String(e)}`);
+      });
+    return () => {
+      live = false;
+    };
+  }, [dir]);
+
+  return { parts, error };
+}
+
+/** Load a profile's PNG frame set, if it has one. */
 function useFrames(profile: Profile | null) {
   const [frames, setFrames] = useState<{ name: string; src: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -274,7 +517,11 @@ function useFrames(profile: Profile | null) {
     }
     let live = true;
     void invoke<{ name: string; src: string }[]>("character_frames", { dir })
-      .then((f) => live && (setFrames(f), setError(null)))
+      .then((f) => {
+        if (!live) return;
+        setFrames(f);
+        setError(null);
+      })
       .catch((e: unknown) => {
         if (!live) return;
         setFrames([]);

@@ -504,6 +504,12 @@ fn character_frames(dir: String) -> Result<Vec<character::Frame>, String> {
     character::load_frames(&characters_dir(), &dir)
 }
 
+/// A layered character's parts, in draw order and validated against the spec.
+#[tauri::command]
+fn character_parts(dir: String) -> Result<Vec<character::Part>, String> {
+    character::load_layers(&characters_dir(), &dir)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let terminals = pty::Terminals::new();
@@ -575,6 +581,7 @@ pub fn run() {
             audio_devices,
             characters_list,
             character_frames,
+            character_parts,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

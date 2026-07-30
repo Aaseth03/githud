@@ -85,12 +85,15 @@ body {
   background-clip: content-box;
 }
 
-/* The character (M7).
+/* The character (M7 · D21).
 
-   Everything that moves is a `transform` or an `opacity`, so the whole figure
-   stays on the compositor — and the only thing driving it is `--mouth`, which
-   the stage's animation frame writes directly onto the element. Nothing here
-   re-renders React, and nothing here animates a layout property.
+   **The animation loop owns every transform here.** `CharacterStage` writes
+   `transform` directly onto the figure, the head group, the antenna group, the
+   eyes and the mouth from its own `requestAnimationFrame`. There are
+   deliberately no keyframes for breathing or blinking: a CSS animation and a JS
+   transform on the same element fight, and the loser is whichever ran last.
+   What lives here is only what the loop does not touch — colour, glow, and the
+   transform-box declarations that make a rotation pivot mean what it says.
 
    A profile may set `--accent`, `--accent-glow` and `--accent-field`, and
    nothing else. Surfaces, lines and ink stay the tokens above, which is what
@@ -102,7 +105,7 @@ body {
 .character-field {
   background-image:
     radial-gradient(
-      ellipse 70% 60% at 50% 42%,
+      ellipse 70% 60% at 50% 45%,
       color-mix(in oklab, var(--accent-field, #0a0d17) 92%, transparent),
       transparent 72%
     ),
@@ -113,63 +116,39 @@ body {
     );
 }
 
-/* The halo brightens with the voice rather than pulsing on a timer. */
+/* The halo brightens with the voice rather than pulsing on a timer, so it is
+   driven by `--mouth` and needs no animation of its own. */
 .character-glow {
   background: radial-gradient(
-    circle at 50% 50%,
-    color-mix(in oklab, var(--accent, #6ee7ff) 34%, transparent),
+    circle at 50% 45%,
+    color-mix(in oklab, var(--accent, #6ee7ff) 30%, transparent),
     transparent 62%
   );
-  opacity: calc(0.18 + var(--mouth) * 0.5);
-  transform: scale(calc(0.94 + var(--mouth) * 0.12));
-  will-change: opacity, transform;
+  opacity: calc(0.14 + var(--mouth) * 0.42);
+  will-change: opacity;
 }
 
-/* Idle drift: the character is alive between replies, not a static asset. */
 .character-figure {
-  animation: character-breathe 5.5s ease-in-out infinite;
+  /* The loop writes `transform`; this only tells the compositor to expect it. */
+  will-change: transform;
 }
 
-@keyframes character-breathe {
-  0%,
-  100% {
-    transform: translateY(0) scale(1);
-  }
-  50% {
-    transform: translateY(-2.5%) scale(1.012);
-  }
+.character-head-group,
+.character-antenna-group {
+  will-change: transform;
 }
 
 .character-svg {
   overflow: visible;
 }
 
-/* The mouth. `transform-box: fill-box` makes the origin the shape's own centre
-   rather than the SVG's, so it opens downward and upward evenly instead of
-   sliding off its face. */
+/* `fill-box` makes a scale happen about the shape's own centre rather than the
+   SVG's, so an eye closes on itself instead of sliding up the face. */
+.character-eyes,
 .character-mouth {
   transform-box: fill-box;
   transform-origin: center;
-  transform: scaleY(calc(0.14 + var(--mouth) * 1.5));
   will-change: transform;
-}
-
-.character-eyes {
-  transform-box: fill-box;
-  transform-origin: center;
-  animation: character-blink 6.4s ease-in-out infinite;
-}
-
-/* A blink is two frames of a long cycle: mostly open, briefly not. */
-@keyframes character-blink {
-  0%,
-  92%,
-  100% {
-    transform: scaleY(1);
-  }
-  95% {
-    transform: scaleY(0.08);
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -178,6 +157,17 @@ body {
   *::after {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
+  }
+
+  /* The character's motion is JavaScript, so the rule above cannot reach it.
+     Holding it still is the honest reading of the preference — and it still
+     shows state through colour and the glow, so nothing is hidden. */
+  .character-figure,
+  .character-head-group,
+  .character-antenna-group,
+  .character-eyes,
+  .character-mouth {
+    transform: none !important;
   }
 }
 

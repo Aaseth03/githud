@@ -56,7 +56,46 @@ export type MouthShape = "round" | "wide" | "line";
  */
 export type Sprite =
   | { kind: "procedural"; eyes: Eyes; mouth: MouthShape }
-  | { kind: "frames"; dir: string };
+  | { kind: "frames"; dir: string }
+  | { kind: "layered"; dir: string; face: Face | null; pivot: Pivots };
+
+/** A point on the part canvas, as `[x, y]` fractions — never pixels. */
+export type Point = [number, number];
+
+/**
+ * Mirrors `character::Face`.
+ *
+ * Where the eyes and mouth are *drawn*, because they are deliberately not in the
+ * artwork: a blink and a spoken syllable must be continuous, and swapping
+ * between an open and a shut PNG is stepped.
+ */
+export interface Face {
+  eyes: Point[];
+  eye_r: Point;
+  mouth: Point;
+  mouth_r: Point;
+  ink: string;
+}
+
+/** Mirrors `character::Pivots`. Absent means that part does not rotate. */
+export interface Pivots {
+  head: Point | null;
+  antenna: Point | null;
+}
+
+/**
+ * Mirrors `character::Temperament`.
+ *
+ * The same code and different numbers is what makes a calm character and a
+ * jittery one two characters rather than two renderers.
+ */
+export interface Temperament {
+  idle: number;
+  bob: number;
+  lean: number;
+  blink_seconds: number;
+  spring: number;
+}
 
 /** Mirrors `character::Profile`. The name is the filename, never declared. */
 export interface Profile {
@@ -66,6 +105,16 @@ export interface Profile {
   voice: string | null;
   palette: Palette;
   sprite: Sprite;
+  temperament: Temperament;
+}
+
+/** Mirrors `character::Part` — one layer, ready to stack. */
+export interface Part {
+  name: string;
+  /** A `data:` URI. `img-src` already allows `data:`, so no CSP change. */
+  src: string;
+  width: number;
+  height: number;
 }
 
 /** Mirrors `character::ProfileError`. */

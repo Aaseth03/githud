@@ -10,6 +10,7 @@ import { FileViewer } from "./FileViewer";
 import { ProjectCard } from "./ProjectCard";
 import { CharacterStage } from "./CharacterStage";
 import { accentOf, type Resolved } from "../character";
+import { useCharacterState } from "../hooks/useCharacterState";
 import type { Card } from "../card";
 import type { VoiceControls } from "../useVoice";
 import { Splitter } from "./Splitter";
@@ -51,6 +52,9 @@ export function ProjectView({
   const [openFile, setOpenFile] = useState<string | null>(null);
   // What the user chose. Never overwritten by fitting — see split.ts.
   const [preferred, setPreferred] = useState(loadWidths);
+  // A third reader of the agent stream — a posture, where agent.ts reduces a
+  // transcript and activity.ts reduces panel state. No new events, no model.
+  const characterState = useCharacterState(project.rel_path, voice.speaking !== null);
   const [available, setAvailable] = useState(Number.POSITIVE_INFINITY);
   const columnsRef = useRef<HTMLDivElement | null>(null);
 
@@ -174,7 +178,9 @@ export function ProjectView({
               profile={character.profile}
               live={voice.live}
               speaking={voice.speaking !== null}
+              state={characterState}
               problem={character.problem}
+              visible={visible}
               size="inset"
             />
           </div>

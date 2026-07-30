@@ -40,31 +40,55 @@ describe("the wire shape", () => {
   it("is what the UI expects, field for field", () => {
     // Typed as `Characters` above, so `tsc` fails if the interface and the
     // fixture disagree. These assertions cover what types cannot: the values.
-    expect(WIRE.profiles).toHaveLength(2);
+    expect(WIRE.profiles).toHaveLength(3);
     expect(WIRE.profiles[0]!.name).toBe("hud");
     expect(WIRE.profiles[0]!.display).toBe("HUD");
     expect(WIRE.profiles[0]!.voice).toBeNull();
     expect(WIRE.profiles[0]!.palette.accent).toBe("#6ee7ff");
+    // Every character carries a temperament, even one that declared none.
+    expect(WIRE.profiles[0]!.temperament.blink_seconds).toBeGreaterThan(0);
   });
 
   it("discriminates a sprite on `kind`, not on a nested key", () => {
     // The exact failure `Health` shipped with: serde wrote `{"up": {…}}` while
     // the UI discriminated on a `status` field, so the check read `undefined`
     // and every speaker button lied for a month.
-    const procedural = WIRE.profiles[0]!.sprite;
-    const frames = WIRE.profiles[1]!.sprite;
+    //
+    // All three kinds appear in the fixture, so adding one cannot slip past.
+    const layered = WIRE.profiles[0]!.sprite;
+    const procedural = WIRE.profiles[1]!.sprite;
+    const frames = WIRE.profiles[2]!.sprite;
 
+    expect(layered.kind).toBe("layered");
     expect(procedural.kind).toBe("procedural");
     expect(frames.kind).toBe("frames");
     expect(Object.keys(procedural)).not.toContain("procedural");
 
     // And the branch actually narrows, which is the only reason the tag exists.
+    if (layered.kind !== "layered") throw new Error("wrong variant");
+    expect(layered.dir).toBe("hud");
+    expect(layered.face?.eyes).toHaveLength(2);
+    expect(layered.pivot.head).not.toBeNull();
+
     if (procedural.kind !== "procedural") throw new Error("wrong variant");
-    expect(procedural.eyes).toBe("visor");
-    expect(procedural.mouth).toBe("line");
+    expect(procedural.eyes).toBe("wide");
+    expect(procedural.mouth).toBe("round");
 
     if (frames.kind !== "frames") throw new Error("wrong variant");
-    expect(frames.dir).toBe("mia");
+    expect(frames.dir).toBe("relic");
+  });
+
+  it("keeps face geometry as fractions, never pixels", () => {
+    // A pixel value here lands the eye far off the character, and the only
+    // symptom is that the blink stopped working.
+    const layered = WIRE.profiles[0]!.sprite;
+    if (layered.kind !== "layered") throw new Error("wrong variant");
+    for (const [x, y] of layered.face!.eyes) {
+      expect(x).toBeGreaterThan(0);
+      expect(x).toBeLessThan(1);
+      expect(y).toBeGreaterThan(0);
+      expect(y).toBeLessThan(1);
+    }
   });
 
   it("carries load errors alongside the profiles that worked", () => {

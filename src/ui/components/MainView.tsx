@@ -2,6 +2,7 @@ import { shouldFlagIcm, type Project } from "../types";
 import { CharacterStage } from "./CharacterStage";
 import type { Resolved } from "../character";
 import type { VoiceControls } from "../useVoice";
+import { useCharacterState } from "../hooks/useCharacterState";
 
 /**
  * The main tab: the routing point.
@@ -26,6 +27,10 @@ export function MainView({
   character: Resolved;
   voice: VoiceControls;
 }) {
+  // The main tab owns no agent, so the house character has nothing to attend to
+  // — it breathes, blinks, and speaks. Passing null rather than inventing a
+  // project id keeps it from reacting to somebody else's work.
+  const state = useCharacterState(null, voice.speaking !== null);
   // Counts consider your own projects only. Including third-party or
   // superseded repos would restore exactly the noise D18 removes.
   const own = projects.filter((p) => p.kind === "own");
@@ -49,6 +54,7 @@ export function MainView({
             profile={character.profile}
             live={voice.live}
             speaking={voice.speaking !== null}
+            state={state}
             problem={character.problem}
           />
         </div>
