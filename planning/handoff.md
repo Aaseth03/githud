@@ -12,10 +12,16 @@ this file says what is in flight and what is waiting on a human.
 
 1. `../AGENTS.md` — Layer 0. Canary `GITHUD-L0-0728`.
 2. `../CONTEXT.md` — Layer 1, repo-wide.
-3. `CONTEXT.md` (this directory) — decisions D1–D23, architecture contracts.
-4. `../src/CONTEXT.md` — **the rules that bite.** Every hard-won lesson is a
-   bullet there. Read it before writing any code in `src/`.
-5. `milestones.md` — the roadmap.
+3. This file, for what is in flight.
+
+Then **one** Layer 2 workspace, chosen by what you are about to do — not all of
+them. `../CONTEXT.md` routes. If that is `src/`, its `CONTEXT.md` indexes
+`../src/lessons/`; read the one lessons file your change touches, not six.
+`milestones.md` when you are deciding what to build, `CONTEXT.md` here for
+decisions and architecture contracts.
+
+Reading all five of these cost 23k tokens before a line of code, which is how the
+lessons ended up split by subsystem in the first place.
 
 `../docs/guides/build-and-run.md` is the canonical home for anything about
 building, running, or launching. Do not rediscover it.
@@ -26,21 +32,34 @@ made goes there — not to `config/`.
 
 ## State
 
+Generated from `milestones.md` by `../ops/scripts/handoff-state.sh`. **Do not
+hand-edit between the markers** — change the milestone's `**Status:**` and re-run.
+This table used to be maintained by hand while this file declared `milestones.md`
+the only home for status; it happened to agree, which is the good outcome of a
+coin toss, not a process.
+
+<!-- BEGIN GENERATED: state -->
+
 | Milestone | Status |
 |---|---|
-| M0 — repo and ICM skeleton | done |
-| M1 — shell, scan, tabs | done |
-| M2 — embedded terminal | done |
-| M3 — agent channel | done |
-| M4 — guardrails | done |
-| M5 — panels and project cards | done — v1 complete |
-| M6 — voice | done — validated by hand 2026-07-29 |
-| M7 — character | **done — validated by hand 2026-07-30** |
-| M8 — app direction | not started — *this is the next build* |
-| M9 — avatar | not started — the aesthetic half of M7, carved out deliberately |
-| M10 — character creation pipeline | not started |
-| M11 — speech shaping | not started |
-| M12 — parallel and portable | not started |
+| M0 — Repo and ICM skeleton | done |
+| M1 — Shell, scan, tabs | done |
+| M2 — Embedded terminal | done |
+| M3 — Agent channel | done |
+| M4 — Guardrails | done |
+| M5 — Panels and project cards | done |
+| M6 — Voice | done |
+| M7 — Character | done |
+| M8 — App direction | not-started |
+| M9 — Avatar | not-started |
+| M10 — Character creation pipeline | not-started |
+| M11 — Speech shaping | not-started |
+| M12 — Parallel and portable | not-started |
+
+<!-- END GENERATED: state -->
+
+**M8 is the next build.** M9 is the aesthetic half of M7, carved out
+deliberately; see below.
 
 **Milestones were renumbered twice on 2026-07-30**, both times because the
 contract is `### M<n>` with an integer and `parse/` implements
@@ -146,8 +165,8 @@ What generalises beyond characters:
 
 ## Traps that have already cost time
 
-Each of these produced a wrong conclusion once. `../src/CONTEXT.md` carries the
-code-level versions; these are the workflow ones.
+Each of these produced a wrong conclusion once. `../src/lessons/` carries the
+code-level versions, split by what they constrain; these are the workflow ones.
 
 - **A stale Vite server serves a stale UI**, and this bit again on 2026-07-30. A
   backgrounded `tauri dev` outlives the shell that started it; `strictPort` then

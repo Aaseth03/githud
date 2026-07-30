@@ -55,6 +55,19 @@ written.
 |---|---|
 | | |
 
+Verified by `ops/scripts/check-context.sh`, not by remembering.
+
+### Lessons this earns
+
+Anything learned the expensive way goes to the one `src/lessons/` file that
+constrains it — **not** into `src/CONTEXT.md`, which is a contract and was once
+522 lines because this table did not exist. One bullet, naming what broke and what
+the wrong conclusion was; a lesson nobody can trace to a symptom cannot be used.
+
+| Lessons file | Bullet |
+|---|---|
+| | |
+
 ## Validation
 
 The command or observation that proves this plan is done. One line. It must be

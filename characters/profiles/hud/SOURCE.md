@@ -44,13 +44,16 @@ Negative:
 
 ## The parts
 
-Cut by `../../../ops/scripts/character-decompose.py`, deterministically, from
+Cut by `../../pipeline/character-decompose.py`, deterministically, from
 `reference.png` plus the measurements in `reference.json`:
 
 ```
-./ops/scripts/character-decompose.py \
-    config/characters/hud/reference.png config/characters/hud
+./characters/pipeline/character-decompose.py \
+    characters/profiles/hud/reference.png characters/profiles/hud
 ```
+
+Run from the repo root. It refuses to overwrite a committed set without
+`--force`.
 
 `reference.json` holds facts measured once about this image — the antenna seam at
 y=282, the neck seam at y=728 (the silhouette's narrowest row), the two eye
