@@ -1,25 +1,9 @@
-# The house character.
+# HUD — GIT HUD's own persona.
 #
-# What a project with no `character` key in ../../config/projects.toml resolves
-# to, and what the main tab shows — the main tab belongs to no project, so it
-# gets this one. There is no built-in face in the binary: if this file is
-# missing, the app says so rather than inventing a character (D9).
-#
-# Keys, all optional:
-#   display          what a human reads; defaults to the filename
-#   voice            a Voicebox voice id — pick it in Settings, not by hand
-#   palette.accent   the character's signal colour: stage, tab pill, focus ring
-#   palette.glow     the halo behind the sprite while it speaks
-#   palette.field    the wash the stage sits on
-#   sprite.kind      procedural | frames | layered
-#
-# A character accents the instrument; it does not repaint it. Surfaces, lines
-# and ink stay the cockpit tokens in src/ui/styles/index.css, so no profile can
-# theme the app into unreadability.
-#
-# An absent colour means "not themed on that axis" — the app's own colour is
-# used. A colour that is present and malformed is an error, because a typo that
-# renders as unthemed is indistinguishable from having meant it.
+# Assigned to the `githud` project in ../../config/projects.toml. **Not the
+# default**: an unconfigured project resolves to `default.toml`, because a project
+# that has not chosen a character has not chosen one, and handing it GIT HUD's own
+# persona would be putting words in its mouth.
 #
 # See ../parts_spec.md for what a layered part set must contain, and
 # hud/SOURCE.md for how this one was made.
@@ -66,11 +50,11 @@ antenna = [0.487, 0.232]
 #   blink_seconds  average gap between blinks; smaller is twitchier
 #   spring         secondary-motion stiffness, 0-1; low is floppy
 #
-# HUD is an instrument: composed, attentive, not fidgety. The antenna is the one
-# loose thing about it, so the spring is soft.
+# HUD is an instrument, but a lively one. The antenna is the loose thing about it,
+# so the spring is soft.
 [temperament]
-idle          = 0.45
-bob           = 0.55
-lean          = 0.5
-blink_seconds = 7.0
-spring        = 0.28
+idle          = 0.8
+bob           = 0.7
+lean          = 0.7
+blink_seconds = 5.0
+spring        = 0.22

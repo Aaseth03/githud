@@ -1,6 +1,28 @@
 {
   "profiles": [
     {
+      "name": "default",
+      "display": "GIT HUD",
+      "voice": null,
+      "palette": {
+        "accent": "#6ee7ff",
+        "glow": "#1e6f85",
+        "field": "#0a0d17"
+      },
+      "sprite": {
+        "kind": "procedural",
+        "eyes": "visor",
+        "mouth": "line"
+      },
+      "temperament": {
+        "idle": 0.5,
+        "bob": 0.5,
+        "lean": 0.5,
+        "blink_seconds": 8.0,
+        "spring": 0.5
+      }
+    },
+    {
       "name": "hud",
       "display": "HUD",
       "voice": null,
@@ -13,15 +35,39 @@
         "kind": "layered",
         "dir": "hud",
         "face": {
-          "eyes": [[0.375, 0.4375], [0.625, 0.4375]],
-          "eye_r": [0.0625, 0.0625],
-          "mouth": [0.5, 0.5],
-          "mouth_r": [0.0625, 0.03125],
+          "eyes": [
+            [
+              0.375,
+              0.4375
+            ],
+            [
+              0.625,
+              0.4375
+            ]
+          ],
+          "eye_r": [
+            0.0625,
+            0.0625
+          ],
+          "mouth": [
+            0.5,
+            0.5
+          ],
+          "mouth_r": [
+            0.0625,
+            0.03125
+          ],
           "ink": "#2c7f86"
         },
         "pivot": {
-          "head": [0.5, 0.625],
-          "antenna": [0.5, 0.25]
+          "head": [
+            0.5,
+            0.625
+          ],
+          "antenna": [
+            0.5,
+            0.25
+          ]
         }
       },
       "temperament": {

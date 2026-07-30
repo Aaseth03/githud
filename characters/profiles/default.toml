@@ -1,0 +1,34 @@
+# The default character — the procedural floor.
+#
+# What every unconfigured project resolves to, and what the main tab shows. The
+# main tab belongs to no project, and a project that has not chosen a character
+# has not chosen one; neither should be given somebody else's persona.
+#
+# **Deliberately procedural.** It needs no art, so a fresh clone renders a
+# character before any exists, and it is honest about being a default rather than
+# impersonating a designed character (D21 keeps `procedural` as the floor for
+# exactly this).
+#
+# There is no built-in face in the binary: if this file is missing, the app says
+# so rather than inventing a character (D9).
+
+display = "GIT HUD"
+
+[palette]
+accent = "#6ee7ff"
+glow   = "#1e6f85"
+field  = "#0a0d17"
+
+[sprite]
+kind  = "procedural"
+eyes  = "visor"
+mouth = "line"
+
+# Calm and unobtrusive: this is the face you see when nothing has been decided,
+# so it should not draw attention to itself.
+[temperament]
+idle          = 0.4
+bob           = 0.4
+lean          = 0.4
+blink_seconds = 8.0
+spring        = 0.4

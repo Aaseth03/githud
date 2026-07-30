@@ -56,7 +56,7 @@ export function resolveCharacter(
         ? null
         : // There is no built-in face in the binary, on purpose (D9). If the
           // file is gone, the app says so rather than inventing a character.
-          `no character profiles found — config/characters/${HOUSE_CHARACTER}.toml is missing`,
+          `no character profiles found — characters/profiles/${HOUSE_CHARACTER}.toml is missing`,
     };
   }
 

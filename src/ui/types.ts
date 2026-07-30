@@ -135,7 +135,7 @@ export interface Characters {
 }
 
 /** The profile an unassigned project resolves to. Mirrors `character::HOUSE`. */
-export const HOUSE_CHARACTER = "hud";
+export const HOUSE_CHARACTER = "default";
 
 /**
  * Should a missing ICM layer be surfaced as a badge?

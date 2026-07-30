@@ -40,11 +40,15 @@ describe("the wire shape", () => {
   it("is what the UI expects, field for field", () => {
     // Typed as `Characters` above, so `tsc` fails if the interface and the
     // fixture disagree. These assertions cover what types cannot: the values.
-    expect(WIRE.profiles).toHaveLength(3);
-    expect(WIRE.profiles[0]!.name).toBe("hud");
-    expect(WIRE.profiles[0]!.display).toBe("HUD");
-    expect(WIRE.profiles[0]!.voice).toBeNull();
-    expect(WIRE.profiles[0]!.palette.accent).toBe("#6ee7ff");
+    expect(WIRE.profiles).toHaveLength(4);
+    // `default` is the fallback and is deliberately procedural — it needs no art,
+    // so a fresh clone renders something, and it does not impersonate a designed
+    // character. GIT HUD's own persona is `hud`, assigned to the githud project.
+    expect(WIRE.profiles[0]!.name).toBe("default");
+    expect(WIRE.profiles[0]!.sprite.kind).toBe("procedural");
+    expect(WIRE.profiles[1]!.name).toBe("hud");
+    expect(WIRE.profiles[1]!.display).toBe("HUD");
+    expect(WIRE.profiles[1]!.palette.accent).toBe("#6ee7ff");
     // Every character carries a temperament, even one that declared none.
     expect(WIRE.profiles[0]!.temperament.blink_seconds).toBeGreaterThan(0);
   });
@@ -55,9 +59,9 @@ describe("the wire shape", () => {
     // and every speaker button lied for a month.
     //
     // All three kinds appear in the fixture, so adding one cannot slip past.
-    const layered = WIRE.profiles[0]!.sprite;
-    const procedural = WIRE.profiles[1]!.sprite;
-    const frames = WIRE.profiles[2]!.sprite;
+    const layered = WIRE.profiles[1]!.sprite;
+    const procedural = WIRE.profiles[2]!.sprite;
+    const frames = WIRE.profiles[3]!.sprite;
 
     expect(layered.kind).toBe("layered");
     expect(procedural.kind).toBe("procedural");
@@ -81,7 +85,7 @@ describe("the wire shape", () => {
   it("keeps face geometry as fractions, never pixels", () => {
     // A pixel value here lands the eye far off the character, and the only
     // symptom is that the blink stopped working.
-    const layered = WIRE.profiles[0]!.sprite;
+    const layered = WIRE.profiles[1]!.sprite;
     if (layered.kind !== "layered") throw new Error("wrong variant");
     for (const [x, y] of layered.face!.eyes) {
       expect(x).toBeGreaterThan(0);
@@ -102,15 +106,15 @@ describe("the wire shape", () => {
   it("distinguishes an unthemed axis from an unthemed profile", () => {
     // `mia` themes only its accent. `null` on the others means "the app's own
     // colour", which is a thing a profile can mean.
-    expect(WIRE.profiles[1]!.palette.accent).toBe("#a78bfa");
-    expect(WIRE.profiles[1]!.palette.glow).toBeNull();
+    expect(WIRE.profiles[2]!.palette.accent).toBe("#a78bfa");
+    expect(WIRE.profiles[2]!.palette.glow).toBeNull();
   });
 });
 
 describe("resolveCharacter", () => {
-  it("gives an unassigned project the house character", () => {
+  it("gives an unassigned project the default, not somebody's persona", () => {
     const r = resolveCharacter(WIRE, null);
-    expect(r.profile?.name).toBe("hud");
+    expect(r.profile?.name).toBe("default");
     expect(r.source).toBe("house");
     expect(r.problem).toBeNull();
   });
@@ -126,7 +130,7 @@ describe("resolveCharacter", () => {
     // The distinction that earns three states instead of two: both draw the
     // house character, and only one of them is something to fix.
     const r = resolveCharacter(WIRE, "nobody");
-    expect(r.profile?.name).toBe("hud");
+    expect(r.profile?.name).toBe("default");
     expect(r.source).toBe("missing");
     expect(r.problem).toContain("nobody");
   });
@@ -137,7 +141,7 @@ describe("resolveCharacter", () => {
     const empty: Characters = { profiles: [], errors: [] };
     const r = resolveCharacter(empty, null);
     expect(r.profile).toBeNull();
-    expect(r.problem).toContain("hud.toml");
+    expect(r.problem).toContain("default.toml");
   });
 
   it("still names a missing profile when the house is gone too", () => {
@@ -149,7 +153,8 @@ describe("resolveCharacter", () => {
   });
 
   it("resolves straight from a project", () => {
-    expect(characterFor(WIRE, project()).profile?.name).toBe("hud");
+    expect(characterFor(WIRE, project()).profile?.name).toBe("default");
+    expect(characterFor(WIRE, project({ character: "hud" })).profile?.name).toBe("hud");
     expect(characterFor(WIRE, project({ character: "mia" })).profile?.name).toBe("mia");
   });
 });
@@ -158,7 +163,7 @@ describe("accentOf", () => {
   it("falls back per axis, not per profile", () => {
     // `mia` themes its accent and nothing else. Falling back wholesale would
     // throw away the one colour it did choose.
-    const a = accentOf(WIRE.profiles[1]!);
+    const a = accentOf(WIRE.profiles[2]!);
     expect(a["--accent"]).toBe("#a78bfa");
     expect(a["--accent-glow"]).toBe(UNTHEMED.glow);
     expect(a["--accent-field"]).toBe(UNTHEMED.field);

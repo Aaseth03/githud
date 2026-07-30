@@ -73,6 +73,93 @@ def load_geometry(ref: Path) -> dict:
     return json.loads(sidecar.read_text())
 
 
+def unmatte(rgb: np.ndarray, behind: np.ndarray | None = None) -> tuple[np.ndarray, np.ndarray]:
+    """Recover colour and soft alpha from art composited on white.
+
+    **A binary mask leaves a white fringe**, and it is visible the moment the
+    character sits on a dark stage. The reference is antialiased against a white
+    backdrop, so every edge pixel is a blend of the artwork and pure white: keep
+    it opaque and you keep the white, drop it and the outline turns ragged.
+
+    Three bands, and only the middle one is interesting:
+
+    - `min(rgb) <  SOLID`   definitely artwork. Opaque, colour untouched.
+    - `min(rgb) >  EMPTY`   definitely backdrop. Transparent.
+    - between               a blend. Alpha is recovered from *how far* the pixel
+      travelled from white toward the nearest solid colour, and the colour is
+      replaced by that solid colour so no white survives to be un-multiplied
+      later.
+
+    Taking the colour from the nearest solid pixel rather than trying to invert
+    the blend per channel matters: near the edge the true foreground is the dark
+    outline, and dividing a nearly-white pixel by a nearly-white estimate
+    amplifies noise into speckle.
+    """
+    lo = rgb.min(axis=2)
+
+    # **The backdrop is found by connectivity, not by a colour threshold**, and
+    # that distinction is the whole fix. A first attempt banded by colour, calling
+    # anything under 200 solid — but this artwork's outline is near-black against
+    # a white ground, so a half-and-half blend lands near 129 and a pixel at 194
+    # is still three-quarters background. Marking those opaque is exactly the
+    # bright rim that showed up the moment the character sat on a dark stage.
+    #
+    # A threshold cannot tell "light because it is background" from "light because
+    # the artwork is light there". Distance from the *outside* can.
+    nearwhite = lo > WHITE
+    labelled, count = ndimage.label(nearwhite)
+    outside = np.zeros_like(nearwhite)
+    if count:
+        border = set(labelled[0]) | set(labelled[-1]) | set(labelled[:, 0]) | set(labelled[:, -1])
+        border.discard(0)
+        outside = np.isin(labelled, list(border))
+
+    # **The paper shadow is backdrop too.** Under the feet the artwork is
+    # antialiased against the reference's light grey wash rather than against
+    # white, so those pixels are never near the flooded outside and the recovery
+    # above skipped them entirely — leaving a bright rim under both feet and
+    # through the leg gap the moment the wash was replaced by real darkness.
+    #
+    # Folding it in fixes them because what matters is not the exact alpha but
+    # that the *colour* is taken from the ink just inside. A blend against 216
+    # read as a blend against 255 is off by a few percent of opacity; keeping the
+    # blended colour is off by the whole fringe.
+    if behind is not None:
+        outside = outside | behind
+
+    # How far each pixel is from the backdrop. The antialiased rim is about two
+    # pixels; kept deliberately tight because a wider band would eat a thin
+    # feature from both sides and turn the whole antenna translucent.
+    dist = ndimage.distance_transform_edt(~outside)
+    RIM = 1.8
+    interior = dist > RIM
+    band = (dist > 0) & ~interior
+
+    alpha = interior.astype(float)
+    colour = rgb.astype(float)
+
+    if band.any() and interior.any():
+        _, (iy, ix) = ndimage.distance_transform_edt(~interior, return_indices=True)
+        near = rgb[iy, ix].astype(float)
+
+        # P = F·a + 255·(1-a)  ⇒  a = (255 - P) / (255 - F), per channel. Use the
+        # channel with the most contrast against white; the others are noise.
+        span = 255.0 - near
+        travelled = 255.0 - rgb.astype(float)
+        best = np.argmax(span, axis=2)
+        gy, gx = np.indices(lo.shape)
+        denom = span[gy, gx, best]
+        numer = travelled[gy, gx, best]
+        est = np.clip(np.divide(numer, denom, out=np.zeros_like(numer), where=denom > 8), 0, 1)
+
+        alpha = np.where(band, est, alpha)
+        # Colour comes from just inside rather than from the blend, so no white
+        # survives at any alpha.
+        colour = np.where(band[..., None], near, colour)
+
+    return colour.round().astype(np.uint8), alpha
+
+
 def masks(rgb: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """The character, and its ground shadow, as separate masks.
 
@@ -91,7 +178,19 @@ def masks(rgb: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     sizes = np.array(ndimage.sum(greyish, labelled, range(1, count + 1)))
     shadow = labelled == (int(np.argmax(sizes)) + 1)
 
-    return ~backdrop & ~greyish, shadow
+    # **The figure gives up only the shadow that is clear of its own ink.**
+    # Excluding shadow *colour* wholesale punched holes through the character's
+    # antialiasing between the legs; excluding the shadow *region* wholesale cut
+    # the feet standing on it. Both failed because the two overlap, and neither
+    # colour nor region alone can say which owns a pixel there.
+    #
+    # Distance can. Shadow more than a couple of pixels from any genuinely dark
+    # ink is ground; shadow-coloured pixels hugging the ink are the character's
+    # own soft edge, and they stay.
+    ink_distance = ndimage.distance_transform_edt(rgb.min(axis=2) >= 190)
+    ground = shadow & (ink_distance > 2.5)
+
+    return ~backdrop & ~ground, shadow
 
 
 def write_part(
@@ -101,13 +200,18 @@ def write_part(
     fills: list[tuple[int, int]],
     eyes: list[tuple[int, int]] | None = None,
     visor_fill: tuple[int, int, int] | None = None,
+    alpha: np.ndarray | None = None,
 ) -> int:
     h, w, _ = rgb.shape
     out = np.zeros((h, w, 4), dtype=np.uint8)
     out[..., :3] = rgb
     for dest, source in fills:
         out[dest, :, :3] = rgb[source]
-    out[..., 3] = (mask * 255).astype(np.uint8)
+    # `mask` selects which pixels belong to this part; `alpha` carries the soft
+    # edge recovered by `unmatte`. Multiplying keeps both, so a part boundary is
+    # crisp and the character's own outline stays feathered.
+    soft = mask.astype(float) * (1.0 if alpha is None else alpha)
+    out[..., 3] = np.clip(soft * 255, 0, 255).astype(np.uint8)
 
     img = Image.fromarray(out)
     if eyes and visor_fill:
@@ -167,20 +271,38 @@ def main() -> None:
         )
     args.out.mkdir(parents=True, exist_ok=True)
 
-    rgb = np.asarray(Image.open(args.reference).convert("RGB")).astype(int)
-    figure, shadow = masks(rgb)
+    raw = np.asarray(Image.open(args.reference).convert("RGB")).astype(int)
+    figure, shadow = masks(raw)
+    # Colour with the backdrop blended out, and the soft edge it was hiding.
+    rgb, alpha = unmatte(raw, behind=shadow)
+    rgb = rgb.astype(int)
 
     written = {}
-    written["shadow"] = write_part(args.out / "shadow.png", rgb, shadow, [])
+    # **A contact shadow is darkness, not a colour.** The reference draws it as
+    # light grey because the reference sits on white paper — ship that verbatim and
+    # the character stands in a bright puddle the moment the stage is dark, which
+    # is exactly what it looked like. So the part keeps the *shape* and throws the
+    # paper colour away: black, with alpha from how dark the wash was, capped so it
+    # reads as contact rather than as a hole.
+    shadow_alpha = np.clip((255 - raw.min(axis=2)) / 42.0, 0, 1) * 0.55
+    written["shadow"] = write_part(
+        args.out / "shadow.png",
+        np.zeros_like(raw),
+        shadow,
+        [],
+        alpha=shadow_alpha,
+    )
 
     m, fills = stock(figure, band(figure, 0, antenna_cut), antenna_cut, STOCK["antenna"], True)
-    written["antenna"] = write_part(args.out / "antenna.png", rgb, m, fills)
+    written["antenna"] = write_part(args.out / "antenna.png", rgb, m, fills, alpha=alpha)
 
     m, fills = stock(figure, band(figure, antenna_cut, neck_cut), neck_cut, STOCK["head"], True)
-    written["head"] = write_part(args.out / "head.png", rgb, m, fills, eyes, visor)
+    written["head"] = write_part(
+        args.out / "head.png", rgb, m, fills, eyes, visor, alpha=alpha
+    )
 
     m, fills = stock(figure, band(figure, neck_cut, rgb.shape[0]), neck_cut, STOCK["body"], False)
-    written["body"] = write_part(args.out / "body.png", rgb, m, fills)
+    written["body"] = write_part(args.out / "body.png", rgb, m, fills, alpha=alpha)
 
     h, w, _ = rgb.shape
     for name, opaque in written.items():

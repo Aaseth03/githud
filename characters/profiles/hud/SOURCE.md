@@ -61,7 +61,7 @@ per-part offsets to get wrong:
 
 | Part | Notes |
 |---|---|
-| `shadow` | The ground ellipse, separate so it stays put while the body breathes |
+| `shadow` | The contact shadow, **recoloured to darkness** — the reference draws it light grey for white paper, and shipped as-is the character stands in a bright puddle. Separate so it stays put while the body breathes |
 | `body` | Torso, arms, legs, feet — with 70 px of stock **above** the neck seam, behind where the head sits |
 | `head` | Dome, visor, ear-pods — **eyes removed**, filled with the visor colour |
 | `antenna` | Stalk and ball, with 40 px of stock **below** its seam so it pivots at the base |

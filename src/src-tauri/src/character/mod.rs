@@ -18,10 +18,10 @@ use serde::{Deserialize, Serialize};
 /// The profile a project with no `character` key falls back to.
 ///
 /// It is a file like any other — there is no built-in face in this binary. If
-/// `characters/profiles/hud.toml` is missing, that is a stated error, not a
+/// `characters/profiles/default.toml` is missing, that is a stated error, not a
 /// silent default, because a character quietly appearing from the code is
 /// exactly what D9 is preventing.
-pub const HOUSE: &str = "hud";
+pub const HOUSE: &str = "default";
 
 /// One character.
 ///
@@ -823,11 +823,11 @@ mod tests {
     #[test]
     fn the_house_character_is_found_by_name() {
         let dir = temp_dir("githud-characters-house");
-        write(&dir, "hud.toml", "display = \"HUD\"\n");
+        write(&dir, "default.toml", "display = \"GIT HUD\"\n");
         write(&dir, "mia.toml", "");
 
         let loaded = load_all(&dir);
-        assert_eq!(loaded.house().map(|p| p.name.as_str()), Some("hud"));
+        assert_eq!(loaded.house().map(|p| p.name.as_str()), Some("default"));
         assert_eq!(loaded.get("mia").map(|p| p.name.as_str()), Some("mia"));
         assert_eq!(loaded.get("nobody"), None);
 
@@ -1088,7 +1088,7 @@ mod tests {
         // a shipped bug, and it would render as a character with a hole in it.
         let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../characters/profiles");
         let loaded = load_all(&dir);
-        let hud = loaded.house().expect("hud.toml");
+        let hud = loaded.get("hud").expect("hud.toml");
         let layered = hud.layered_dir().expect("hud is layered");
 
         let parts = load_layers(&dir, layered).unwrap();
@@ -1147,12 +1147,14 @@ mod tests {
 
         // And the parts the UI actually branches on, stated rather than implied.
         // Every sprite kind appears, so adding one cannot slip past this test.
-        assert_eq!(parsed.profiles.len(), 3);
-        assert_eq!(declared["profiles"][0]["sprite"]["kind"], "layered");
-        assert_eq!(declared["profiles"][1]["sprite"]["kind"], "procedural");
-        assert_eq!(declared["profiles"][2]["sprite"]["kind"], "frames");
+        assert_eq!(parsed.profiles.len(), 4);
+        assert_eq!(declared["profiles"][0]["name"], HOUSE);
+        assert_eq!(declared["profiles"][0]["sprite"]["kind"], "procedural");
+        assert_eq!(declared["profiles"][1]["sprite"]["kind"], "layered");
+        assert_eq!(declared["profiles"][2]["sprite"]["kind"], "procedural");
+        assert_eq!(declared["profiles"][3]["sprite"]["kind"], "frames");
         assert!(
-            declared["profiles"][1].get("procedural").is_none(),
+            declared["profiles"][0].get("procedural").is_none(),
             "an externally tagged encoding would nest the variant here — the \
              exact shape `Health` shipped with through all of M6"
         );
@@ -1173,22 +1175,33 @@ mod tests {
             "characters/profiles/{HOUSE}.toml must exist — it is what an unassigned project resolves to"
         );
         assert!(
-            loaded.profiles.len() >= 2,
-            "M7 validates on two visibly distinct rooms, so two profiles must ship"
+            matches!(loaded.house().unwrap().sprite, Sprite::Procedural { .. }),
+            "the default must stay procedural: it needs no art, so a fresh clone \
+             renders something, and it should not impersonate a designed character"
+        );
+        assert!(
+            loaded.profiles.len() >= 3,
+            "the default, GIT HUD's own persona, and at least one other"
         );
 
-        // Distinct accents are the whole point. Two characters that resolve to
-        // the same colour are not two rooms.
+        // GIT HUD's persona is a character like any other — assigned to the
+        // `githud` project in config/projects.toml, never the fallback. A project
+        // that has not chosen a character has not chosen one, and handing it this
+        // app's own persona would be putting words in its mouth.
+        let hud = loaded.get("hud").expect("hud.toml");
+        assert!(matches!(hud.sprite, Sprite::Layered { .. }));
+        assert_ne!(hud.name, HOUSE, "the persona must not be the default");
+
+        // Two distinct accents at least, because that is what "visibly distinct
+        // rooms" needs. **Not one per profile**: the default shares GIT HUD's cyan
+        // on purpose — it is the app's own colour, and the character wearing it is
+        // the app's own persona.
         let accents: std::collections::BTreeSet<_> = loaded
             .profiles
             .iter()
             .filter_map(|p| p.palette.accent.as_deref())
             .collect();
-        assert_eq!(
-            accents.len(),
-            loaded.profiles.len(),
-            "every shipped profile needs its own accent"
-        );
+        assert!(accents.len() >= 2, "{accents:?}");
     }
 
     fn temp_dir(name: &str) -> PathBuf {

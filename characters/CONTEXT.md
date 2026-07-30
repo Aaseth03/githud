@@ -20,7 +20,8 @@ characters/
 ├─ CONTEXT.md
 ├─ parts_spec.md               the contract a layered part set must satisfy
 ├─ profiles/
-│  ├─ hud.toml                 the house character — what an unassigned project resolves to
+│  ├─ default.toml             the fallback — procedural, what an unassigned project resolves to
+│  ├─ hud.toml                 GIT HUD's own persona, assigned to the githud project
 │  ├─ hud/                     HUD's layered parts (D21)
 │  │  ├─ SOURCE.md             model, seed, prompt, cut lines — so it is regenerable
 │  │  ├─ reference.png         the chosen candidate, front-facing and neutral
@@ -76,6 +77,22 @@ A project should not gain a file because of the tool that happened to open it.
   and a dark outline passes through mid-grey, so a colour test alone catches a
   one-pixel halo of the entire character and the shadow layer renders as a ghost
   of it. 816 px on HUD's reference.
+- **A part cut with a binary mask keeps the backdrop in its edge.** The reference
+  is antialiased against white, so every rim pixel is part artwork and part paper —
+  keep it opaque and the character wears a bright outline on a dark stage. Alpha is
+  recovered from how far the pixel travelled from the backdrop toward the ink just
+  inside, and **the colour is taken from that ink** rather than un-blended, because
+  dividing a nearly-white pixel by a nearly-white estimate turns noise into
+  speckle. The backdrop is found by flooding from the border, never by a
+  threshold: a threshold cannot tell "light because it is background" from "light
+  because the artwork is light there".
+- **A contact shadow is darkness, not a colour.** The reference draws it light grey
+  because the reference sits on white paper. Shipped verbatim, the character stands
+  in a bright puddle. The part keeps the shape and throws the paper colour away.
+- **The paper shadow is backdrop for un-matting purposes too.** Under the feet the
+  artwork blends against that grey rather than against white, so the recovery skips
+  those pixels and leaves a bright rim exactly where the character meets the
+  ground.
 - **A character accents the instrument; it cannot repaint it.** A profile owns
   `accent`, `glow` and `field`. Surfaces, lines and ink stay the cockpit tokens in
   `../src/ui/styles/index.css` — a readability guarantee a TOML file can revoke is
@@ -85,10 +102,13 @@ A project should not gain a file because of the tool that happened to open it.
   themed on that axis" and the app's own colour is used, which is a thing you can
   mean. `accent = "blue"` is a typo, and a typo rendering as unthemed is
   indistinguishable from having meant it.
-- **`profiles/hud.toml` is not optional.** It is what an unassigned project and
-  the main tab resolve to, and there is no built-in face in the binary. If it is
-  missing the app says so rather than inventing a character — a character
-  appearing from the code is precisely what D9 prevents.
+- **`profiles/default.toml` is not optional, and it stays procedural.** It is what
+  an unassigned project and the main tab resolve to, and there is no built-in face
+  in the binary — if it is missing the app says so rather than inventing a
+  character (D9). Procedural because it needs no art, so a fresh clone renders
+  something; and because **a project that has not chosen a character has not
+  chosen one.** Giving it GIT HUD's own persona would be putting words in its
+  mouth. `hud` is a character like any other, assigned in `../config/projects.toml`.
 - **A generated asset nobody can regenerate is one you cannot iterate on.** Every
   character commits its model, seed, prompt and cut lines in `SOURCE.md`. The
   decomposition refuses to overwrite a committed set without `--force`.
