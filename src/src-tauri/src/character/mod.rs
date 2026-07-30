@@ -1,6 +1,6 @@
 //! Character profiles (D9).
 //!
-//! A profile lives in `config/characters/<name>.toml`, centrally — never in the
+//! A profile lives in `characters/profiles/<name>.toml`, centrally — never in the
 //! project it represents, because a project should not gain a file because of
 //! the tool that happened to open it.
 //!
@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 /// The profile a project with no `character` key falls back to.
 ///
 /// It is a file like any other — there is no built-in face in this binary. If
-/// `config/characters/hud.toml` is missing, that is a stated error, not a
+/// `characters/profiles/hud.toml` is missing, that is a stated error, not a
 /// silent default, because a character quietly appearing from the code is
 /// exactly what D9 is preventing.
 pub const HOUSE: &str = "hud";
@@ -80,7 +80,7 @@ pub enum Sprite {
         #[serde(default)]
         mouth: Mouth,
     },
-    /// A directory of PNG frames under `config/characters/`, swapped by
+    /// A directory of PNG frames under `characters/profiles/`, swapped by
     /// amplitude. Overrides the procedural renderer entirely.
     Frames { dir: String },
 }
@@ -140,7 +140,7 @@ pub struct ProfileError {
     pub error: String,
 }
 
-/// Everything in `config/characters/`, and everything that failed.
+/// Everything in `characters/profiles/`, and everything that failed.
 ///
 /// Both halves, always. One malformed profile must not take the others down —
 /// the same shape the scan uses for a malformed overrides file.
@@ -219,7 +219,7 @@ fn validate_frames_dir(dir: &str) -> Result<(), String> {
     }
     if dir.contains('/') || dir.contains('\\') || dir.contains("..") {
         return Err(format!(
-            "sprite.dir: `{dir}` must be a single folder name under config/characters/"
+            "sprite.dir: `{dir}` must be a single folder name under characters/profiles/"
         ));
     }
     Ok(())
@@ -673,13 +673,13 @@ mod tests {
         // satisfies the milestone contract: a profile that ships broken is a
         // shipped bug, and it would show up as a missing character rather than
         // as a parse error anyone would look for.
-        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../config/characters");
+        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../characters/profiles");
         let loaded = load_all(&dir);
 
         assert!(loaded.errors.is_empty(), "{:?}", loaded.errors);
         assert!(
             loaded.house().is_some(),
-            "config/characters/{HOUSE}.toml must exist — it is what an unassigned project resolves to"
+            "characters/profiles/{HOUSE}.toml must exist — it is what an unassigned project resolves to"
         );
         assert!(
             loaded.profiles.len() >= 2,

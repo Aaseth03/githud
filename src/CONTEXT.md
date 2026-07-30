@@ -229,7 +229,7 @@ src-tauri/src/
   — it is the only part that survives `SIGKILL` and a crash.
 - **Reaping must never touch a live sibling.** An orphan is a *marked* process
   whose parent is no longer a `githud` — both halves, always. The mark alone
-  would match a second instance's running session, which M9's parallel sessions
+  would match a second instance's running session, which M10's parallel sessions
   make a real case, and killing that would be far worse than the leak. Orphans
   reparent to `systemd --user` here rather than to pid 1, so the test is what
   the parent *is*, never its pid.

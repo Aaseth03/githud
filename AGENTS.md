@@ -109,6 +109,7 @@ into other files.
 | `planning/architecture/guardrails.md` | The allow/deny list and its three layers |
 | `config/contracts/milestones.md` | The cross-project milestone file format |
 | `planning/decisions/*.md` | Committed decisions |
+| `characters/parts_spec.md` | What a layered character's part set must contain |
 
 ## Where to go next
 

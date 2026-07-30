@@ -71,8 +71,16 @@ fn overrides_path() -> PathBuf {
 }
 
 /// Where character profiles live, centrally and never per-repo (D9).
+///
+/// `characters/` is a workspace of its own rather than a corner of `config/`
+/// (D23) — it holds a pipeline, a parts contract and provenance, and `config/`
+/// holds no work. Its own override, so `config/` resolution is untouched.
 fn characters_dir() -> PathBuf {
-    config_dir().join("characters")
+    if let Ok(explicit) = std::env::var("GITHUD_CHARACTERS_DIR") {
+        return PathBuf::from(explicit);
+    }
+    // src-tauri/ → src/ → repo root → characters/profiles/
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../characters/profiles")
 }
 
 /// The absolute path being scanned, so the UI can show it rather than guess.
@@ -480,7 +488,7 @@ fn agent_available() -> bool {
 
 // ── Characters (D9) ──────────────────────────────────────────────────────────
 
-/// Every profile in `config/characters/`, and every one that failed to load.
+/// Every profile in `characters/profiles/`, and every one that failed to load.
 ///
 /// Both halves cross together. A profile that vanished because of a typo would
 /// otherwise look exactly like a profile nobody wrote — and the config screen is

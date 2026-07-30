@@ -325,13 +325,13 @@ transforms and into reacting to real events — not into a third-party runtime.
 - [ ] A WebGL probe in Settings, so whether this webview could ever run Live2D
       or Rive is a fact rather than an assumption
 - [ ] One character made by hand, end to end — it exists to prove the parts
-      spec before M7.5 automates it
+      spec before M8 automates it
 - [ ] Character/voice config screen that picks from Voicebox's profiles API —
       voice *creation* stays in Voicebox, do not rebuild it
 - [ ] Assignment written back into `config/projects.toml` with its comment
       block intact
 
-### M7.5 — Character creation pipeline
+### M8 — Character creation pipeline
 **Status:** not-started
 **Validation:** one prompt produces a complete, valid character folder that the
 app renders without a code change — and the same seed produces it again.
@@ -357,7 +357,7 @@ no model in the render path. D20's constraint on speech, applied to art.
 - [ ] Seeds committed with the character, so the same input reproduces it
 - [ ] Scripted, not prompted (D13) — it drives ComfyUI's HTTP API headlessly
 
-### M8 — Speech shaping
+### M9 — Speech shaping
 **Status:** not-started
 **Validation:** a spoken paragraph containing `JSON`, `HTTP`, a numbered list, a
 file path and an acronym the lexicon does not know reads aloud the way a person
@@ -403,7 +403,7 @@ like one rather than like a screen reader.
       point is that it can be proved without listening to it
 - [ ] Integrated with M7's character, so delivery and identity are one thing
 
-### M9 — Parallel and portable
+### M10 — Parallel and portable
 **Status:** not-started
 **Validation:** two concurrent sessions on one repo; a second adapter runs a real
 task; a new project is born end to end.

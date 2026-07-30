@@ -32,8 +32,9 @@ building, running, or launching. Do not rediscover it.
 | M5 — panels and project cards | done — v1 complete |
 | M6 — voice | **done — validated by hand 2026-07-29** |
 | M7 — character | not started — *this is the next build* |
-| M8 — speech shaping | not started — carved out of M6's tail (D20) |
-| M9 — parallel and portable | not started |
+| M8 — character creation pipeline | not started — split out of M7 (D21) |
+| M9 — speech shaping | not started — carved out of M6's tail (D20) |
+| M10 — parallel and portable | not started |
 
 **`main` is current: PRs #1–#10 merged, M6 included.** Branch off `main` for
 M7 — and verify it by content rather than by the merged label, which is the
@@ -89,7 +90,7 @@ and it earned its keep the day it was built.
 
 ## What M6 deliberately did not do
 
-**M8 — speech shaping** was carved out rather than crammed in. The app speaks;
+**M9 — speech shaping** was carved out rather than crammed in. The app speaks;
 it does not yet speak *well*. `voice.ts` implements D15, which is a filter — it
 decides what must never be read aloud — and a filter is not a narrator. Tables
 vanish, `1.` is read as a flat "one", and no policy distinguishes *Jayson* from

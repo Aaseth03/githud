@@ -51,7 +51,8 @@ planning/
    ├─ 2026-07-28-D19-sandbox-scope.md
    ├─ 2026-07-29-D20-speech-is-a-script.md
    ├─ 2026-07-30-D21-character-is-layered-parts.md
-   └─ 2026-07-30-D22-python-in-tooling.md
+   ├─ 2026-07-30-D22-python-in-tooling.md
+   └─ 2026-07-30-D23-characters-are-a-workspace.md
 ```
 
 `specs/` holds the detail a decision record deliberately does not carry.
@@ -70,7 +71,7 @@ later does not mean re-doing the comparison.
 | `plans/` | Implementation plans (`YYYY-MM-DD-title.plan.md`) | Planning a feature before coding — start from `plans/_TEMPLATE.plan.md` |
 | `specs/` | Feature specs (`feature-name_spec.md`) | Spec'ing a feature in detail, or recording an option deferred rather than dropped |
 
-## Decisions D1–D22
+## Decisions D1–D23
 
 D1–D15 were committed 2026-07-28 out of the design interview; D16–D18 followed
 the same day — D16 when a D7 assumption was tested and failed, D17 when M1 turned
@@ -82,7 +83,7 @@ rendering, which is the only way anyone could have known it read as a
 placeholder. **Do not re-litigate them.** Supersede one with a new dated record
 that names what it replaces.
 
-D22 amends D4 rather than superseding it: Python was blanket-banned, M7.5 needs
+D22 amends D4 rather than superseding it: Python was blanket-banned, M8 needs
 it because ComfyUI is Python, and D4's own escape hatch — *reopen the record
 rather than sneak in as a script* — is the route that was taken.
 
@@ -102,7 +103,7 @@ its job on the day it is overturned.**
 | D6 | [Agent branch isolation](decisions/2026-07-28-D06-agent-branch-isolation.md) — commits freely on its own branch, never shared history |
 | D7 | [Three guardrail layers](decisions/2026-07-28-D07-three-guardrail-layers.md) — shim → bwrap → remote protection. **Amended by D16; Layer 3 does not exist** |
 | D8 | [Split store](decisions/2026-07-28-D08-split-store.md) — `config/` synced, state local |
-| D9 | [Central character profiles](decisions/2026-07-28-D09-central-characters.md) |
+| D9 | [Central character profiles](decisions/2026-07-28-D09-central-characters.md) — **relocated by D23**; central-not-per-repo stands |
 | D10 | [Registry is scanned](decisions/2026-07-28-D10-registry-is-scanned.md), not declared |
 | D11 | [Project card cached](decisions/2026-07-28-D11-project-card-cached.md) at registration |
 | D12 | [Transcript retention](decisions/2026-07-28-D12-transcript-retention.md) — raw local, index synced |
@@ -116,6 +117,7 @@ its job on the day it is overturned.**
 | D20 | [Speech shaping is a script](decisions/2026-07-29-D20-speech-is-a-script.md), not a judgement — deterministic, with the lexicon as data the user owns |
 | D21 | [The character is layered parts driven by a script](decisions/2026-07-30-D21-character-is-layered-parts.md), authored to Live2D's spec so the ceiling stays reachable |
 | D22 | [Python is allowed in tooling](decisions/2026-07-30-D22-python-in-tooling.md), and stays out of the app — amends D4 |
+| D23 | [Characters are a workspace](decisions/2026-07-30-D23-characters-are-a-workspace.md), not a config folder — amends D9's location clause |
 
 ## Architecture
 
