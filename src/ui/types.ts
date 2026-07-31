@@ -33,6 +33,19 @@ export interface Project {
    * profile answers to is a *different* state — see `resolveCharacter`.
    */
   character: string | null;
+  /**
+   * A project's own accent (M8), independent of its character — the tab rail
+   * and glass tint for the room, not the resident. `null` means the app's
+   * own signal colour.
+   */
+  accent: string | null;
+  /**
+   * The filename of an uploaded background image (M8), resolved by
+   * `project_background_image`. `null` means no background is set — and a
+   * name that resolves to nothing on this machine (the image was never
+   * uploaded here) is the ordinary case, not a typo.
+   */
+  background: string | null;
 }
 
 /** Mirrors `character::Palette`. Absent means "not themed on that axis". */

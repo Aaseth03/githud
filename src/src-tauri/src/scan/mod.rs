@@ -84,6 +84,14 @@ pub struct Project {
     /// is the normal case and the other is a typo worth surfacing. Resolution
     /// happens in `ui/character.ts`; the scan only reports what was declared.
     pub character: Option<String>,
+    /// A project's own accent (M8), independent of its character — the tab
+    /// rail and glass tint for the room, not the resident. `None` means the
+    /// app's own signal colour.
+    pub accent: Option<String>,
+    /// The filename of an uploaded background image (M8), resolved against
+    /// the machine-local backgrounds directory — never a path, and never
+    /// assumed to exist on this machine.
+    pub background: Option<String>,
 }
 
 impl Project {
@@ -153,6 +161,8 @@ pub fn scan_with(
         if let Some(entry) = overrides.get(&project.rel_path) {
             project.note = entry.note.clone();
             project.character = entry.character.clone();
+            project.accent = entry.accent.clone();
+            project.background = entry.background.clone();
             if let Some(name) = &entry.name {
                 project.name = name.clone();
             }
@@ -264,6 +274,8 @@ fn describe(root: &Path, path: &Path, depth: usize) -> Project {
         agent: AgentAccess::default(),
         note: None,
         character: None,
+        accent: None,
+        background: None,
     }
 }
 

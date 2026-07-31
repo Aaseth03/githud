@@ -139,7 +139,7 @@ export function CharacterStage({
 
   return (
     <div
-      className={`character-stage relative flex flex-col items-center justify-center overflow-hidden ${
+      className={`character-stage relative flex h-full flex-col items-center justify-center overflow-hidden ${
         inset ? "gap-1 p-3" : "gap-4 p-6"
       }`}
       style={accentOf(profile) as React.CSSProperties}
@@ -152,7 +152,18 @@ export function CharacterStage({
         className="character-figure relative"
         style={{
           ["--mouth" as string]: "0",
-          width: inset ? 96 : 240,
+          // Inset is sized from the frame's *height*, not its width — the
+          // frame (`ProjectView`) can never be taller than it is wide
+          // (`characterHeight.ts`), so deriving width from height instead of
+          // the other way around guarantees the whole figure always fits: the
+          // top and bottom always meet the frame exactly, and `maxWidth`
+          // is a floor under that guarantee rather than the thing doing the
+          // work, for the character art that ever isn't perfectly square.
+          // The stage variant keeps a fixed size; it is never inside a
+          // resizable box worth filling.
+          ...(inset
+            ? { height: "100%", width: "auto", maxWidth: "100%" }
+            : { width: 240 }),
           aspectRatio: canvas ? `${canvas.width} / ${canvas.height}` : "1 / 1",
         }}
       >

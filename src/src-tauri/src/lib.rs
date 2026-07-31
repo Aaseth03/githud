@@ -16,6 +16,7 @@ pub mod parse;
 pub mod pty;
 pub mod reap;
 pub mod scan;
+pub mod theme;
 pub mod voice;
 
 use std::path::PathBuf;
@@ -68,6 +69,45 @@ fn config_dir() -> PathBuf {
 /// The declared overrides (D10, D18).
 fn overrides_path() -> PathBuf {
     config_dir().join("projects.toml")
+}
+
+/// Where uploaded background images live (M8).
+///
+/// Machine-local, never `config/` — an upload is the user's own file, not
+/// authored art, and `config/projects.toml` syncs across machines (D8) while
+/// the image itself is not expected to.
+fn backgrounds_dir() -> Result<PathBuf, String> {
+    if let Ok(explicit) = std::env::var("GITHUD_BACKGROUNDS_DIR") {
+        return Ok(PathBuf::from(explicit));
+    }
+    let data_home = dirs::data_local_dir().ok_or("could not resolve the data directory")?;
+    Ok(data_home.join("githud/backgrounds"))
+}
+
+/// Read, apply, and write back `config/projects.toml` — the temp-file-then-
+/// rename dance every writer here needs, so a crash mid-write cannot leave a
+/// truncated overrides file. That file decides whether the agent may write in
+/// a project (D18); a half-written one is the worst thing any of these
+/// commands could produce.
+fn update_overrides(
+    project: &str,
+    apply: impl FnOnce(&str, &str) -> Result<String, String>,
+) -> Result<(), String> {
+    let path = overrides_path();
+
+    // A missing file is not an error — no overrides is the normal state, and
+    // the first assignment on a fresh machine creates it.
+    let text = match std::fs::read_to_string(&path) {
+        Ok(t) => t,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(e) => return Err(format!("{}: {e}", path.display())),
+    };
+
+    let updated = apply(&text, project)?;
+
+    let temp = path.with_extension("toml.tmp");
+    std::fs::write(&temp, &updated).map_err(|e| format!("{}: {e}", temp.display()))?;
+    std::fs::rename(&temp, &path).map_err(|e| format!("{}: {e}", path.display()))
 }
 
 /// Where character profiles live, centrally and never per-repo (D9).
@@ -521,21 +561,68 @@ fn character_parts(dir: String) -> Result<Vec<character::Part>, String> {
 /// could produce.
 #[tauri::command]
 fn character_assign(project: String, character: Option<String>) -> Result<(), String> {
-    let path = overrides_path();
+    update_overrides(&project, |text, p| {
+        overrides::assign_character(text, p, character.as_deref())
+    })
+}
 
-    // A missing file is not an error — no overrides is the normal state, and the
-    // first assignment on a fresh machine creates it.
-    let text = match std::fs::read_to_string(&path) {
-        Ok(t) => t,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
-        Err(e) => return Err(format!("{}: {e}", path.display())),
+/// Set or clear a project's own accent colour (M8) — its tab rail and glass
+/// tint, independent of whatever character it has.
+///
+/// Validated here, at the boundary, rather than in `Overrides::parse`: a bad
+/// value should refuse to be *written*, the same way a bad `kind` refuses to
+/// be *read* — but a hand-edited `projects.toml` with a stray bad accent must
+/// still load, the same way a hand-edited bad `character` name still does.
+#[tauri::command]
+fn project_accent_set(project: String, accent: Option<String>) -> Result<(), String> {
+    if let Some(hex) = &accent {
+        if !theme::valid_hex_color(hex) {
+            return Err(format!("not a hex colour: {hex} — expected #rrggbb"));
+        }
+    }
+    update_overrides(&project, |text, p| {
+        overrides::assign_accent(text, p, accent.as_deref())
+    })
+}
+
+/// Upload or clear a project's background image (M8).
+///
+/// `image_base64` and `ext` travel together — a base64 payload with no
+/// extension has nowhere to be written, and one without the other means
+/// "clear" rather than a malformed upload, so both are `None` for that case
+/// rather than the frontend sending an empty string it would have to invent.
+#[tauri::command]
+fn project_background_set(
+    project: String,
+    image_base64: Option<String>,
+    ext: Option<String>,
+) -> Result<(), String> {
+    let dir = backgrounds_dir()?;
+    let filename = match (image_base64, ext) {
+        (Some(b64), Some(ext)) => {
+            use base64::Engine as _;
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(&b64)
+                .map_err(|e| format!("bad image encoding: {e}"))?;
+            Some(theme::save_background(&dir, &project, &bytes, &ext)?)
+        }
+        _ => {
+            theme::clear_background(&dir, &project);
+            None
+        }
     };
+    update_overrides(&project, |text, p| {
+        overrides::assign_background(text, p, filename.as_deref())
+    })
+}
 
-    let updated = overrides::assign_character(&text, &project, character.as_deref())?;
-
-    let temp = path.with_extension("toml.tmp");
-    std::fs::write(&temp, &updated).map_err(|e| format!("{}: {e}", temp.display()))?;
-    std::fs::rename(&temp, &path).map_err(|e| format!("{}: {e}", path.display()))
+/// A project's stored background image, as a data URI — the same convention
+/// `character_frames` already uses, so the front end never resolves a
+/// filesystem path itself.
+#[tauri::command]
+fn project_background_image(filename: String) -> Result<Option<String>, String> {
+    let dir = backgrounds_dir()?;
+    theme::read_background(&dir, &filename)
 }
 
 /// Give a character a voice, or clear it.
@@ -650,6 +737,9 @@ pub fn run() {
             character_parts,
             character_assign,
             character_voice,
+            project_accent_set,
+            project_background_set,
+            project_background_image,
             webview_notes,
         ])
         .build(tauri::generate_context!())

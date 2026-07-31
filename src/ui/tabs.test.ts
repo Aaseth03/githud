@@ -4,6 +4,7 @@ import {
   closeTab,
   initialTabState,
   isTabVisible,
+  liveProject,
   openProject,
   openProjectKeys,
   openSettings,
@@ -22,6 +23,8 @@ function project(name: string, rel = name): Project {
     agent: "read-write",
     note: null,
     character: null,
+    accent: null,
+    background: null,
   };
 }
 
@@ -189,5 +192,28 @@ describe("tab visibility — every open tab stays mounted", () => {
     expect(isTabVisible(s, "first")).toBe(true);
     expect(isTabVisible(s, "second")).toBe(false);
     expect(s.tabs).toHaveLength(3);
+  });
+});
+
+describe("liveProject — refreshing a tab's snapshot against the current scan", () => {
+  it("prefers the current scan's data over the tab's snapshot", () => {
+    const opened = project("githud");
+    const rescanned = { ...opened, accent: "#52d9a8", character: "hud" };
+
+    expect(liveProject([rescanned], opened)).toEqual(rescanned);
+  });
+
+  it("falls back to the snapshot when the project is not in the current scan", () => {
+    const opened = project("githud");
+
+    expect(liveProject([project("someone-else")], opened)).toEqual(opened);
+    expect(liveProject([], opened)).toEqual(opened);
+  });
+
+  it("matches by relative path, not by object identity", () => {
+    const opened = project("HOME_AI_VAULT", "Obsidian/HOME_AI_VAULT");
+    const rescanned = { ...project("HOME_AI_VAULT", "Obsidian/HOME_AI_VAULT"), accent: "#9b7cf0" };
+
+    expect(liveProject([rescanned], opened).accent).toBe("#9b7cf0");
   });
 });

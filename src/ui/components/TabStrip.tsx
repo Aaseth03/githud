@@ -36,7 +36,7 @@ export function TabStrip({
     <div
       role="tablist"
       aria-label="Open projects"
-      className="flex shrink-0 items-stretch gap-px overflow-x-auto border-b border-line bg-deep px-2 pt-2"
+      className="glass-panel flex shrink-0 items-stretch gap-1.5 overflow-x-auto px-2 py-2"
     >
       {tabs.map((tab) => {
         const key = tabKey(tab);
@@ -58,24 +58,25 @@ export function TabStrip({
               onClick={() => onSelect(key)}
               title={tab.kind === "project" ? tab.project.path : title}
               className={[
-                "relative flex min-h-10 items-center rounded-t border-x border-t",
-                "px-4 py-2.5 text-sm transition-colors",
+                "relative flex min-h-9 items-center rounded-lg border",
+                "px-4 py-2 text-sm transition-colors",
                 // Room for the close control, which overlays the right edge.
                 isMain ? "" : "pr-9",
                 isActive
-                  ? "border-line-bright bg-surface text-ink"
-                  : "border-transparent bg-transparent text-ink-faint hover:bg-surface/50 hover:text-ink-dim",
-                // Inset so the ring is not clipped by the top of the window.
-                "focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-signal",
+                  ? "border-line-bright bg-surface/60 text-ink"
+                  : "border-transparent bg-transparent text-ink-faint hover:bg-surface/30 hover:text-ink-dim",
+                "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-signal",
               ].join(" ")}
             >
               {/* The active tab is lit along its top edge — the strip reads at
                   a glance without relying on fill alone. Lit in the character's
-                  colour, so the room is legible before you enter it. */}
+                  colour, so the room is legible before you enter it. Inset from
+                  the corners so the glow does not overhang the tab's own
+                  rounding. */}
               {isActive && (
                 <span
                   aria-hidden
-                  className="absolute inset-x-0 top-0 h-px"
+                  className="absolute inset-x-2 top-0 h-px rounded-full"
                   style={{ background: accent, boxShadow: `0 0 10px ${accent}` }}
                 />
               )}

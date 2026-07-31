@@ -84,7 +84,7 @@ export function Panel({
   }, [id]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col border-l border-line bg-deep">
+    <div className="flex h-full min-h-0 flex-col">
       <div className="flex shrink-0 gap-px border-b border-line px-2 pt-2">
         <ModeTab mode="activity" active={mode} onSelect={setMode}>
           Activity

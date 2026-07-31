@@ -32,6 +32,8 @@ function project(overrides: Partial<Project> = {}): Project {
     agent: "read-write",
     note: null,
     character: null,
+    accent: null,
+    background: null,
     ...overrides,
   };
 }

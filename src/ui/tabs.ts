@@ -108,3 +108,21 @@ export function activeTab(state: TabState): Tab {
 export function isTabVisible(state: TabState, key: string): boolean {
   return state.activeKey === key;
 }
+
+/**
+ * A tab's project, refreshed against the current scan.
+ *
+ * `openProject` captures the project as it was the moment the tab opened, and
+ * a `Tab` lives in `TabState` — nothing about it changes when `App` reloads
+ * `projects` after a Settings edit. Read `tab.project` straight and a project
+ * already open in a tab keeps showing its old character, accent or
+ * background until the tab is closed and reopened: the exact "reopen the
+ * app" bug this exists to fix.
+ *
+ * Falls back to the tab's own snapshot when the project has vanished from
+ * the live scan — a tab already open should not lose the data it is
+ * rendering with just because a rescan is mid-flight or the repo was deleted.
+ */
+export function liveProject(projects: Project[], fallback: Project): Project {
+  return projects.find((p) => p.rel_path === fallback.rel_path) ?? fallback;
+}

@@ -14,6 +14,7 @@ import { useCharacterState } from "../hooks/useCharacterState";
 import type { Card } from "../card";
 import type { VoiceControls } from "../useVoice";
 import { Splitter } from "./Splitter";
+import { RowSplitter } from "./RowSplitter";
 import {
   DEFAULT_LEFT,
   DEFAULT_RIGHT,
@@ -23,6 +24,12 @@ import {
   RIGHT_BOUNDS,
   saveWidths,
 } from "../split";
+import {
+  DEFAULT_CHARACTER_HEIGHT,
+  fitCharacterHeight,
+  loadCharacterHeight,
+  saveCharacterHeight,
+} from "../characterHeight";
 
 /**
  * A project tab.
@@ -52,6 +59,8 @@ export function ProjectView({
   const [openFile, setOpenFile] = useState<string | null>(null);
   // What the user chose. Never overwritten by fitting — see split.ts.
   const [preferred, setPreferred] = useState(loadWidths);
+  // Same shape, one axis over — see characterHeight.ts.
+  const [characterPreferred, setCharacterPreferred] = useState(loadCharacterHeight);
   // A third reader of the agent stream — a posture, where agent.ts reduces a
   // transcript and activity.ts reduces panel state. No new events, no model.
   const [listening, setListening] = useState(false);
@@ -73,6 +82,10 @@ export function ProjectView({
   }, [preferred]);
 
   useEffect(() => {
+    saveCharacterHeight(characterPreferred);
+  }, [characterPreferred]);
+
+  useEffect(() => {
     const el = columnsRef.current;
     if (!el) return;
     const measure = () => setAvailable(el.clientWidth || Number.POSITIVE_INFINITY);
@@ -85,6 +98,8 @@ export function ProjectView({
   // Narrowing the window must not crush the centre; the side columns give way,
   // and widen again when there is room, because the preference survived.
   const widths = fit(preferred.left, preferred.right, available);
+  // Never taller than the file tree column is wide — see characterHeight.ts.
+  const characterHeight = fitCharacterHeight(characterPreferred, widths.left);
 
   // Read once and cached in Rust (D11). No agent is involved in showing a
   // project's state — that is the point of the card.
@@ -102,11 +117,14 @@ export function ProjectView({
 
   return (
     // The accent is scoped to the tab, so two open projects are two rooms.
+    // The scene itself (a project's own background, M8) is painted once at
+    // the app root — every panel here is glass floating over it, not a
+    // second decorative field competing for the same pixels.
     <div
-      className="flex h-full min-h-0 flex-col"
+      className="flex h-full min-h-0 flex-col gap-3"
       style={accentOf(character.profile) as React.CSSProperties}
     >
-      <header className="starfield border-b-2 border-b-[var(--accent)]/45 px-8 pt-8 pb-5">
+      <header className="glass-panel shrink-0 px-8 pt-6 pb-5">
         <h1 className="text-2xl font-light tracking-wide text-ink">
           {project.name}
         </h1>
@@ -135,7 +153,7 @@ export function ProjectView({
               " Agent access is declared read-only — enforced from M4."}
           </p>
         )}
-        <nav className="mt-6 -mb-5 flex gap-px" aria-label="Project panes">
+        <nav className="mt-6 flex gap-1.5" aria-label="Project panes">
           <PaneTab
             pane="chat"
             active={panes.active}
@@ -163,35 +181,51 @@ export function ProjectView({
       </header>
 
       <div ref={columnsRef} className="flex min-h-0 flex-1">
-        <aside
-          style={{ width: widths.left }}
-          className="flex shrink-0 flex-col bg-deep"
-        >
-          <h2 className="shrink-0 px-3 pt-3 pb-1 text-[10px] tracking-[0.16em] text-ink-faint uppercase">
-            Files
-          </h2>
-          <FileTree
-            cwd={project.path}
-            selected={openFile}
-            onOpen={(path) => {
-              setOpenFile(path);
-              setPanes((p) => showPane(p, "file"));
-            }}
-          />
-
-          {/* The character shrinks to a small window beneath the tree
-              (`planning/architecture/ui-layout.md`). It sits below on purpose:
-              the tree is what you navigate with, so it gets the height. */}
-          <div className="shrink-0 border-t border-line">
-            <CharacterStage
-              profile={character.profile}
-              live={voice.live}
-              speaking={voice.speaking !== null}
-              state={characterState}
-              problem={character.problem}
-              visible={visible}
-              size="inset"
+        <aside style={{ width: widths.left }} className="shrink-0 pr-1.5">
+          <div className="glass-panel flex h-full flex-col overflow-hidden">
+            <h2 className="shrink-0 px-3 pt-3 pb-1 text-[10px] tracking-[0.16em] text-ink-faint uppercase">
+              Files
+            </h2>
+            <FileTree
+              cwd={project.path}
+              selected={openFile}
+              onOpen={(path) => {
+                setOpenFile(path);
+                setPanes((p) => showPane(p, "file"));
+              }}
             />
+
+            <RowSplitter
+              height={characterHeight}
+              columnWidth={widths.left}
+              onResize={setCharacterPreferred}
+              onReset={() => setCharacterPreferred(DEFAULT_CHARACTER_HEIGHT)}
+              label="Character stage height"
+            />
+
+            {/* The character sits beneath the tree on purpose — it is what
+                you navigate with (`planning/architecture/ui-layout.md`) — but
+                its own frame is now draggable, not fixed: dragging the bar
+                above it up grows the stage, and it can never grow taller than
+                this column is wide (characterHeight.ts), so the avatar only
+                ever gets more visible, not distorted. Bordered and padded
+                (`.character-stage`'s own `p-3`) so it reads as a window
+                rather than bleeding into the tree above it or the column's
+                own edges. */}
+            <div
+              style={{ height: characterHeight }}
+              className="mx-2 mb-2 shrink-0 overflow-hidden rounded-lg border border-line"
+            >
+              <CharacterStage
+                profile={character.profile}
+                live={voice.live}
+                speaking={voice.speaking !== null}
+                state={characterState}
+                problem={character.problem}
+                visible={visible}
+                size="inset"
+              />
+            </div>
           </div>
         </aside>
 
@@ -207,42 +241,51 @@ export function ProjectView({
         <div className="relative min-h-0 flex-1">
         {/* Both panes are hidden with CSS rather than unmounted — see
             ../panes.ts. The terminal is not rendered at all until first shown,
-            so browsing a project never leaves a shell behind. */}
+            so browsing a project never leaves a shell behind. Padding lives on
+            each absolutely positioned pane, not on this relative parent —
+            `inset-0` measures from the padding edge, so padding here would be
+            invisible to them. */}
         <div
-          className={`absolute inset-0 ${panes.active === "chat" ? "" : "hidden"}`}
+          className={`absolute inset-0 p-1.5 ${panes.active === "chat" ? "" : "hidden"}`}
         >
-          <Chat
-            project={project}
-            visible={visible && panes.active === "chat"}
-            voice={voice}
-            roomVoice={roomVoice}
-            onListening={setListening}
-          />
+          <div className="glass-panel-strong h-full overflow-hidden">
+            <Chat
+              project={project}
+              visible={visible && panes.active === "chat"}
+              voice={voice}
+              roomVoice={roomVoice}
+              onListening={setListening}
+            />
+          </div>
         </div>
 
         {isMounted(panes, "file") && (
           <div
-            className={`absolute inset-0 ${
+            className={`absolute inset-0 p-1.5 ${
               panes.active === "file" ? "" : "hidden"
             }`}
           >
-            <FileViewer cwd={project.path} path={openFile} />
+            <div className="glass-panel h-full overflow-hidden">
+              <FileViewer cwd={project.path} path={openFile} />
+            </div>
           </div>
         )}
 
         {isMounted(panes, "terminal") && (
           <div
-            className={`absolute inset-0 ${
+            className={`absolute inset-0 p-1.5 ${
               panes.active === "terminal" ? "" : "hidden"
             }`}
           >
-            <Terminal
-              id={project.rel_path}
-              cwd={project.path}
-              // Both must hold: fitting a terminal on a hidden tab measures
-              // zero and would resize the shell to 1x1.
-              visible={visible && panes.active === "terminal"}
-            />
+            <div className="glass-panel-strong h-full overflow-hidden">
+              <Terminal
+                id={project.rel_path}
+                cwd={project.path}
+                // Both must hold: fitting a terminal on a hidden tab measures
+                // zero and would resize the shell to 1x1.
+                visible={visible && panes.active === "terminal"}
+              />
+            </div>
           </div>
         )}
         </div>
@@ -256,13 +299,15 @@ export function ProjectView({
           label="Panel width"
         />
 
-        <div style={{ width: widths.right }} className="shrink-0">
-          <Panel
-            id={project.rel_path}
-            cwd={project.path}
-            card={card}
-            problems={problems}
-          />
+        <div style={{ width: widths.right }} className="shrink-0 pl-1.5">
+          <div className="glass-panel h-full overflow-hidden">
+            <Panel
+              id={project.rel_path}
+              cwd={project.path}
+              card={card}
+              problems={problems}
+            />
+          </div>
         </div>
       </div>
     </div>
@@ -286,17 +331,33 @@ function PaneTab({
       onClick={() => onSelect(pane)}
       aria-current={isActive ? "page" : undefined}
       className={[
-        "relative min-h-9 rounded-t border-x border-t px-4 py-2 text-sm transition-colors",
+        "relative min-h-9 rounded-lg border px-4 py-2 text-sm transition-colors",
         isActive
-          ? "border-line-bright bg-deep text-ink"
-          : "border-transparent text-ink-faint hover:bg-surface/50 hover:text-ink-dim",
-        "focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-signal",
+          ? "text-ink"
+          : "border-transparent text-ink-faint hover:bg-surface/30 hover:text-ink-dim",
+        "focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-signal",
       ].join(" ")}
+      // `--panel-fill`/`--panel-edge` are the header's own (its `.glass-panel`
+      // class defines them, and custom properties inherit) — a button inside
+      // it picking up the same project colour is one cascade, not a second
+      // prop threaded down from `App`.
+      style={
+        isActive
+          ? {
+              borderColor: "color-mix(in oklab, var(--panel-edge, var(--color-line-bright)) 65%, transparent)",
+              background: "color-mix(in oklab, var(--panel-fill, var(--color-surface)) 70%, transparent)",
+            }
+          : undefined
+      }
     >
       {isActive && (
         <span
           aria-hidden
-          className="absolute inset-x-0 top-0 h-px bg-signal shadow-[0_0_10px_var(--color-signal)]"
+          className="absolute inset-x-2 top-0 h-px rounded-full"
+          style={{
+            background: "var(--panel-tint, var(--color-signal))",
+            boxShadow: "0 0 10px var(--panel-tint, var(--color-signal))",
+          }}
         />
       )}
       {children}

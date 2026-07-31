@@ -13,6 +13,12 @@ interface Props {
   onOpen: (project: Project) => void;
   onRescan: () => void;
   onSettings: () => void;
+  /**
+   * A project's own accent (M8), keyed by `rel_path`. Absent means the
+   * project has not chosen one, so the rail keeps the app's own signal
+   * colour — the same fallback `TabStrip` uses for the same reason.
+   */
+  accents?: Record<string, string>;
 }
 
 export function Sidebar({
@@ -27,9 +33,10 @@ export function Sidebar({
   onOpen,
   onRescan,
   onSettings,
+  accents,
 }: Props) {
   return (
-    <aside className="flex w-72 shrink-0 flex-col border-r border-line bg-deep">
+    <aside className="glass-panel flex w-72 shrink-0 flex-col overflow-hidden">
       <header className="flex items-baseline justify-between gap-2 px-4 pt-4 pb-3">
         <div className="min-w-0">
           <h2 className="text-[11px] font-semibold tracking-[0.18em] text-ink-faint uppercase">
@@ -94,6 +101,7 @@ export function Sidebar({
           {projects.map((p) => {
             const isOpen = openKeys.has(p.rel_path);
             const isActive = activeKey === p.rel_path;
+            const rail = accents?.[p.rel_path];
             return (
               <li key={p.rel_path}>
                 <button
@@ -109,17 +117,26 @@ export function Sidebar({
                   ].join(" ")}
                 >
                   {/* Open projects carry a rail. Active is brighter — two
-                      states, one mark, no legend needed. */}
+                      states, one mark, no legend needed. A project's own
+                      accent (M8) replaces the app's signal colour when it has
+                      chosen one, the same fallback `TabStrip` uses. */}
                   <span
                     aria-hidden
                     className={[
                       "absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-full transition-colors",
-                      isActive
-                        ? "bg-signal"
-                        : isOpen
-                          ? "bg-signal-deep"
-                          : "bg-transparent",
+                      rail
+                        ? ""
+                        : isActive
+                          ? "bg-signal"
+                          : isOpen
+                            ? "bg-signal-deep"
+                            : "bg-transparent",
                     ].join(" ")}
+                    style={
+                      rail
+                        ? { background: rail, opacity: isActive ? 1 : isOpen ? 0.55 : 0 }
+                        : undefined
+                    }
                   />
                   <span className="min-w-0 flex-1">
                     <span

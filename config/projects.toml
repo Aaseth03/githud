@@ -47,7 +47,13 @@ note = "Superseded by GIT HUD. Kept for reference; not developed."
 [projects.githud]
 character = "hud"
 note = "GIT HUD's own persona. Every other project resolves to `default` until it picks one."
+background = "githud.jpg"
+accent = "#692323"
 
 [projects."Obsidian/HOME_AI_VAULT"]
 character = "mia"
 note = "The vault. MIA is its character (D5)."
+
+[projects.Professor]
+accent = "#174920"
+background = "Professor.jpg"

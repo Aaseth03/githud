@@ -15,6 +15,8 @@ function project(
     agent: kind === "external" ? "read-only" : "read-write",
     note: null,
     character: null,
+    accent: null,
+    background: null,
   };
 }
 

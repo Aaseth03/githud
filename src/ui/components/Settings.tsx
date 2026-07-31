@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CharacterSection, GraphicsSection } from "./CharacterSection";
+import { ThemeSection } from "./ThemeSection";
 import { Select } from "./Select";
 import type { VoiceControls } from "../useVoice";
 import type { Characters, Project } from "../types";
@@ -55,15 +56,18 @@ export function Settings({
   onCharactersChanged: () => Promise<void> | void;
 }) {
   return (
-    <div className="h-full overflow-y-auto bg-void px-8 py-6">
-      <header className="mb-6">
-        <h1 className="text-sm font-semibold tracking-[0.18em] text-ink uppercase">
-          Settings
-        </h1>
-        <p className="mt-1 text-xs text-ink-faint">
-          What this machine has, what the app can reach, and what it got when it
-          last tried.
-        </p>
+    <div className="h-full overflow-y-auto px-8 py-6">
+      <header className="mb-6 flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-sm font-semibold tracking-[0.18em] text-ink uppercase">
+            Settings
+          </h1>
+          <p className="mt-1 text-xs text-ink-faint">
+            What this machine has, what the app can reach, and what it got when
+            it last tried.
+          </p>
+        </div>
+        <ReloadProjectsButton onProjectsChanged={onProjectsChanged} />
       </header>
 
       <div className="max-w-3xl space-y-6">
@@ -75,6 +79,7 @@ export function Settings({
           onProjectsChanged={onProjectsChanged}
           onCharactersChanged={onCharactersChanged}
         />
+        <ThemeSection projects={projects} onProjectsChanged={onProjectsChanged} />
         <AudioSection />
         <MicrophoneTest />
         <VoiceSection />
@@ -82,6 +87,51 @@ export function Settings({
         <WebviewSection />
       </div>
     </div>
+  );
+}
+
+/**
+ * Reload `config/projects.toml` and every open tab with it.
+ *
+ * A change made *in* Settings already reloads on its own — every save here
+ * calls the same `onProjectsChanged`, and `App` refreshes each open tab's
+ * project against the new scan (`tabs.liveProject`) rather than the stale
+ * copy it opened with. This button exists for the change Settings did not
+ * make: `config/projects.toml` hand-edited in an editor, or a background
+ * image dropped straight into the machine-local backgrounds directory.
+ */
+function ReloadProjectsButton({
+  onProjectsChanged,
+}: {
+  onProjectsChanged: () => Promise<void> | void;
+}) {
+  const [state, setState] = useState<"idle" | "reloading" | "reloaded">("idle");
+
+  const reload = useCallback(() => {
+    setState("reloading");
+    void Promise.resolve(onProjectsChanged())
+      .then(() => setState("reloaded"))
+      .catch(() => setState("idle"));
+  }, [onProjectsChanged]);
+
+  useEffect(() => {
+    if (state !== "reloaded") return;
+    const id = setTimeout(() => setState("idle"), 1500);
+    return () => clearTimeout(id);
+  }, [state]);
+
+  return (
+    <button
+      onClick={reload}
+      disabled={state === "reloading"}
+      title="Re-read config/projects.toml and every open tab with it — for a change made outside the app"
+      className="shrink-0 rounded border border-line px-2.5 py-1.5 font-mono text-[10px]
+                 tracking-wider text-ink-dim transition-colors hover:border-signal-deep hover:text-signal
+                 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal
+                 disabled:opacity-40"
+    >
+      {state === "reloading" ? "RELOADING…" : state === "reloaded" ? "RELOADED" : "RELOAD PROJECTS"}
+    </button>
   );
 }
 
@@ -95,7 +145,7 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="rounded border border-line bg-deep px-4 py-3.5">
+    <section className="glass-panel px-4 py-3.5">
       <h2 className="text-[11px] font-semibold tracking-[0.16em] text-ink-dim uppercase">
         {title}
       </h2>

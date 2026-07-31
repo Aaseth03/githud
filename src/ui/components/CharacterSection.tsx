@@ -70,7 +70,7 @@ export function CharacterSection({
   );
 
   return (
-    <section className="rounded border border-line bg-deep px-4 py-3.5">
+    <section className="glass-panel px-4 py-3.5">
       <h2 className="text-[11px] font-semibold tracking-[0.16em] text-ink-dim uppercase">
         Characters
       </h2>
@@ -317,7 +317,7 @@ export function GraphicsSection() {
   }, []);
 
   return (
-    <section className="rounded border border-line bg-deep px-4 py-3.5">
+    <section className="glass-panel px-4 py-3.5">
       <h2 className="text-[11px] font-semibold tracking-[0.16em] text-ink-dim uppercase">
         Graphics
       </h2>

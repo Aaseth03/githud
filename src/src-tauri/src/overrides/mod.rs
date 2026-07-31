@@ -80,6 +80,24 @@ pub struct Override {
     pub adapter: Option<String>,
     pub model: Option<String>,
     pub character: Option<String>,
+    /// A project's own accent, independent of its character (M8).
+    ///
+    /// Character accents stay scoped to `--accent`/`--accent-glow`/
+    /// `--accent-field` on the character itself (D21) — this is a different
+    /// axis, the tab rail and glass tint for the *room*, not the *resident*.
+    /// A hex string; validated at the point it is written, not here, so a
+    /// stale or hand-edited value fails the same way a bad `character` name
+    /// does — by resolving to nothing rather than refusing to load the file.
+    pub accent: Option<String>,
+    /// The filename of an uploaded background image, resolved against the
+    /// machine-local backgrounds directory (D8) — never a path, because this
+    /// file syncs across machines (D8) and an absolute path would not.
+    ///
+    /// Unlike `character`, a name here that resolves to nothing on this
+    /// machine (the image was never uploaded here) is the ordinary case, not
+    /// a typo — the same tolerance the rest of this file already has for an
+    /// entry naming a repo that is not on this machine.
+    pub background: Option<String>,
     /// Keep a scanned repo out of the sidebar entirely.
     #[serde(default)]
     pub hidden: bool,
@@ -146,12 +164,46 @@ impl Overrides {
 /// only thing in it, because an empty `[projects.x]` is noise that reads as a
 /// declaration.
 pub fn assign_character(text: &str, rel_path: &str, character: Option<&str>) -> Result<String, String> {
+    set_field(text, rel_path, "character", character)
+}
+
+/// Set or clear a project's own accent (M8), preserving everything else.
+pub fn assign_accent(text: &str, rel_path: &str, accent: Option<&str>) -> Result<String, String> {
+    set_field(text, rel_path, "accent", accent)
+}
+
+/// Set or clear a project's background-image filename (M8), preserving
+/// everything else.
+pub fn assign_background(text: &str, rel_path: &str, background: Option<&str>) -> Result<String, String> {
+    set_field(text, rel_path, "background", background)
+}
+
+/// Set or clear one field of one project's entry, preserving everything else
+/// — comments included.
+///
+/// **Editing, not re-serializing.** `config/projects.toml` opens with a thirty-line
+/// comment block explaining D10 and D18, and round-tripping it through `toml`
+/// would delete all of it — the file would still be correct and would have lost
+/// the reason it exists. `toml_edit` keeps trivia, so this adds one line.
+///
+/// Shared by `assign_character`, `assign_accent` and `assign_background`
+/// rather than three hand-written copies, because a fourth one written by hand
+/// beside them would drift from this exact logic the first time any of them
+/// changed. `None` removes the key, and removes the table too if that was the
+/// only thing in it, because an empty `[projects.x]` is noise that reads as a
+/// declaration.
+fn set_field(
+    text: &str,
+    rel_path: &str,
+    field: &str,
+    value: Option<&str>,
+) -> Result<String, String> {
     let mut doc = text
         .parse::<toml_edit::DocumentMut>()
         .map_err(|e| format!("config/projects.toml is malformed: {e}"))?;
 
     if !doc.contains_key("projects") {
-        if character.is_none() {
+        if value.is_none() {
             return Ok(doc.to_string());
         }
         let mut table = toml_edit::Table::new();
@@ -165,19 +217,19 @@ pub fn assign_character(text: &str, rel_path: &str, character: Option<&str>) -> 
         .as_table_mut()
         .ok_or_else(|| "config/projects.toml: `projects` is not a table".to_string())?;
 
-    match character {
-        Some(name) => {
+    match value {
+        Some(v) => {
             if !projects.contains_key(rel_path) {
                 projects.insert(rel_path, toml_edit::Item::Table(toml_edit::Table::new()));
             }
             let entry = projects[rel_path]
                 .as_table_mut()
                 .ok_or_else(|| format!("config/projects.toml: `{rel_path}` is not a table"))?;
-            entry["character"] = toml_edit::value(name);
+            entry[field] = toml_edit::value(v);
         }
         None => {
             if let Some(entry) = projects.get_mut(rel_path).and_then(|e| e.as_table_mut()) {
-                entry.remove("character");
+                entry.remove(field);
                 if entry.is_empty() {
                     projects.remove(rel_path);
                 }
@@ -492,5 +544,75 @@ note  = "MIT, third-party."
         assert!(ProjectKind::Own.expects_icm());
         assert!(!ProjectKind::External.expects_icm());
         assert!(!ProjectKind::Deprecated.expects_icm());
+    }
+
+    // ── Accent and background (M8) ──────────────────────────────────────────
+    //
+    // Both go through the same `set_field` that `assign_character`'s tests
+    // above already exercise exhaustively — comment preservation, nested-path
+    // quoting, malformed-file refusal. These prove the field name is right and
+    // that the three fields do not step on each other.
+
+    #[test]
+    fn assigning_an_accent_keeps_every_comment() {
+        let out = assign_accent(REAL, "githud", Some("#52d9a8")).unwrap();
+        assert!(out.contains("# THIS IS NOT A PROJECT LIST"));
+        assert!(out.contains(r##"accent = "#52d9a8""##));
+    }
+
+    #[test]
+    fn assigning_a_background_keeps_every_comment() {
+        let out = assign_background(REAL, "githud", Some("githud.png")).unwrap();
+        assert!(out.contains("# THIS IS NOT A PROJECT LIST"));
+        assert!(out.contains(r#"background = "githud.png""#));
+    }
+
+    #[test]
+    fn accent_character_and_background_coexist_on_one_project() {
+        let with_character = assign_character(REAL, "githud", Some("hud")).unwrap();
+        let with_accent = assign_accent(&with_character, "githud", Some("#52d9a8")).unwrap();
+        let with_background = assign_background(&with_accent, "githud", Some("githud.png")).unwrap();
+
+        let entry = Overrides::parse(&with_background).unwrap();
+        let entry = entry.get("githud").unwrap();
+        assert_eq!(entry.character.as_deref(), Some("hud"));
+        assert_eq!(entry.accent.as_deref(), Some("#52d9a8"));
+        assert_eq!(entry.background.as_deref(), Some("githud.png"));
+        // Only one `[projects.githud]` table, not three.
+        assert_eq!(with_background.matches("[projects.githud]").count(), 1);
+    }
+
+    #[test]
+    fn clearing_the_accent_leaves_the_background_alone() {
+        let with_both = assign_background(
+            &assign_accent(REAL, "githud", Some("#52d9a8")).unwrap(),
+            "githud",
+            Some("githud.png"),
+        )
+        .unwrap();
+        let cleared = assign_accent(&with_both, "githud", None).unwrap();
+
+        let entry = Overrides::parse(&cleared).unwrap();
+        let entry = entry.get("githud").unwrap();
+        assert_eq!(entry.accent, None);
+        assert_eq!(entry.background.as_deref(), Some("githud.png"));
+    }
+
+    #[test]
+    fn clearing_the_only_declared_field_removes_the_whole_entry() {
+        let assigned = assign_accent(REAL, "githud", Some("#52d9a8")).unwrap();
+        let cleared = assign_accent(&assigned, "githud", None).unwrap();
+        assert!(!cleared.contains("[projects.githud]"), "{cleared}");
+    }
+
+    #[test]
+    fn reassigning_an_accent_replaces_rather_than_duplicating() {
+        let once = assign_accent(REAL, "githud", Some("#52d9a8")).unwrap();
+        let twice = assign_accent(&once, "githud", Some("#9b7cf0")).unwrap();
+        assert_eq!(twice.matches("accent =").count(), 1);
+        assert_eq!(
+            Overrides::parse(&twice).unwrap().get("githud").unwrap().accent.as_deref(),
+            Some("#9b7cf0")
+        );
     }
 }
