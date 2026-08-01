@@ -21,7 +21,7 @@
 #   hidden     true to keep a scanned repo out of the sidebar
 #
 # The table key is the repo path relative to ~/github. Quote it if it nests:
-#   [projects."Obsidian/HOME_AI_VAULT"]
+#   [projects."some-folder/nested-repo"]
 #
 # ── kind ──────────────────────────────────────────────────────────────────────
 #
@@ -50,7 +50,7 @@ note = "GIT HUD's own persona. Every other project resolves to `default` until i
 background = "githud.jpg"
 accent = "#692323"
 
-[projects."Obsidian/HOME_AI_VAULT"]
+[projects.HOME_AI_VAULT]
 character = "mia"
 note = "The vault. MIA is its character (D5)."
 

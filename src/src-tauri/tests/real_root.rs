@@ -52,13 +52,20 @@ fn finds_every_repo_under_the_real_root_including_the_nested_vault() {
         found.len()
     );
 
-    // The specific case that makes a naive depth-1 scan wrong.
+    // The vault sits directly under the root, not nested under `Obsidian/` —
+    // moved there because its `rel_path` needs to be stable across machines,
+    // and `config/projects.toml` addresses it by that exact path.
     let vault = found
         .iter()
-        .find(|p| p.rel_path == "Obsidian/HOME_AI_VAULT")
-        .expect("the vault at depth 2 must be found");
-    assert_eq!(vault.depth, 2);
+        .find(|p| p.rel_path == "HOME_AI_VAULT")
+        .expect("the vault must be found");
+    assert_eq!(vault.depth, 1);
     assert!(vault.icm.layer0, "the vault has AGENTS.md");
+    assert_eq!(
+        vault.character.as_deref(),
+        Some("mia"),
+        "the override in config/projects.toml must resolve against the real scan"
+    );
 
     // GIT HUD itself must be conformant — it is the reference for the badge.
     let githud = found

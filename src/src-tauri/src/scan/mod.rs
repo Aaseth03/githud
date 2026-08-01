@@ -14,8 +14,11 @@ use crate::overrides::{AgentAccess, Overrides, ProjectKind};
 
 /// How many directory levels below the root to search.
 ///
-/// The vault lives at `~/github/Obsidian/HOME_AI_VAULT` — depth 2 — which is the
-/// specific case that makes a naive depth-1 scan wrong.
+/// A depth of 1 would miss any repo living inside a container folder — the
+/// vault used to be the case in point, nested under `~/github/Obsidian/`
+/// until it moved to sit directly under the root. Kept at 3 as headroom for
+/// whatever else ends up nested rather than tuned down to exactly what is
+/// on disk today.
 pub const DEFAULT_MAX_DEPTH: usize = 3;
 
 /// Directories never worth descending into. Skipping these is the difference
