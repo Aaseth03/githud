@@ -440,12 +440,14 @@ no model in the render path. D20's constraint on speech, applied to art.
 - [ ] `character-parts` — the chosen reference drives the full layer set, with
       occluded regions filled per D21, background removed, fixed canvas and
       anchors so every part registers
-- [ ] `character-assemble` — writes `config/characters/<name>/` and a
-      `profile.toml` scaffold, then **validates against the parts spec**, so a
-      half-finished set fails loudly instead of rendering as a character with
-      no mouth
+- [ ] `character-assemble` — writes `characters/profiles/<name>/` and a
+      `characters/profiles/<name>.toml` scaffold, then **validates against the
+      parts spec**, so a half-finished set fails loudly instead of rendering as a
+      character with no mouth
 - [ ] Seeds committed with the character, so the same input reproduces it
-- [ ] Scripted, not prompted (D13) — it drives ComfyUI's HTTP API headlessly
+- [ ] Scripted, not prompted (D13) — it drives ComfyUI's HTTP API headlessly.
+      These live in `characters/pipeline/` beside `character-decompose.py`, not
+      in `ops/` — they are steps in a workspace, not scripts about the repo (D23)
 
 ### M11 — Speech shaping
 **Status:** not-started
