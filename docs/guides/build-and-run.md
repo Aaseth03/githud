@@ -7,6 +7,12 @@ file; never mirror it.
 
 ## Quick start
 
+Needs Node 22.x and a Rust toolchain (via [rustup](https://rustup.rs)) on
+`PATH` — see [System dependencies](#system-dependencies) below for the rest.
+`npm run app` checks for `cargo` first and fails with an install pointer
+instead of the confusing `cargo metadata ... No such file or directory`
+error you get if Rust is missing outright.
+
 ```bash
 cd src
 npm install
@@ -65,7 +71,43 @@ The last one is environment-dependent — it scans the real `~/github` — so it
 | Tailwind | 4, via `@tailwindcss/vite` — no `tailwind.config.js`; the theme is `@theme` in `ui/styles/index.css` |
 | Vitest | 3 |
 
-## System dependencies — Linux (Fedora / Nobara)
+## System dependencies
+
+Both platforms need a Rust toolchain — install with:
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+`npm run app` / `npm run app:build` check for `cargo` first (via
+`scripts/check-rust.sh`) and print the line above if it's missing, instead of
+failing deep inside the Tauri CLI with `cargo metadata ... No such file or
+directory`.
+
+**After installing, open a new terminal and confirm `command -v cargo` finds
+it.** rustup patches your shell's startup file (`~/.zprofile` for zsh,
+`~/.bash_profile` for bash) to add `~/.cargo/bin` to `PATH` — if that file
+can't be written (wrong ownership/permissions, unusual on a normal account
+but seen once), rustup installs fine but silently never reaches your shell.
+If a new terminal still can't find `cargo`, add this line to your shell's
+startup file yourself:
+
+```bash
+. "$HOME/.cargo/env"
+```
+
+### macOS
+
+Xcode Command Line Tools, if not already present:
+
+```bash
+xcode-select --install
+```
+
+Nothing else — Tauri v2 on macOS links against system WebKit, so there is no
+Linux-style devel-package list to install.
+
+### Linux (Fedora / Nobara)
 
 ```bash
 sudo dnf install webkit2gtk4.1-devel openssl-devel curl wget file \
