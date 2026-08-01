@@ -179,6 +179,23 @@ export interface ScanResult {
 }
 
 /**
+ * Mirrors `ScanRootInfo` in `lib.rs` — the effective folder being scanned for
+ * projects, resolved fresh on every call.
+ */
+export interface ScanRootInfo {
+  path: string;
+  /** Whether this is a folder the machine chose, rather than the default. */
+  is_custom: boolean;
+  /**
+   * Set when a saved custom folder could not be used (moved, deleted, an
+   * unplugged drive) or `machine.toml` itself was malformed — the app fell
+   * back to the default rather than failing, but that fallback must not be
+   * silent.
+   */
+  warning: string | null;
+}
+
+/**
  * An open tab. The main tab always exists and is never closable; project tabs
  * are keyed by `rel_path` because that is what stays stable across machines.
  * Settings is a place you visit — one of it, and closable, unlike main (D5).

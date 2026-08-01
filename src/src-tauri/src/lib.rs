@@ -10,6 +10,7 @@ pub mod card;
 pub mod character;
 pub mod git;
 pub mod guard;
+pub mod machine;
 pub mod mic;
 pub mod overrides;
 pub mod parse;
@@ -24,24 +25,87 @@ use std::path::PathBuf;
 use overrides::Overrides;
 use scan::{ScanResult, DEFAULT_MAX_DEPTH};
 
-/// Where projects live.
+/// Where machine-local settings live (D8) — never `config/`, because this is
+/// per-machine and must not sync.
+fn machine_dir() -> Result<PathBuf, String> {
+    if let Ok(explicit) = std::env::var("GITHUD_MACHINE_DIR") {
+        return Ok(PathBuf::from(explicit));
+    }
+    let data_home = dirs::data_local_dir().ok_or("could not resolve the data directory")?;
+    Ok(data_home.join("githud"))
+}
+
+fn machine_toml_path() -> Result<PathBuf, String> {
+    Ok(machine_dir()?.join("machine.toml"))
+}
+
+/// Read `machine.toml`, degrading to defaults on a parse failure rather than
+/// failing the caller outright — the same "surface, don't swallow, don't take
+/// the whole thing down" posture `Overrides::load` uses for `projects.toml`.
+fn load_machine_config() -> (machine::MachineConfig, Option<String>) {
+    let path = match machine_toml_path() {
+        Ok(p) => p,
+        Err(e) => return (machine::MachineConfig::default(), Some(e)),
+    };
+    match machine::MachineConfig::load(&path) {
+        Ok(c) => (c, None),
+        Err(e) => (machine::MachineConfig::default(), Some(e)),
+    }
+}
+
+/// The effective scan root, resolved fresh on every call so a folder that
+/// moved or vanished since the last run is never trusted blindly.
+struct ResolvedRoot {
+    path: PathBuf,
+    is_custom: bool,
+    /// A saved custom root that turned out unusable, or a malformed
+    /// `machine.toml` — either way the app fell back to the default rather
+    /// than failing, but that fallback must not be silent.
+    warning: Option<String>,
+}
+
+/// Where projects live: the machine's own choice if one is set and still
+/// valid, else `~/github`.
 ///
-/// Hard-coded to `~/github` for M1. It becomes configurable when there is a
-/// settings surface to configure it from; inventing one now would be
-/// speculative.
-fn project_root() -> Option<PathBuf> {
-    dirs::home_dir().map(|h| h.join("github"))
+/// A saved folder that no longer exists — moved, deleted, an unplugged
+/// external drive — must not break the whole registry, the same reasoning
+/// `scan()` already applies to a root that does not exist at all. It falls
+/// back to the default and reports why, rather than either crashing or
+/// silently scanning the wrong thing.
+fn resolve_root() -> Result<ResolvedRoot, String> {
+    let default_root = dirs::home_dir()
+        .map(|h| h.join("github"))
+        .ok_or("could not resolve the home directory")?;
+
+    let (config, warning) = load_machine_config();
+
+    let Some(saved) = config.project_root else {
+        return Ok(ResolvedRoot { path: default_root, is_custom: false, warning });
+    };
+
+    match machine::resolve_project_root(&saved) {
+        Ok(path) => Ok(ResolvedRoot { path, is_custom: true, warning }),
+        Err(e) => {
+            let msg =
+                format!("the saved project folder is unusable, using the default instead: {e}");
+            let warning = Some(match warning {
+                Some(w) => format!("{w}; {msg}"),
+                None => msg,
+            });
+            Ok(ResolvedRoot { path: default_root, is_custom: false, warning })
+        }
+    }
 }
 
 /// Scan the project root and return everything found — repos, plus root-level
 /// folders that are not repos yet.
 ///
 /// Returns an empty result rather than an error when the root does not exist —
-/// a machine without `~/github` has no projects, which is a state, not a
+/// a machine without a scannable root has no projects, which is a state, not a
 /// failure.
 #[tauri::command]
 fn scan_projects() -> Result<ScanResult, String> {
-    let root = project_root().ok_or_else(|| "could not resolve the home directory".to_string())?;
+    let root = resolve_root()?.path;
 
     // A malformed overrides file must not take the whole scan down — but it
     // must also not pass unnoticed, because a typo that silently reverts a
@@ -123,12 +187,48 @@ fn characters_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../characters/profiles")
 }
 
-/// The absolute path being scanned, so the UI can show it rather than guess.
+/// The absolute path being scanned, whether it is a custom choice or the
+/// default, and any problem that fell back silently otherwise — so Settings
+/// can show the truth rather than a guess.
+#[derive(Clone, serde::Serialize)]
+struct ScanRootInfo {
+    path: String,
+    is_custom: bool,
+    warning: Option<String>,
+}
+
 #[tauri::command]
-fn scan_root() -> Result<String, String> {
-    project_root()
-        .map(|p| p.to_string_lossy().into_owned())
-        .ok_or_else(|| "could not resolve the home directory".to_string())
+fn scan_root() -> Result<ScanRootInfo, String> {
+    let resolved = resolve_root()?;
+    Ok(ScanRootInfo {
+        path: resolved.path.to_string_lossy().into_owned(),
+        is_custom: resolved.is_custom,
+        warning: resolved.warning,
+    })
+}
+
+/// Set the folder to scan for projects.
+///
+/// The path is never trusted as given — `machine::resolve_project_root`
+/// canonicalizes it (resolving `..` and symlinks) and confirms it is a real
+/// directory before anything is written, so a stale or malformed string can
+/// at worst be refused, never silently accepted. Returns the canonicalized
+/// path so the caller can show exactly what was saved.
+#[tauri::command]
+fn set_project_root(path: String) -> Result<String, String> {
+    let resolved = machine::resolve_project_root(std::path::Path::new(&path))?;
+    let (mut config, _) = load_machine_config();
+    config.project_root = Some(resolved.clone());
+    config.save(&machine_toml_path()?)?;
+    Ok(resolved.to_string_lossy().into_owned())
+}
+
+/// Clear the custom folder, reverting to the default (`~/github`).
+#[tauri::command]
+fn reset_project_root() -> Result<(), String> {
+    let (mut config, _) = load_machine_config();
+    config.project_root = None;
+    config.save(&machine_toml_path()?)
 }
 
 // ── Channel 1: the terminal (D1) ─────────────────────────────────────────────
@@ -684,6 +784,7 @@ pub fn run() {
     });
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(terminals.clone())
         .manage(agents.clone())
         .manage(cards)
@@ -713,6 +814,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             scan_projects,
             scan_root,
+            set_project_root,
+            reset_project_root,
             pty_open,
             pty_write,
             pty_resize,

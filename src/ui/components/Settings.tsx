@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CharacterSection, GraphicsSection } from "./CharacterSection";
 import { ThemeSection } from "./ThemeSection";
+import { ProjectFolderSection } from "./ProjectFolderSection";
 import { Select } from "./Select";
 import type { VoiceControls } from "../useVoice";
 import type { Characters, Project } from "../types";
@@ -42,6 +43,9 @@ import {
 export function Settings({
   voice,
   projects,
+  root,
+  rootIsCustom,
+  rootWarning,
   characters,
   charactersError,
   onProjectsChanged,
@@ -50,6 +54,10 @@ export function Settings({
   voice: VoiceControls;
   /** Owned by `App`, so a save here applies in every open tab. */
   projects: Project[];
+  /** The folder currently scanned for projects — see `ProjectFolderSection`. */
+  root: string;
+  rootIsCustom: boolean;
+  rootWarning: string | null;
   characters: Characters;
   charactersError: string | null;
   onProjectsChanged: () => Promise<void> | void;
@@ -71,6 +79,12 @@ export function Settings({
       </header>
 
       <div className="max-w-3xl space-y-6">
+        <ProjectFolderSection
+          root={root}
+          rootIsCustom={rootIsCustom}
+          rootWarning={rootWarning}
+          onProjectsChanged={onProjectsChanged}
+        />
         <CharacterSection
           voice={voice}
           projects={projects}

@@ -25,8 +25,17 @@ import {
 import { MAIN_TAB_KEY, SETTINGS_TAB_KEY, type Project } from "./types";
 
 export default function App() {
-  const { projects, uninitiated, root, loading, error, overridesError, rescan } =
-    useProjects();
+  const {
+    projects,
+    uninitiated,
+    root,
+    rootIsCustom,
+    rootWarning,
+    loading,
+    error,
+    overridesError,
+    rescan,
+  } = useProjects();
 
   // Tab rules live in ./tabs.ts, pure and unit-tested. This component only
   // wires them to events.
@@ -191,6 +200,9 @@ export default function App() {
               <Settings
                 voice={voice}
                 projects={projects}
+                root={root}
+                rootIsCustom={rootIsCustom}
+                rootWarning={rootWarning}
                 characters={characters}
                 charactersError={charactersError}
                 onProjectsChanged={rescan}
