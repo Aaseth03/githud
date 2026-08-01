@@ -2,30 +2,21 @@
  * Which character a project gets, and what colour that makes the room.
  *
  * Pure. Resolution lives here rather than in Rust because it is a rule about
- * what the UI shows, and because the assignment and the profiles arrive from
- * two different commands — joining them is exactly the kind of thing that
- * belongs in a tested module instead of inside a component.
+ * what the UI shows, and because the house profile and a project's own
+ * character arrive from two different commands — joining them is exactly the
+ * kind of thing that belongs in a tested module instead of inside a
+ * component.
  *
- * D9: profiles are central. A project references one by name and the profile is
- * resolved from `config/characters/`, never from the project's own repo.
+ * D24: characters are local and per-project, never a shared, named registry.
+ * A project either has its own `character.toml` or it does not — there is no
+ * name to look up any more, so unlike before there is no "assigned to a name
+ * that does not resolve" state left to represent.
  */
 
-import {
-  HOUSE_CHARACTER,
-  type Characters,
-  type Palette,
-  type Profile,
-  type Project,
-} from "./types";
+import { HOUSE_CHARACTER, type Characters, type Palette, type Profile } from "./types";
 
-/**
- * What a project resolved to, and how.
- *
- * The three cases are deliberately separate. Collapsing `missing` into
- * `house` would make a typo in `projects.toml` look exactly like an
- * unassigned project — and one of those is worth fixing.
- */
-export type CharacterSource = "assigned" | "house" | "missing";
+/** What a project resolved to, and how. */
+export type CharacterSource = "assigned" | "house";
 
 export interface Resolved {
   /** The profile to draw, or `null` when there is nothing to draw at all. */
@@ -35,44 +26,34 @@ export interface Resolved {
   problem: string | null;
 }
 
+/** The shipped fallback, from the house registry `characters_list` returns. */
+export function houseCharacter(characters: Characters): Profile | null {
+  return characters.profiles.find((p) => p.name === HOUSE_CHARACTER) ?? null;
+}
+
 /**
- * Resolve one project to a character.
- *
- * A name that no profile answers to still falls back to the house character —
- * a room with no face is worse than a room with the wrong one — but it says so
- * rather than pretending it was never assigned.
+ * Resolve one project to a character, given the house profile and this
+ * project's own (already fetched via `project_character`, or `null` if it
+ * has none).
  */
-export function resolveCharacter(
-  characters: Characters,
-  assigned: string | null,
-): Resolved {
-  const house = characters.profiles.find((p) => p.name === HOUSE_CHARACTER) ?? null;
-
-  if (!assigned) {
-    return {
-      profile: house,
-      source: "house",
-      problem: house
-        ? null
-        : // There is no built-in face in the binary, on purpose (D9). If the
-          // file is gone, the app says so rather than inventing a character.
-          `no character profiles found — characters/profiles/${HOUSE_CHARACTER}.toml is missing`,
-    };
+export function resolveCharacter(house: Profile | null, own: Profile | null): Resolved {
+  if (own) {
+    return { profile: own, source: "assigned", problem: null };
   }
-
-  const named = characters.profiles.find((p) => p.name === assigned);
-  if (named) return { profile: named, source: "assigned", problem: null };
-
   return {
     profile: house,
-    source: "missing",
-    problem: `no character named "${assigned}" in config/characters/`,
+    source: "house",
+    problem: house
+      ? null
+      : // There is no built-in face in the binary, on purpose (D9). If the
+        // file is gone, the app says so rather than inventing a character.
+        `no character profiles found — characters/profiles/${HOUSE_CHARACTER}.toml is missing`,
   };
 }
 
-/** Resolve straight from a project, which is what every caller actually has. */
-export function characterFor(characters: Characters, project: Project): Resolved {
-  return resolveCharacter(characters, project.character);
+/** Resolve straight from the house registry and a project's own profile. */
+export function characterFor(characters: Characters, own: Profile | null): Resolved {
+  return resolveCharacter(houseCharacter(characters), own);
 }
 
 /**
@@ -117,9 +98,9 @@ export function accentOf(profile: Profile | null): Accent {
  * A character is allowed to be a look without being a voice, so an unset
  * `voice` falls through to the global choice rather than silencing the project.
  * And a character naming a voice this machine's Voicebox does not have falls
- * through too — voices are per-installation, `config/` syncs across machines
- * (D8), and a profile that travels is a profile that will name a missing voice
- * eventually.
+ * through too — voices are per-installation, and a local character (D24) that
+ * moves machines via export/import is a character that will name a missing
+ * voice eventually.
  */
 export function voiceFor(
   profile: Profile | null,

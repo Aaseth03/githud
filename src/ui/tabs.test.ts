@@ -22,9 +22,9 @@ function project(name: string, rel = name): Project {
     kind: "own",
     agent: "read-write",
     note: null,
-    character: null,
+    has_local_character: false,
     accent: null,
-    background: null,
+    has_local_background: false,
   };
 }
 
@@ -198,7 +198,7 @@ describe("tab visibility — every open tab stays mounted", () => {
 describe("liveProject — refreshing a tab's snapshot against the current scan", () => {
   it("prefers the current scan's data over the tab's snapshot", () => {
     const opened = project("githud");
-    const rescanned = { ...opened, accent: "#52d9a8", character: "hud" };
+    const rescanned = { ...opened, accent: "#52d9a8", has_local_character: true };
 
     expect(liveProject([rescanned], opened)).toEqual(rescanned);
   });

@@ -218,6 +218,9 @@ export function ProjectView({
             >
               <CharacterStage
                 profile={character.profile}
+                // Art lives in this project's own local folder when the
+                // character is its own (D24); the shipped default has none.
+                project={character.source === "assigned" ? project.rel_path : null}
                 live={voice.live}
                 speaking={voice.speaking !== null}
                 state={characterState}

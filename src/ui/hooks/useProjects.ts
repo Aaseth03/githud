@@ -19,11 +19,12 @@ type State = {
   /** Never swallowed — principle 5. A failed scan is shown, not hidden. */
   error: string | null;
   /**
-   * A malformed `config/projects.toml`. Distinct from `error`: the scan
-   * succeeded, but every declared override was lost — which silently means
-   * `own` and read-write everywhere. That must be visible (D18).
+   * Malformed local `project.toml` files (D24), one per broken project.
+   * Distinct from `error`: the scan succeeded, but a broken project's own
+   * declaration was lost — which silently means `own` and read-write for it.
+   * That must be visible (D18).
    */
-  overridesError: string | null;
+  localErrors: string[];
 };
 
 const EMPTY: State = {
@@ -34,7 +35,7 @@ const EMPTY: State = {
   rootWarning: null,
   loading: true,
   error: null,
-  overridesError: null,
+  localErrors: [],
 };
 
 /**
@@ -59,7 +60,7 @@ export function useProjects() {
         rootWarning: rootInfo.warning,
         loading: false,
         error: null,
-        overridesError: result.overrides_error,
+        localErrors: result.local_errors,
       });
     } catch (e) {
       setState((s) => ({

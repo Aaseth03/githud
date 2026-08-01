@@ -86,8 +86,9 @@ src/
 │  │  ├─ Select.tsx        the app's dropdown — the platform's could not be styled
 │  │  ├─ FileViewer.tsx    read-only file pane, bounded
 │  │  ├─ CharacterStage.tsx  the character — layered parts, procedural face or frames, and the rAF loop
-│  │  ├─ CharacterSection.tsx  Settings: assign a character, give it a voice, WebGL facts
+│  │  ├─ CharacterSection.tsx  Settings: toggle a project's own character, edit it minimally, WebGL facts
 │  │  ├─ VoicePill.tsx     Voicebox status, voice choice, MUTE — in the tab strip
+│  │  ├─ ExportImportSection.tsx  Settings: bundle the local store, or unpack one (D24)
 │  │  ├─ Settings.tsx      audio devices, mic test, voice test, webview facts
 │  │  └─ Terminal.tsx      xterm.js — the only file that touches it
 │  └─ styles/
@@ -104,8 +105,13 @@ src/
    ├─ src/
    │  ├─ main.rs           thin entry point
    │  ├─ lib.rs            commands + handler registration
-   │  ├─ overrides/
-   │  │  └─ mod.rs         config/projects.toml — read and written
+   │  ├─ local/
+   │  │  └─ mod.rs         a project's own local config (D24) — read and written
+   │  ├─ bundle/
+   │  │  └─ mod.rs         export/import — bundles the local store into one file (D24)
+   │  ├─ machine/
+   │  │  └─ mod.rs         machine.toml — the custom scan root, per-machine
+   │  ├─ theme.rs           a project's accent and background image, in its local folder
    │  ├─ agent/
    │  │  ├─ mod.rs         Channel 2 — agent sessions, lifecycle
    │  │  ├─ event.rs       the normalized vocabulary the UI subscribes to
@@ -148,7 +154,10 @@ tree may never do. Never hand-edit it; it is rebuilt.
 | Path | Contains | When to use |
 |---|---|---|
 | `src-tauri/src/scan/` | The walk, ICM detection | Changing discovery rules |
-| `src-tauri/src/overrides/` | `projects.toml` — kind, agent access, note, character. Reading **and writing** | Changing what can be declared about a project, or how it is saved |
+| `src-tauri/src/local/` | A project's own local declaration (D24) — kind, agent access, note, character presence, accent, background. Reading **and writing** | Changing what can be declared about a project, or how it is saved |
+| `src-tauri/src/bundle/` | Export/import — bundling the local store into one file and back (D24) | Changing the export format, or what import validates |
+| `src-tauri/src/machine/` | `machine.toml` — the custom scan root | Changing per-machine settings unrelated to a specific project |
+| `src-tauri/src/theme.rs` | A project's accent and background image, inside its own local folder | Anything about a project's own theme, not its character's |
 | `src-tauri/src/pty/` | Terminal sessions: spawn, write, resize, kill | Changing terminal behaviour |
 | `src-tauri/src/agent/` | Agent sessions and the normalized event mapping | Adding an adapter, or changing what the UI sees |
 | `src-tauri/src/guard/` | The sandbox scope, the shim, branch policy | Changing what the agent is allowed to touch |

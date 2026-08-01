@@ -6,13 +6,14 @@
 
 pub mod agent;
 pub mod audio;
+pub mod bundle;
 pub mod card;
 pub mod character;
 pub mod git;
 pub mod guard;
+pub mod local;
 pub mod machine;
 pub mod mic;
-pub mod overrides;
 pub mod parse;
 pub mod pty;
 pub mod reap;
@@ -22,7 +23,6 @@ pub mod voice;
 
 use std::path::PathBuf;
 
-use overrides::Overrides;
 use scan::{ScanResult, DEFAULT_MAX_DEPTH};
 
 /// Where machine-local settings live (D8) — never `config/`, because this is
@@ -80,11 +80,19 @@ fn resolve_root() -> Result<ResolvedRoot, String> {
     let (config, warning) = load_machine_config();
 
     let Some(saved) = config.project_root else {
-        return Ok(ResolvedRoot { path: default_root, is_custom: false, warning });
+        return Ok(ResolvedRoot {
+            path: default_root,
+            is_custom: false,
+            warning,
+        });
     };
 
     match machine::resolve_project_root(&saved) {
-        Ok(path) => Ok(ResolvedRoot { path, is_custom: true, warning }),
+        Ok(path) => Ok(ResolvedRoot {
+            path,
+            is_custom: true,
+            warning,
+        }),
         Err(e) => {
             let msg =
                 format!("the saved project folder is unusable, using the default instead: {e}");
@@ -92,7 +100,11 @@ fn resolve_root() -> Result<ResolvedRoot, String> {
                 Some(w) => format!("{w}; {msg}"),
                 None => msg,
             });
-            Ok(ResolvedRoot { path: default_root, is_custom: false, warning })
+            Ok(ResolvedRoot {
+                path: default_root,
+                is_custom: false,
+                warning,
+            })
         }
     }
 }
@@ -106,85 +118,77 @@ fn resolve_root() -> Result<ResolvedRoot, String> {
 #[tauri::command]
 fn scan_projects() -> Result<ScanResult, String> {
     let root = resolve_root()?.path;
-
-    // A malformed overrides file must not take the whole scan down — but it
-    // must also not pass unnoticed, because a typo that silently reverts a
-    // project to `own` + read-write is the failure this cannot have (D18).
-    let (overrides, error) = match Overrides::load(&overrides_path()) {
-        Ok(o) => (o, None),
-        Err(e) => (Overrides::default(), Some(e)),
-    };
-
-    Ok(scan::scan_with(&root, DEFAULT_MAX_DEPTH, &overrides, error))
+    let local_dir = local_projects_dir()?;
+    Ok(scan::scan_with(&root, DEFAULT_MAX_DEPTH, Some(&local_dir)))
 }
 
-/// `config/`, the committed half of the split store (D8).
-///
-/// Resolved relative to the repo during development. It becomes a bundled
-/// resource path when the app ships; that belongs with packaging, not here.
-fn config_dir() -> PathBuf {
-    if let Ok(explicit) = std::env::var("GITHUD_CONFIG_DIR") {
-        return PathBuf::from(explicit);
-    }
-    // src-tauri/ → src/ → repo root → config/
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../config")
-}
-
-/// The declared overrides (D10, D18).
-fn overrides_path() -> PathBuf {
-    config_dir().join("projects.toml")
-}
-
-/// Where uploaded background images live (M8).
-///
-/// Machine-local, never `config/` — an upload is the user's own file, not
-/// authored art, and `config/projects.toml` syncs across machines (D8) while
-/// the image itself is not expected to.
-fn backgrounds_dir() -> Result<PathBuf, String> {
-    if let Ok(explicit) = std::env::var("GITHUD_BACKGROUNDS_DIR") {
-        return Ok(PathBuf::from(explicit));
-    }
-    let data_home = dirs::data_local_dir().ok_or("could not resolve the data directory")?;
-    Ok(data_home.join("githud/backgrounds"))
-}
-
-/// Read, apply, and write back `config/projects.toml` — the temp-file-then-
-/// rename dance every writer here needs, so a crash mid-write cannot leave a
-/// truncated overrides file. That file decides whether the agent may write in
-/// a project (D18); a half-written one is the worst thing any of these
-/// commands could produce.
-fn update_overrides(
-    project: &str,
-    apply: impl FnOnce(&str, &str) -> Result<String, String>,
-) -> Result<(), String> {
-    let path = overrides_path();
-
-    // A missing file is not an error — no overrides is the normal state, and
-    // the first assignment on a fresh machine creates it.
-    let text = match std::fs::read_to_string(&path) {
-        Ok(t) => t,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
-        Err(e) => return Err(format!("{}: {e}", path.display())),
-    };
-
-    let updated = apply(&text, project)?;
-
-    let temp = path.with_extension("toml.tmp");
-    std::fs::write(&temp, &updated).map_err(|e| format!("{}: {e}", temp.display()))?;
-    std::fs::rename(&temp, &path).map_err(|e| format!("{}: {e}", path.display()))
-}
-
-/// Where character profiles live, centrally and never per-repo (D9).
-///
-/// `characters/` is a workspace of its own rather than a corner of `config/`
-/// (D23) — it holds a pipeline, a parts contract and provenance, and `config/`
-/// holds no work. Its own override, so `config/` resolution is untouched.
+/// Where character profiles that ship with the app live (D9) — today, only
+/// `default.toml`, the required fallback. Nothing else here is committed any
+/// longer (D24); a project's own character lives in its local folder instead.
 fn characters_dir() -> PathBuf {
     if let Ok(explicit) = std::env::var("GITHUD_CHARACTERS_DIR") {
         return PathBuf::from(explicit);
     }
     // src-tauri/ → src/ → repo root → characters/profiles/
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../characters/profiles")
+}
+
+/// Where every project's personal, local declaration lives (D24) —
+/// gitignored, never shipped, one folder per customized project.
+///
+/// The independent `GITHUD_*` override follows the same convention
+/// `machine_dir()` and `characters_dir()` already use, for the same
+/// test-isolation reason: a test pointing this elsewhere must not also move
+/// `machine.toml`.
+fn local_projects_dir() -> Result<PathBuf, String> {
+    if let Ok(explicit) = std::env::var("GITHUD_PROJECTS_DIR") {
+        return Ok(PathBuf::from(explicit));
+    }
+    let data_home = dirs::data_local_dir().ok_or("could not resolve the data directory")?;
+    Ok(data_home.join("githud/projects"))
+}
+
+/// One project's own local folder — `project.toml`, `character.toml`, its
+/// art if any, and its background image, all colocated (D24).
+fn project_local_dir(project: &str) -> Result<PathBuf, String> {
+    Ok(local::project_dir(&local_projects_dir()?, project))
+}
+
+fn project_character_path(project: &str) -> Result<PathBuf, String> {
+    Ok(project_local_dir(project)?.join("character.toml"))
+}
+
+/// Read, apply, and write back one project's `project.toml` — the temp-file-
+/// then-rename dance every writer here needs, so a crash mid-write cannot
+/// leave a truncated declaration. That file decides whether the agent may
+/// write in this project (D18); a half-written one is the worst thing any of
+/// these commands could produce.
+fn update_project_local(
+    project: &str,
+    apply: impl FnOnce(local::ProjectLocal) -> local::ProjectLocal,
+) -> Result<(), String> {
+    let path = project_local_dir(project)?.join("project.toml");
+    let current = local::ProjectLocal::load(&path)?;
+    apply(current).save(&path)
+}
+
+/// Read, apply, and write back one project's `character.toml` — the same
+/// temp-file-then-rename dance, so a crash cannot leave a half-written
+/// character. `apply` is one of `character::set_display` /
+/// `set_palette_field` / `set_voice`, the same pure text-transforms used
+/// everywhere else, applied here to the file's new location rather than the
+/// old shared registry's.
+fn update_character_local(
+    project: &str,
+    apply: impl FnOnce(&str) -> Result<String, String>,
+) -> Result<(), String> {
+    let path = project_character_path(project)?;
+    let text = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let updated = apply(&text)?;
+
+    let temp = path.with_extension("toml.tmp");
+    std::fs::write(&temp, &updated).map_err(|e| format!("{}: {e}", temp.display()))?;
+    std::fs::rename(&temp, &path).map_err(|e| format!("{}: {e}", path.display()))
 }
 
 /// The absolute path being scanned, whether it is a custom choice or the
@@ -419,7 +423,9 @@ async fn voice_readiness() -> Result<voice::Readiness, String> {
 
 #[tauri::command]
 async fn voice_voices() -> Result<Vec<voice::Voice>, String> {
-    voice::voices().await.inspect_err(|e| log::warn!("voice_voices: {e}"))
+    voice::voices()
+        .await
+        .inspect_err(|e| log::warn!("voice_voices: {e}"))
 }
 
 /// Every voice failure is logged verbatim as well as returned.
@@ -650,29 +656,20 @@ fn character_parts(dir: String) -> Result<Vec<character::Part>, String> {
     character::load_layers(&characters_dir(), &dir)
 }
 
-/// Assign a character to a project, or clear it.
+/// Set or clear a project's own note or accent colour (M8, D24) — the note
+/// explaining a declaration, and the tab rail / glass tint, independent of
+/// whatever character the project has.
 ///
-/// Writes `config/projects.toml`, because the assignment is a fact about a
-/// *project* (D23) — the character it names is resolved from `characters/`.
-///
-/// **Written via a temporary file and renamed**, so a crash mid-write cannot
-/// leave a truncated overrides file. That file decides whether the agent may
-/// write in a project (D18); a half-written one is the worst thing this command
-/// could produce.
+/// Accent is validated here, at the boundary, rather than in
+/// `ProjectLocal`'s own (de)serialization: a bad value should refuse to be
+/// *written*, the same way a bad `kind` refuses to be *read* — but a
+/// hand-edited `project.toml` with a stray bad accent must still load, the
+/// same way a hand-edited bad `character` name always has.
 #[tauri::command]
-fn character_assign(project: String, character: Option<String>) -> Result<(), String> {
-    update_overrides(&project, |text, p| {
-        overrides::assign_character(text, p, character.as_deref())
-    })
+fn project_note_set(project: String, note: Option<String>) -> Result<(), String> {
+    update_project_local(&project, |current| local::ProjectLocal { note, ..current })
 }
 
-/// Set or clear a project's own accent colour (M8) — its tab rail and glass
-/// tint, independent of whatever character it has.
-///
-/// Validated here, at the boundary, rather than in `Overrides::parse`: a bad
-/// value should refuse to be *written*, the same way a bad `kind` refuses to
-/// be *read* — but a hand-edited `projects.toml` with a stray bad accent must
-/// still load, the same way a hand-edited bad `character` name still does.
 #[tauri::command]
 fn project_accent_set(project: String, accent: Option<String>) -> Result<(), String> {
     if let Some(hex) = &accent {
@@ -680,12 +677,15 @@ fn project_accent_set(project: String, accent: Option<String>) -> Result<(), Str
             return Err(format!("not a hex colour: {hex} — expected #rrggbb"));
         }
     }
-    update_overrides(&project, |text, p| {
-        overrides::assign_accent(text, p, accent.as_deref())
+    update_project_local(&project, |current| local::ProjectLocal {
+        accent,
+        ..current
     })
 }
 
-/// Upload or clear a project's background image (M8).
+/// Upload or clear a project's background image (M8), inside its own local
+/// folder now (D24) rather than a flat machine-wide directory — the folder
+/// itself disambiguates the project, so there is no filename left to record.
 ///
 /// `image_base64` and `ext` travel together — a base64 payload with no
 /// extension has nowhere to be written, and one without the other means
@@ -697,49 +697,158 @@ fn project_background_set(
     image_base64: Option<String>,
     ext: Option<String>,
 ) -> Result<(), String> {
-    let dir = backgrounds_dir()?;
-    let filename = match (image_base64, ext) {
+    let dir = project_local_dir(&project)?;
+    match (image_base64, ext) {
         (Some(b64), Some(ext)) => {
             use base64::Engine as _;
             let bytes = base64::engine::general_purpose::STANDARD
                 .decode(&b64)
                 .map_err(|e| format!("bad image encoding: {e}"))?;
-            Some(theme::save_background(&dir, &project, &bytes, &ext)?)
+            theme::save_background(&dir, &bytes, &ext)
         }
         _ => {
-            theme::clear_background(&dir, &project);
-            None
+            theme::clear_background(&dir);
+            Ok(())
         }
-    };
-    update_overrides(&project, |text, p| {
-        overrides::assign_background(text, p, filename.as_deref())
-    })
+    }
 }
 
 /// A project's stored background image, as a data URI — the same convention
 /// `character_frames` already uses, so the front end never resolves a
 /// filesystem path itself.
 #[tauri::command]
-fn project_background_image(filename: String) -> Result<Option<String>, String> {
-    let dir = backgrounds_dir()?;
-    theme::read_background(&dir, &filename)
+fn project_background_image(project: String) -> Result<Option<String>, String> {
+    theme::read_background(&project_local_dir(&project)?)
 }
 
-/// Give a character a voice, or clear it.
-///
-/// Written into the character's own profile, because a voice belongs to the
-/// character — the same character in two projects should sound the same in both.
+/// This project's own character, if it has one (D24) — `None` when
+/// unconfigured, which resolves to the house character in `ui/character.ts`.
+/// There is no name to look up any more; presence is the whole fact.
 #[tauri::command]
-fn character_voice(name: String, voice: Option<String>) -> Result<(), String> {
-    let path = character::profile_path(&characters_dir(), &name);
+fn project_character(project: String) -> Result<Option<character::Profile>, String> {
+    let path = project_character_path(&project)?;
+    if !path.is_file() {
+        return Ok(None);
+    }
     let text = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-    let updated = character::set_voice(&text, voice.as_deref())?;
+    character::Profile::parse(&project, &text).map(Some)
+}
 
-    // Temporary file then rename, so a crash cannot leave a half-written profile
-    // — which would make the character vanish rather than merely lose its voice.
+/// The PNG frame set a project's own character points at, in mouth order.
+#[tauri::command]
+fn project_character_frames(project: String, dir: String) -> Result<Vec<character::Frame>, String> {
+    character::load_frames(&project_local_dir(&project)?, &dir)
+}
+
+/// A project's own layered character parts, in draw order and validated
+/// against the spec.
+#[tauri::command]
+fn project_character_parts(project: String, dir: String) -> Result<Vec<character::Part>, String> {
+    character::load_layers(&project_local_dir(&project)?, &dir)
+}
+
+/// Give this project its own character, seeded from `default`'s palette,
+/// sprite and temperament — a freshly enabled character starts considered
+/// rather than blank (the same reasoning D9 already applies to the house
+/// character's own defaults). Refuses to overwrite one that already exists;
+/// clear it first to start over.
+#[tauri::command]
+fn character_local_enable(project: String) -> Result<(), String> {
+    let path = project_character_path(&project)?;
+    if path.is_file() {
+        return Err(format!("{project} already has its own character"));
+    }
+
+    let house_path = character::profile_path(&characters_dir(), character::HOUSE);
+    let house_text = std::fs::read_to_string(&house_path)
+        .map_err(|e| format!("{}: {e}", house_path.display()))?;
+    let house = character::Profile::parse(character::HOUSE, &house_text)?;
+
+    let toml = character::seed_toml(&project, house.palette, house.sprite, house.temperament)?;
+
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
+    }
     let temp = path.with_extension("toml.tmp");
-    std::fs::write(&temp, &updated).map_err(|e| format!("{}: {e}", temp.display()))?;
+    std::fs::write(&temp, &toml).map_err(|e| format!("{}: {e}", temp.display()))?;
     std::fs::rename(&temp, &path).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+/// Remove this project's own character. Leaves any hand-added art directory
+/// alone — deleting art on a toggle would be a surprising way to lose work;
+/// only the pointer that makes it the assignment goes away.
+#[tauri::command]
+fn character_local_disable(project: String) -> Result<(), String> {
+    let path = project_character_path(&project)?;
+    if path.is_file() {
+        std::fs::remove_file(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+fn character_local_set_display(project: String, display: Option<String>) -> Result<(), String> {
+    update_character_local(&project, |text| {
+        character::set_display(text, display.as_deref())
+    })
+}
+
+#[tauri::command]
+fn character_local_set_palette(
+    project: String,
+    field: String,
+    value: Option<String>,
+) -> Result<(), String> {
+    if let Some(hex) = &value {
+        if !theme::valid_hex_color(hex) {
+            return Err(format!("not a hex colour: {hex} — expected #rrggbb"));
+        }
+    }
+    update_character_local(&project, |text| {
+        character::set_palette_field(text, &field, value.as_deref())
+    })
+}
+
+/// Give this project's character a voice, or clear it.
+///
+/// Unlike before D24, a voice no longer needs to belong to a *named*
+/// character shared across projects — each project has at most one character
+/// now, so the voice simply lives in that character's own file.
+#[tauri::command]
+fn character_local_set_voice(project: String, voice: Option<String>) -> Result<(), String> {
+    update_character_local(&project, |text| {
+        character::set_voice(text, voice.as_deref())
+    })
+}
+
+// ── Export and import (D24) ─────────────────────────────────────────────────
+//
+// Moving config between machines is explicit, not automatic sync — see
+// `bundle`'s own module doc for why.
+
+/// Bundle every local project into one file at `dest_path`. Returns the
+/// project keys that made it in; one project's files failing to read is
+/// logged and skipped rather than failing the whole export.
+#[tauri::command]
+fn export_config(dest_path: String) -> Result<Vec<String>, String> {
+    let (b, failed) = bundle::build(&local_projects_dir()?);
+    if !failed.is_empty() {
+        log::warn!(
+            "export_config skipped {} project(s): {failed:?}",
+            failed.len()
+        );
+    }
+    bundle::write(&b, std::path::Path::new(&dest_path))?;
+    Ok(b.projects.keys().cloned().collect())
+}
+
+/// Unpack a bundle at `src_path` into the local store. Every project it names
+/// overwrites that project's local folder wholesale; every other local
+/// project is untouched.
+#[tauri::command]
+fn import_config(src_path: String) -> Result<bundle::ImportSummary, String> {
+    let b = bundle::read(std::path::Path::new(&src_path))?;
+    Ok(bundle::apply(&b, &local_projects_dir()?))
 }
 
 /// Can this webview give a GPU canvas?
@@ -752,7 +861,10 @@ fn character_voice(name: String, voice: Option<String>) -> Result<(), String> {
 #[tauri::command]
 fn webview_notes() -> Vec<String> {
     let mut notes = Vec::new();
-    for var in ["WEBKIT_DISABLE_DMABUF_RENDERER", "WEBKIT_DISABLE_COMPOSITING_MODE"] {
+    for var in [
+        "WEBKIT_DISABLE_DMABUF_RENDERER",
+        "WEBKIT_DISABLE_COMPOSITING_MODE",
+    ] {
         if let Ok(v) = std::env::var(var) {
             notes.push(format!("{var}={v}"));
         }
@@ -838,11 +950,20 @@ pub fn run() {
             characters_list,
             character_frames,
             character_parts,
-            character_assign,
-            character_voice,
+            project_character,
+            project_character_frames,
+            project_character_parts,
+            character_local_enable,
+            character_local_disable,
+            character_local_set_display,
+            character_local_set_palette,
+            character_local_set_voice,
+            project_note_set,
             project_accent_set,
             project_background_set,
             project_background_image,
+            export_config,
+            import_config,
             webview_notes,
         ])
         .build(tauri::generate_context!())

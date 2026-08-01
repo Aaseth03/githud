@@ -20,43 +20,46 @@ characters/
 ├─ CONTEXT.md
 ├─ parts_spec.md               the contract a layered part set must satisfy
 ├─ profiles/
-│  ├─ default.toml             the fallback — procedural, what an unassigned project resolves to
-│  ├─ hud.toml                 GIT HUD's own persona, assigned to the githud project
-│  ├─ hud/                     HUD's layered parts (D21)
-│  │  ├─ SOURCE.md             model, seed, prompt, cut lines — so it is regenerable
-│  │  ├─ reference.png         the chosen candidate, front-facing and neutral
-│  │  ├─ reference.json        seams and feature positions, measured once
-│  │  ├─ shadow.png            the ground ellipse; stays put while the body breathes
-│  │  ├─ body.png              torso and limbs, with stock above the neck seam
-│  │  ├─ head.png              dome and visor, eyes removed so they can be vectors
-│  │  └─ antenna.png           stalk and ball, with stock below its seam
-│  └─ mia.toml                 the vault's character (D5) — still procedural, no art yet
+│  └─ default.toml             the one thing shipped — procedural, what an
+│                               unconfigured project and the main tab resolve to
 └─ pipeline/
    └─ character-decompose.py   cuts a reference into layered parts, deterministically
 ```
+
+**Everything else lives locally now (D24), never here.** A project's own
+character — `hud` was `githud`'s, `mia` was the vault's — sits in that
+project's own gitignored local folder (`~/.local/share/githud/projects/<key>/`,
+`local::project_dir` in the Rust core), not in this workspace. Nothing about a
+specific user's own projects ships with the app; `default.toml` is the single,
+deliberate exception, because it is the fallback D9 already requires.
 
 ## Routing
 
 | I need to… | Go to |
 |---|---|
-| Add or edit a character | `profiles/<name>.toml` |
+| Edit the shipped default | `profiles/default.toml` |
+| Give a project its own character | Settings → Characters (toggle "own character"), or hand-edit its local `character.toml` — never this workspace |
 | Know what a layered part set must contain | `parts_spec.md` |
-| Produce or regenerate a character's parts | `pipeline/character-decompose.py` |
-| Know how an existing character was made | `profiles/<name>/SOURCE.md` |
+| Produce or regenerate a character's parts | `pipeline/character-decompose.py` — still driven from here; only where the *output* lands changed (D24) |
+| Know how an existing character was made | its local folder's `character/SOURCE.md` |
 | Compare renderer stacks, or pick up a deferred one | `../planning/specs/character-renderers_spec.md` |
-| Assign a character to a project | Settings → Characters, or `../config/projects.toml` by hand — the assignment is a fact about the *project* |
-| Give a character a voice | Settings → Characters → Voices. Written into the profile, because a voice belongs to the character |
+| Give a project's own character a voice | Settings → Characters. Written into that project's own `character.toml` — there is no shared registry left to edit a *named* character's voice in |
 | Change how a character is drawn or moves | `../src/ui/` — `character.ts`, `sprite.ts`, `components/CharacterStage.tsx` |
 
 ## What a character is
 
-A **profile** — `<name>.toml` — and, if it is `layered`, a **directory of parts**
-beside it. The profile's filename is its id; there is no `name` key, because a
-file that could name itself could disagree with the key a project references it
-by.
+A **profile** — `character.toml` — and, if it is `layered`, a **directory of
+parts** beside it. The profile's filename inside its folder is fixed
+(`character.toml`); there is no `name` key, because a file that could name
+itself could disagree with the folder it lives in.
 
-Profiles are resolved **centrally, never from the project they represent** (D9).
-A project should not gain a file because of the tool that happened to open it.
+**D24 narrowed D9, it did not drop it.** Profiles are still resolved
+centrally in the sense that matters — never from the project's own git repo,
+never committed alongside its code — but the "one registry, many projects
+reference a name" shape is gone. A character's whole purpose is telling
+projects apart, so sharing one across two projects was never actually used;
+each project that wants its own character just has one, in its own local
+folder, and `default` is the single name-based exception left.
 
 ## Rules that bite here
 
@@ -104,12 +107,14 @@ A project should not gain a file because of the tool that happened to open it.
   mean. `accent = "blue"` is a typo, and a typo rendering as unthemed is
   indistinguishable from having meant it.
 - **`profiles/default.toml` is not optional, and it stays procedural.** It is what
-  an unassigned project and the main tab resolve to, and there is no built-in face
-  in the binary — if it is missing the app says so rather than inventing a
+  an unconfigured project and the main tab resolve to, and there is no built-in
+  face in the binary — if it is missing the app says so rather than inventing a
   character (D9). Procedural because it needs no art, so a fresh clone renders
   something; and because **a project that has not chosen a character has not
-  chosen one.** Giving it GIT HUD's own persona would be putting words in its
-  mouth. `hud` is a character like any other, assigned in `../config/projects.toml`.
+  chosen one.** Giving it a project's own persona would be putting words in its
+  mouth — and it would also mean shipping that persona with the app, which D24
+  rules out entirely: `hud`, GIT HUD's own look, lives in `githud`'s own local
+  folder like anyone else's, not here.
 - **A generated asset nobody can regenerate is one you cannot iterate on.** Every
   character commits its model, seed, prompt and cut lines in `SOURCE.md`. The
   decomposition refuses to overwrite a committed set without `--force`.

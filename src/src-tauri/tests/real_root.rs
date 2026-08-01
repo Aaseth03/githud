@@ -1,31 +1,31 @@
 //! The M1 validation, as a test rather than a squint at the UI.
 //!
-//! This one is environment-dependent — it scans the real `~/github` — so it is
-//! `#[ignore]`d and does not run in a normal `cargo test`. Run it deliberately:
+//! This one is environment-dependent — it scans the real `~/github` and this
+//! machine's real local config (D24) — so it is `#[ignore]`d and does not run
+//! in a normal `cargo test`. Run it deliberately:
 //!
 //! ```text
 //! cargo test --test real_root -- --ignored --nocapture
 //! ```
 
-use githud_lib::overrides::{AgentAccess, Overrides, ProjectKind};
+use githud_lib::local::{AgentAccess, ProjectKind};
 use githud_lib::scan::{self, DEFAULT_MAX_DEPTH};
 
 #[test]
-#[ignore = "scans the real ~/github; run explicitly with --ignored"]
+#[ignore = "scans the real ~/github and this machine's local config; run explicitly with --ignored"]
 fn finds_every_repo_under_the_real_root_including_the_nested_vault() {
     let root = dirs::home_dir().expect("home dir").join("github");
+    // Mirrors `local_projects_dir()`'s default resolution — this test has no
+    // access to `lib.rs`'s private function, so it replicates the same path.
+    let local_dir = dirs::data_local_dir()
+        .expect("data dir")
+        .join("githud/projects");
 
-    // Load the real committed overrides, so this asserts the actual
-    // config/projects.toml rather than a fixture of it.
-    let overrides_path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../config/projects.toml");
-    let overrides = Overrides::load(&overrides_path)
-        .unwrap_or_else(|e| panic!("committed projects.toml must parse: {e}"));
-
-    let result = scan::scan_with(&root, DEFAULT_MAX_DEPTH, &overrides, None);
+    let result = scan::scan_with(&root, DEFAULT_MAX_DEPTH, Some(&local_dir));
     let found = result.projects;
 
     println!("\nscan root: {}", root.display());
+    println!("local config: {}", local_dir.display());
     println!("{} repo(s) found:\n", found.len());
     for p in &found {
         println!(
@@ -46,6 +46,12 @@ fn finds_every_repo_under_the_real_root_including_the_nested_vault() {
     println!();
 
     assert!(
+        result.local_errors.is_empty(),
+        "committed real_root against this machine's local config: {:?}",
+        result.local_errors
+    );
+
+    assert!(
         found.len() >= 5,
         "expected at least five repos under {}, found {}",
         root.display(),
@@ -53,18 +59,17 @@ fn finds_every_repo_under_the_real_root_including_the_nested_vault() {
     );
 
     // The vault sits directly under the root, not nested under `Obsidian/` —
-    // moved there because its `rel_path` needs to be stable across machines,
-    // and `config/projects.toml` addresses it by that exact path.
+    // moved there so its `rel_path` is stable across machines, and every
+    // machine's own local config addresses it by that exact path (D24).
     let vault = found
         .iter()
         .find(|p| p.rel_path == "HOME_AI_VAULT")
         .expect("the vault must be found");
     assert_eq!(vault.depth, 1);
     assert!(vault.icm.layer0, "the vault has AGENTS.md");
-    assert_eq!(
-        vault.character.as_deref(),
-        Some("mia"),
-        "the override in config/projects.toml must resolve against the real scan"
+    assert!(
+        vault.has_local_character,
+        "the vault's own character.toml must resolve against the real scan"
     );
 
     // GIT HUD itself must be conformant — it is the reference for the badge.
@@ -75,6 +80,10 @@ fn finds_every_repo_under_the_real_root_including_the_nested_vault() {
     assert!(
         githud.icm.is_conformant(),
         "githud has both AGENTS.md and CONTEXT.md"
+    );
+    assert!(
+        githud.has_local_character,
+        "githud's own character.toml must resolve against the real scan"
     );
 
     // Professor keeps Layer 1 *inside* AGENTS.md. If the fallback chain is
@@ -100,7 +109,10 @@ fn finds_every_repo_under_the_real_root_including_the_nested_vault() {
         !voicebox.should_flag_icm(),
         "a third-party repo must never be flagged for missing ICM"
     );
-    assert!(voicebox.note.is_some(), "the reason travels with the override");
+    assert!(
+        voicebox.note.is_some(),
+        "the reason travels with the local declaration"
+    );
 
     // The vault is yours and genuinely lacks Layer 1, so it stays flagged.
     assert!(

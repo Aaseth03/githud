@@ -52,6 +52,9 @@ export function MainView({
         <div className="mt-8 flex justify-center">
           <CharacterStage
             profile={character.profile}
+            // The main tab belongs to no project — always the shipped
+            // default, whose art (if it ever has any) lives centrally.
+            project={null}
             live={voice.live}
             speaking={voice.speaking !== null}
             state={state}

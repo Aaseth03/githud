@@ -28,9 +28,9 @@ impl MachineConfig {
     ///
     /// **A missing file is not an error** — no machine settings is the normal
     /// state on a fresh install. A malformed one *is* an error, surfaced
-    /// rather than swallowed, the same posture `Overrides::load` takes: a
-    /// typo silently reverting to defaults is exactly the failure this must
-    /// not have.
+    /// rather than swallowed, the same posture `local::ProjectLocal::load`
+    /// takes: a typo silently reverting to defaults is exactly the failure
+    /// this must not have.
     pub fn load(path: &Path) -> Result<Self, String> {
         match fs::read_to_string(path) {
             Ok(text) => toml::from_str(&text).map_err(|e| format!("{}: {e}", path.display())),
@@ -41,7 +41,7 @@ impl MachineConfig {
 
     /// Write to disk, via a temporary file then rename — so a crash mid-write
     /// cannot leave a truncated `machine.toml` (the same dance
-    /// `update_overrides` uses for `config/projects.toml`).
+    /// `local::ProjectLocal::save` uses for a project's own `project.toml`).
     pub fn save(&self, path: &Path) -> Result<(), String> {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
@@ -120,7 +120,10 @@ mod tests {
         let fx = Fixture::new("missing");
         let path = fx.root.join("does-not-exist/machine.toml");
 
-        assert_eq!(MachineConfig::load(&path).unwrap(), MachineConfig::default());
+        assert_eq!(
+            MachineConfig::load(&path).unwrap(),
+            MachineConfig::default()
+        );
     }
 
     #[test]

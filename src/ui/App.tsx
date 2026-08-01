@@ -10,7 +10,8 @@ import { useVoice } from "./useVoice";
 import { useProjects } from "./hooks/useProjects";
 import { useCharacters } from "./hooks/useCharacters";
 import { useProjectBackground } from "./hooks/useProjectBackground";
-import { accentOf, characterFor, resolveCharacter } from "./character";
+import { useProjectCharacters } from "./hooks/useProjectCharacters";
+import { accentOf, characterFor } from "./character";
 import {
   activeTab,
   closeTab,
@@ -33,7 +34,7 @@ export default function App() {
     rootWarning,
     loading,
     error,
-    overridesError,
+    localErrors,
     rescan,
   } = useProjects();
 
@@ -55,9 +56,19 @@ export default function App() {
    * Profiles are central (D9), so they are loaded once here and resolved per
    * tab — never fetched inside a tab, which would be the same answer N times.
    */
-  const { characters, error: charactersError, reload: reloadCharacters } =
-    useCharacters();
-  const house = resolveCharacter(characters, null);
+  const { characters, error: charactersError } = useCharacters();
+  const house = characterFor(characters, null);
+
+  /**
+   * A project's own character now lives in its own local folder (D24) — no
+   * more shared registry a project's assignment points into — so it is
+   * fetched per open project rather than resolved from what `useCharacters`
+   * already holds.
+   */
+  const openRelPaths = tabState.tabs.flatMap((t) =>
+    t.kind === "project" ? [t.project.rel_path] : [],
+  );
+  const projectCharacters = useProjectCharacters(openRelPaths, projects);
 
   const handleOpen = useCallback((project: Project) => {
     setTabState((s) => openProject(s, project));
@@ -98,7 +109,9 @@ export default function App() {
   const openTab = activeTab(tabState);
   const activeProject =
     openTab.kind === "project" ? liveProject(projects, openTab.project) : null;
-  const scene = useProjectBackground(activeProject?.background ?? null);
+  const scene = useProjectBackground(
+    activeProject?.has_local_background ? activeProject.rel_path : null,
+  );
   const sceneStyle: React.CSSProperties = {
     ...(scene
       ? {
@@ -121,7 +134,7 @@ export default function App() {
         root={root}
         loading={loading}
         error={error}
-        overridesError={overridesError}
+        localErrors={localErrors}
         openKeys={openProjectKeys(tabState)}
         activeKey={tabState.activeKey}
         onOpen={handleOpen}
@@ -147,8 +160,9 @@ export default function App() {
               const current = liveProject(projects, t.project);
               // A project's own theme (M8) wins over its character's — the
               // room's own choice over the resident's, when it has made one.
+              const own = projectCharacters[current.rel_path] ?? null;
               const accent =
-                current.accent ?? accentOf(characterFor(characters, current).profile)["--accent"];
+                current.accent ?? accentOf(characterFor(characters, own).profile)["--accent"];
               return [[t.key, accent]];
             }),
           )}
@@ -206,7 +220,6 @@ export default function App() {
                 characters={characters}
                 charactersError={charactersError}
                 onProjectsChanged={rescan}
-                onCharactersChanged={reloadCharacters}
               />
             </div>
           )}
@@ -228,7 +241,7 @@ export default function App() {
                   project={current}
                   visible={isTabVisible(tabState, tab.key)}
                   voice={voice}
-                  character={characterFor(characters, current)}
+                  character={characterFor(characters, projectCharacters[current.rel_path] ?? null)}
                 />
               </div>
             );

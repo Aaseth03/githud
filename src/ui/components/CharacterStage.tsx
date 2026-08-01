@@ -27,6 +27,7 @@ import type { Eyes, MouthShape, Part, Point, Profile } from "../types";
  */
 export function CharacterStage({
   profile,
+  project,
   live,
   speaking,
   state,
@@ -35,6 +36,13 @@ export function CharacterStage({
   size = "stage",
 }: {
   profile: Profile | null;
+  /**
+   * Whose local folder `profile`'s art (if it needs any) lives in — a
+   * project's `rel_path` when `profile` is that project's own character, or
+   * `null` for the shipped default (D24). Determines which Tauri command
+   * `useFrames`/`useParts` calls.
+   */
+  project: string | null;
   /** What is sounding, read imperatively. See `LiveSpeech`. */
   live: React.RefObject<LiveSpeech | null>;
   speaking: boolean;
@@ -54,8 +62,8 @@ export function CharacterStage({
   const frameEls = useRef<(HTMLImageElement | null)[]>([]);
   const springs = useRef<Motion>(motion());
 
-  const { frames, error: frameError } = useFrames(profile);
-  const { parts, error: partsError } = useParts(profile);
+  const { frames, error: frameError } = useFrames(profile, project);
+  const { parts, error: partsError } = useParts(profile, project);
   const [synthetic, setSynthetic] = useState<string | null>(null);
 
   const temperament = profile?.temperament;
@@ -483,7 +491,7 @@ function Mouth({ shape }: { shape: MouthShape }) {
  * the procedural face — a character quietly rendering as something else is how
  * an afternoon goes into looking for a bug in a palette.
  */
-function useParts(profile: Profile | null) {
+function useParts(profile: Profile | null, project: string | null) {
   const [parts, setParts] = useState<Part[]>([]);
   const [error, setError] = useState<string | null>(null);
   const dir = profile?.sprite.kind === "layered" ? profile.sprite.dir : null;
@@ -495,7 +503,13 @@ function useParts(profile: Profile | null) {
       return;
     }
     let live = true;
-    void invoke<Part[]>("character_parts", { dir })
+    // A project's own character's art lives in its local folder (D24); the
+    // shipped default's lives centrally — two different Tauri commands, same
+    // shape back.
+    const load = project
+      ? invoke<Part[]>("project_character_parts", { project, dir })
+      : invoke<Part[]>("character_parts", { dir });
+    void load
       .then((p) => {
         if (!live) return;
         setParts(p);
@@ -509,13 +523,13 @@ function useParts(profile: Profile | null) {
     return () => {
       live = false;
     };
-  }, [dir]);
+  }, [dir, project]);
 
   return { parts, error };
 }
 
 /** Load a profile's PNG frame set, if it has one. */
-function useFrames(profile: Profile | null) {
+function useFrames(profile: Profile | null, project: string | null) {
   const [frames, setFrames] = useState<{ name: string; src: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
   const dir = profile?.sprite.kind === "frames" ? profile.sprite.dir : null;
@@ -527,7 +541,10 @@ function useFrames(profile: Profile | null) {
       return;
     }
     let live = true;
-    void invoke<{ name: string; src: string }[]>("character_frames", { dir })
+    const load = project
+      ? invoke<{ name: string; src: string }[]>("project_character_frames", { project, dir })
+      : invoke<{ name: string; src: string }[]>("character_frames", { dir });
+    void load
       .then((f) => {
         if (!live) return;
         setFrames(f);
@@ -541,7 +558,7 @@ function useFrames(profile: Profile | null) {
     return () => {
       live = false;
     };
-  }, [dir]);
+  }, [dir, project]);
 
   return { frames, error };
 }

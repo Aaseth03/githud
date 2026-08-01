@@ -3,7 +3,7 @@
 Who owns a piece of state, who may read it, and who writes it to disk. The
 recurring fault is a component fetching what its owner already holds.
 
-**Constrains:** `ui/App.tsx`, `ui/hooks/`, `ui/components/`, `ui/split.ts`, `ui/card.ts`, `ui/activity.ts`, `src-tauri/src/overrides/`
+**Constrains:** `ui/App.tsx`, `ui/hooks/`, `ui/components/`, `ui/split.ts`, `ui/card.ts`, `ui/activity.ts`, `src-tauri/src/local/`
 
 Every bullet here was paid for by a bug. They are constraints, not advice —
 deleting one does not fail a build, which is exactly why they are written down.
@@ -42,16 +42,25 @@ Add to this file when a lesson is earned; the index is `../CONTEXT.md`.
   with no voice of their own, which belongs in Settings beside the characters it
   falls back for. The pill keeps health, AUTO, MUTE and the backlog, and now names
   the fallback read-only.
-- **The writer of a file lives beside its reader.** `overrides::assign_character`
-  and `character::set_voice` sit in the same modules as the parsers that read
-  them back, and share their tests — a writer that drifts from its reader
-  produces a file the app cannot load. Both **edit** rather than re-serialize:
-  `projects.toml` and every profile carry the commentary explaining what each key
-  means, and a round-trip through `toml` leaves a correct file that has lost the
-  reason it exists. Both write to a temporary file and rename, because
-  `projects.toml` decides whether the agent may write in a project (D18) and a
-  half-written one is the worst thing a save could produce.
-- **An unassigned project is not a project assigned to `default`.** The Settings
-  dropdown's empty value clears the key rather than writing the default's name —
-  writing it would add a line that declares nothing, and `projects.toml` is only
-  for what the scan cannot derive (D10).
+- **The writer of a file lives beside its reader.** `character::set_voice` (and
+  `set_display`, `set_palette_field`) sit in the same module as the parser that
+  reads them back, and share its tests — a writer that drifts from its reader
+  produces a file the app cannot load. All three **edit** rather than
+  re-serialize: a hand-authored character file carries the commentary
+  explaining what each key means, and a round-trip through `toml` leaves a
+  correct file that has lost the reason it exists. `local::ProjectLocal` does
+  not follow this — since D24 gave each project its own small `project.toml`
+  instead of one shared file, there is no longer a big header comment at risk,
+  so it round-trips through plain `toml::to_string_pretty` like `MachineConfig`
+  already did. Both still write to a temporary file and rename, because
+  `project.toml` decides whether the agent may write in that project (D18) and
+  a half-written one is the worst thing a save could produce.
+- **Presence is the assignment; there is no "unassigned" value to write.**
+  Before D24, an unassigned project was not a project assigned to `default` —
+  the Settings dropdown's empty value cleared the `character` key rather than
+  writing the default's name, because writing it would add a line that
+  declares nothing. D24 sharpened this further: a project's own character
+  either has a `character.toml` or it does not, so the distinction is now a
+  file's existence, not a value inside a shared file — `character_local_enable`
+  / `_disable` create and remove the file itself, and there is no empty-string
+  case left to special-case.

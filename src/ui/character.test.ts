@@ -7,7 +7,7 @@ import {
   UNTHEMED,
   voiceFor,
 } from "./character";
-import type { Characters, Profile, Project } from "./types";
+import type { Characters, Profile } from "./types";
 
 /**
  * The same file `character::tests` round-trips through Rust.
@@ -20,23 +20,6 @@ import type { Characters, Profile, Project } from "./types";
 const WIRE = JSON.parse(
   readFileSync(new URL("./fixtures/characters.json", import.meta.url), "utf8"),
 ) as Characters;
-
-function project(overrides: Partial<Project> = {}): Project {
-  return {
-    name: "vault",
-    path: "/home/x/github/vault",
-    rel_path: "vault",
-    depth: 1,
-    icm: { layer0: true, layer1: true },
-    kind: "own",
-    agent: "read-write",
-    note: null,
-    character: null,
-    accent: null,
-    background: null,
-    ...overrides,
-  };
-}
 
 describe("the wire shape", () => {
   it("is what the UI expects, field for field", () => {
@@ -114,50 +97,43 @@ describe("the wire shape", () => {
 });
 
 describe("resolveCharacter", () => {
-  it("gives an unassigned project the default, not somebody's persona", () => {
-    const r = resolveCharacter(WIRE, null);
+  const house = WIRE.profiles[0]!; // "default"
+  const own = WIRE.profiles[2]!; // a project's own procedural character
+
+  it("gives an unconfigured project the house character, not somebody's persona", () => {
+    const r = resolveCharacter(house, null);
     expect(r.profile?.name).toBe("default");
     expect(r.source).toBe("house");
     expect(r.problem).toBeNull();
   });
 
-  it("gives an assigned project the one it names", () => {
-    const r = resolveCharacter(WIRE, "mia");
-    expect(r.profile?.name).toBe("mia");
+  it("gives a project its own character when it has one", () => {
+    // D24: presence is the assignment — there is no name to look up any
+    // more, so there is no longer a "typo" state distinct from "unconfigured".
+    const r = resolveCharacter(house, own);
+    expect(r.profile).toBe(own);
     expect(r.source).toBe("assigned");
     expect(r.problem).toBeNull();
   });
 
-  it("does not let a typo look like an unassigned project", () => {
-    // The distinction that earns three states instead of two: both draw the
-    // house character, and only one of them is something to fix.
-    const r = resolveCharacter(WIRE, "nobody");
-    expect(r.profile?.name).toBe("default");
-    expect(r.source).toBe("missing");
-    expect(r.problem).toContain("nobody");
-  });
-
   it("says so when there is no house character at all", () => {
-    // There is no built-in face in the binary (D9). A missing hud.toml is
-    // stated, never invented around.
-    const empty: Characters = { profiles: [], errors: [] };
-    const r = resolveCharacter(empty, null);
+    // There is no built-in face in the binary (D9). A missing default.toml
+    // is stated, never invented around.
+    const r = resolveCharacter(null, null);
     expect(r.profile).toBeNull();
     expect(r.problem).toContain("default.toml");
   });
 
-  it("still names a missing profile when the house is gone too", () => {
-    const only: Characters = { profiles: [], errors: [] };
-    const r = resolveCharacter(only, "mia");
-    expect(r.profile).toBeNull();
-    expect(r.source).toBe("missing");
-    expect(r.problem).toContain("mia");
+  it("does not report a problem when the project has its own character, house or not", () => {
+    const r = resolveCharacter(null, own);
+    expect(r.profile).toBe(own);
+    expect(r.source).toBe("assigned");
+    expect(r.problem).toBeNull();
   });
 
-  it("resolves straight from a project", () => {
-    expect(characterFor(WIRE, project()).profile?.name).toBe("default");
-    expect(characterFor(WIRE, project({ character: "hud" })).profile?.name).toBe("hud");
-    expect(characterFor(WIRE, project({ character: "mia" })).profile?.name).toBe("mia");
+  it("resolves straight from the house registry and a fetched own profile", () => {
+    expect(characterFor(WIRE, null).profile?.name).toBe("default");
+    expect(characterFor(WIRE, own).profile).toBe(own);
   });
 });
 

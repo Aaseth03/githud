@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { CharacterSection, GraphicsSection } from "./CharacterSection";
 import { ThemeSection } from "./ThemeSection";
 import { ProjectFolderSection } from "./ProjectFolderSection";
+import { ExportImportSection } from "./ExportImportSection";
 import { Select } from "./Select";
 import type { VoiceControls } from "../useVoice";
 import type { Characters, Project } from "../types";
@@ -49,7 +50,6 @@ export function Settings({
   characters,
   charactersError,
   onProjectsChanged,
-  onCharactersChanged,
 }: {
   voice: VoiceControls;
   /** Owned by `App`, so a save here applies in every open tab. */
@@ -61,7 +61,6 @@ export function Settings({
   characters: Characters;
   charactersError: string | null;
   onProjectsChanged: () => Promise<void> | void;
-  onCharactersChanged: () => Promise<void> | void;
 }) {
   return (
     <div className="h-full overflow-y-auto px-8 py-6">
@@ -91,9 +90,9 @@ export function Settings({
           characters={characters}
           loadError={charactersError}
           onProjectsChanged={onProjectsChanged}
-          onCharactersChanged={onCharactersChanged}
         />
         <ThemeSection projects={projects} onProjectsChanged={onProjectsChanged} />
+        <ExportImportSection onProjectsChanged={onProjectsChanged} />
         <AudioSection />
         <MicrophoneTest />
         <VoiceSection />
@@ -105,14 +104,15 @@ export function Settings({
 }
 
 /**
- * Reload `config/projects.toml` and every open tab with it.
+ * Reload the scan — every project's local config (D24) and every open tab
+ * with it.
  *
  * A change made *in* Settings already reloads on its own — every save here
  * calls the same `onProjectsChanged`, and `App` refreshes each open tab's
  * project against the new scan (`tabs.liveProject`) rather than the stale
  * copy it opened with. This button exists for the change Settings did not
- * make: `config/projects.toml` hand-edited in an editor, or a background
- * image dropped straight into the machine-local backgrounds directory.
+ * make: a project's local `project.toml` or `character.toml` hand-edited in
+ * an editor, or a background image dropped straight into its local folder.
  */
 function ReloadProjectsButton({
   onProjectsChanged,
@@ -138,7 +138,7 @@ function ReloadProjectsButton({
     <button
       onClick={reload}
       disabled={state === "reloading"}
-      title="Re-read config/projects.toml and every open tab with it — for a change made outside the app"
+      title="Re-scan every project's local config and every open tab with it — for a change made outside the app"
       className="shrink-0 rounded border border-line px-2.5 py-1.5 font-mono text-[10px]
                  tracking-wider text-ink-dim transition-colors hover:border-signal-deep hover:text-signal
                  focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal

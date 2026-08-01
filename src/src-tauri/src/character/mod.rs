@@ -214,7 +214,7 @@ pub enum Mouth {
 /// Separate from `Profile` because `name` is not declarable and `display`
 /// defaults to it. Keeping them apart is what stops a file claiming a name
 /// other than its own.
-#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Declared {
     display: Option<String>,
@@ -551,8 +551,8 @@ pub fn load_layers(characters_dir: &Path, dir: &str) -> Result<Vec<Part>, String
             Err(e) => return Err(format!("{}: {e}", path.display())),
         };
 
-        let (w, h) = png_size(&bytes)
-            .ok_or_else(|| format!("{}: not a readable PNG", path.display()))?;
+        let (w, h) =
+            png_size(&bytes).ok_or_else(|| format!("{}: not a readable PNG", path.display()))?;
 
         // Parts register by position, so one part at another size means every
         // feature fraction lands somewhere else on it.
@@ -561,8 +561,9 @@ pub fn load_layers(characters_dir: &Path, dir: &str) -> Result<Vec<Part>, String
             Some((cw, ch)) if (cw, ch) != (w, h) => {
                 return Err(format!(
                     "{}: {name}.png is {w}x{h} but the set is {cw}x{ch} — every part \
-                     shares one canvas so they register by position"
-                , root.display()));
+                     shares one canvas so they register by position",
+                    root.display()
+                ));
             }
             Some(_) => {}
         }
@@ -605,6 +606,31 @@ pub fn profile_path(characters_dir: &Path, name: &str) -> PathBuf {
     characters_dir.join(format!("{name}.toml"))
 }
 
+/// The TOML text for a freshly seeded character file — the declarable fields
+/// only, `name` never among them (it is always the file's own stem, never a
+/// value a file can claim, D9's rule and unaffected by D24 moving where the
+/// file lives).
+///
+/// Used when a project is given its own character for the first time
+/// (`character_local_enable`): seeded from `default`'s own fields, so a
+/// freshly enabled character starts considered rather than blank, the same
+/// reasoning `Temperament::default` already applies at a smaller scale.
+pub fn seed_toml(
+    display: &str,
+    palette: Palette,
+    sprite: Sprite,
+    temperament: Temperament,
+) -> Result<String, String> {
+    let declared = Declared {
+        display: Some(display.to_string()),
+        voice: None,
+        palette,
+        sprite,
+        temperament,
+    };
+    toml::to_string_pretty(&declared).map_err(|e| e.to_string())
+}
+
 /// Set or clear a character's `voice`, preserving the rest of the file.
 ///
 /// **A voice belongs to the character, not to the project.** Assign the same
@@ -625,6 +651,58 @@ pub fn set_voice(text: &str, voice: Option<&str>) -> Result<String, String> {
         Some(id) => doc["voice"] = toml_edit::value(id),
         None => {
             doc.remove("voice");
+        }
+    }
+
+    Ok(doc.to_string())
+}
+
+/// Set or clear a character's `display` name, preserving the rest of the file.
+///
+/// Pure, so the rule is testable without a filesystem.
+pub fn set_display(text: &str, display: Option<&str>) -> Result<String, String> {
+    let mut doc = text
+        .parse::<toml_edit::DocumentMut>()
+        .map_err(|e| format!("profile is malformed: {e}"))?;
+
+    match display {
+        Some(name) => doc["display"] = toml_edit::value(name),
+        None => {
+            doc.remove("display");
+        }
+    }
+
+    Ok(doc.to_string())
+}
+
+/// Set or clear one field of a character's `[palette]` — `field` is `accent`,
+/// `glow`, or `field`, matching `Palette`'s own keys — preserving the rest of
+/// the file.
+///
+/// **Not validated here.** The Tauri command boundary checks the colour
+/// before this is ever called, the same posture `theme::valid_hex_color`
+/// already has for a project's own accent — a hand-edited file with a bad
+/// colour must still *load*, resolving to unthemed on that one axis, rather
+/// than refuse to parse (`Profile::parse` is where a bad value already fails
+/// loudly; this is only the writer).
+///
+/// Pure, so the rule is testable without a filesystem.
+pub fn set_palette_field(text: &str, field: &str, value: Option<&str>) -> Result<String, String> {
+    let mut doc = text
+        .parse::<toml_edit::DocumentMut>()
+        .map_err(|e| format!("profile is malformed: {e}"))?;
+
+    match value {
+        Some(v) => {
+            if !doc.contains_key("palette") {
+                doc["palette"] = toml_edit::table();
+            }
+            doc["palette"][field] = toml_edit::value(v);
+        }
+        None => {
+            if let Some(palette) = doc.get_mut("palette").and_then(|p| p.as_table_mut()) {
+                palette.remove(field);
+            }
         }
     }
 
@@ -935,13 +1013,76 @@ mod tests {
         let one = set_voice("display = \"HUD\"\n", Some("a")).unwrap();
         let two = set_voice(&one, Some("b")).unwrap();
         assert_eq!(two.matches("voice").count(), 1);
-        assert_eq!(Profile::parse("x", &two).unwrap().voice.as_deref(), Some("b"));
+        assert_eq!(
+            Profile::parse("x", &two).unwrap().voice.as_deref(),
+            Some("b")
+        );
 
         // Cleared means "the app's voice", which is a state a character can mean —
         // not silence, and not an empty string that would name no voice at all.
         let none = set_voice(&two, None).unwrap();
         assert!(!none.contains("voice"), "{none}");
         assert_eq!(Profile::parse("x", &none).unwrap().voice, None);
+    }
+
+    #[test]
+    fn setting_display_keeps_the_profile_s_commentary() {
+        let before = "# A hand-authored character.\n\n[palette]\naccent = \"#6ee7ff\"\n";
+        let after = set_display(before, Some("Ada")).unwrap();
+
+        assert!(after.contains("# A hand-authored character."));
+        assert!(after.contains(r##"accent = "#6ee7ff""##));
+        assert_eq!(Profile::parse("x", &after).unwrap().display, "Ada");
+    }
+
+    #[test]
+    fn clearing_the_display_falls_back_to_the_file_stem() {
+        let with_display = set_display("", Some("Ada")).unwrap();
+        let cleared = set_display(&with_display, None).unwrap();
+
+        assert!(!cleared.contains("display"), "{cleared}");
+        assert_eq!(Profile::parse("x", &cleared).unwrap().display, "x");
+    }
+
+    #[test]
+    fn setting_a_palette_field_creates_the_table_if_absent() {
+        let after = set_palette_field("display = \"Ada\"\n", "accent", Some("#a78bfa")).unwrap();
+
+        assert_eq!(
+            Profile::parse("x", &after)
+                .unwrap()
+                .palette
+                .accent
+                .as_deref(),
+            Some("#a78bfa")
+        );
+    }
+
+    #[test]
+    fn setting_a_palette_field_leaves_the_others_alone() {
+        let before = "[palette]\naccent = \"#a78bfa\"\nglow = \"#4c2f96\"\n";
+        let after = set_palette_field(before, "field", Some("#120a24")).unwrap();
+
+        let palette = Profile::parse("x", &after).unwrap().palette;
+        assert_eq!(palette.accent.as_deref(), Some("#a78bfa"));
+        assert_eq!(palette.glow.as_deref(), Some("#4c2f96"));
+        assert_eq!(palette.field.as_deref(), Some("#120a24"));
+    }
+
+    #[test]
+    fn clearing_a_palette_field_removes_only_that_key() {
+        let before = "[palette]\naccent = \"#a78bfa\"\nglow = \"#4c2f96\"\n";
+        let after = set_palette_field(before, "accent", None).unwrap();
+
+        let palette = Profile::parse("x", &after).unwrap().palette;
+        assert_eq!(palette.accent, None);
+        assert_eq!(palette.glow.as_deref(), Some("#4c2f96"));
+    }
+
+    #[test]
+    fn clearing_a_palette_field_from_an_empty_profile_does_not_error() {
+        let after = set_palette_field("display = \"Ada\"\n", "accent", None).unwrap();
+        assert_eq!(Profile::parse("x", &after).unwrap().palette.accent, None);
     }
 
     #[test]
@@ -953,11 +1094,14 @@ mod tests {
     #[test]
     fn setting_a_voice_leaves_a_layered_sprite_intact() {
         // The geometry is nested tables; a careless writer flattens them.
-        let before = "[sprite]\nkind = \"layered\"\ndir = \"hud\"\n\n[sprite.pivot]\nhead = [0.5, 0.6]\n";
+        let before =
+            "[sprite]\nkind = \"layered\"\ndir = \"hud\"\n\n[sprite.pivot]\nhead = [0.5, 0.6]\n";
         let after = set_voice(before, Some("v1")).unwrap();
         let p = Profile::parse("hud", &after).unwrap();
         assert_eq!(p.layered_dir(), Some("hud"));
-        let Sprite::Layered { pivot, .. } = &p.sprite else { panic!("lost the variant") };
+        let Sprite::Layered { pivot, .. } = &p.sprite else {
+            panic!("lost the variant")
+        };
         assert_eq!(pivot.head, Some([0.5, 0.6]));
     }
 
@@ -1061,7 +1205,10 @@ mod tests {
         // frozen. Zero everywhere would render as a static image.
         let p = Profile::parse("x", "").unwrap();
         assert_eq!(p.temperament, Temperament::default());
-        assert!(p.temperament.idle > 0.0, "a default character still breathes");
+        assert!(
+            p.temperament.idle > 0.0,
+            "a default character still breathes"
+        );
         assert!(p.temperament.blink_seconds > 0.0);
     }
 
@@ -1123,7 +1270,11 @@ mod tests {
 
         let parts = load_layers(&dir, "x").unwrap();
         let names: Vec<_> = parts.iter().map(|p| p.name.as_str()).collect();
-        assert_eq!(names, ["body", "head"], "no shadow, no antenna, still valid");
+        assert_eq!(
+            names,
+            ["body", "head"],
+            "no shadow, no antenna, still valid"
+        );
         assert_eq!((parts[0].width, parts[0].height), (80, 120));
         assert!(parts[0].src.starts_with("data:image/png;base64,"));
 
@@ -1156,22 +1307,6 @@ mod tests {
         std::fs::remove_dir_all(&dir).ok();
     }
 
-    #[test]
-    fn githud_s_own_layered_character_loads() {
-        // HUD ships as `layered`. A committed part set that fails validation is
-        // a shipped bug, and it would render as a character with a hole in it.
-        let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../characters/profiles");
-        let loaded = load_all(&dir);
-        let hud = loaded.get("hud").expect("hud.toml");
-        let layered = hud.layered_dir().expect("hud is layered");
-
-        let parts = load_layers(&dir, layered).unwrap();
-        let names: Vec<_> = parts.iter().map(|p| p.name.as_str()).collect();
-        assert_eq!(names, ["shadow", "body", "head", "antenna"]);
-        // One canvas, and it is the reference's own size.
-        assert!(parts.iter().all(|p| (p.width, p.height) == (832, 1216)), "{names:?}");
-    }
-
     /// The smallest valid PNG of a given size: a real IHDR, and nothing that has
     /// to decode. `load_layers` reads the header and hands the bytes onward.
     fn png(w: u32, h: u32) -> Vec<u8> {
@@ -1196,10 +1331,10 @@ mod tests {
         // what Rust emits: deserialize it, serialize it back, and require the
         // JSON to be identical. Rename a field, drop a tag, or change a
         // variant name on either side and one of the two tests fails.
-        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../src/ui/fixtures/characters.json");
-        let text = std::fs::read_to_string(&path)
-            .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
+        let path =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../src/ui/fixtures/characters.json");
+        let text =
+            std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
 
         // **The fixture's numbers are all exact in binary**, e.g. 0.4375 and
         // 0.03125 rather than 0.44 and 0.03. `f32` widens to `f64` on the way
@@ -1235,11 +1370,14 @@ mod tests {
     }
 
     #[test]
-    fn githud_s_own_committed_profiles_load() {
-        // The same reasoning as the test asserting GIT HUD's own milestone file
-        // satisfies the milestone contract: a profile that ships broken is a
-        // shipped bug, and it would show up as a missing character rather than
-        // as a parse error anyone would look for.
+    fn githud_s_own_committed_default_loads() {
+        // D24: nothing but `default` ships in the repo any longer — every
+        // character that used to live here (`hud`, `mia`) is local, personal
+        // data now. The same reasoning as the test asserting GIT HUD's own
+        // milestone file satisfies the milestone contract still applies to
+        // the one file that *does* ship: broken here is a shipped bug, and it
+        // would show up as a missing character rather than a parse error
+        // anyone would look for.
         let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../characters/profiles");
         let loaded = load_all(&dir);
 
@@ -1253,29 +1391,12 @@ mod tests {
             "the default must stay procedural: it needs no art, so a fresh clone \
              renders something, and it should not impersonate a designed character"
         );
-        assert!(
-            loaded.profiles.len() >= 3,
-            "the default, GIT HUD's own persona, and at least one other"
+        assert_eq!(
+            loaded.profiles.len(),
+            1,
+            "only `default` ships now — every project-specific character is local (D24): {:?}",
+            loaded.profiles
         );
-
-        // GIT HUD's persona is a character like any other — assigned to the
-        // `githud` project in config/projects.toml, never the fallback. A project
-        // that has not chosen a character has not chosen one, and handing it this
-        // app's own persona would be putting words in its mouth.
-        let hud = loaded.get("hud").expect("hud.toml");
-        assert!(matches!(hud.sprite, Sprite::Layered { .. }));
-        assert_ne!(hud.name, HOUSE, "the persona must not be the default");
-
-        // Two distinct accents at least, because that is what "visibly distinct
-        // rooms" needs. **Not one per profile**: the default shares GIT HUD's cyan
-        // on purpose — it is the app's own colour, and the character wearing it is
-        // the app's own persona.
-        let accents: std::collections::BTreeSet<_> = loaded
-            .profiles
-            .iter()
-            .filter_map(|p| p.palette.accent.as_deref())
-            .collect();
-        assert!(accents.len() >= 2, "{accents:?}");
     }
 
     fn temp_dir(name: &str) -> PathBuf {

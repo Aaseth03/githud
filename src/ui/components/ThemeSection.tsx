@@ -18,9 +18,9 @@ const MAX_BYTES = 8 * 1024 * 1024;
  * about the *room* rather than the *resident*, so a project can have both a
  * character with its own accent and a theme of its own.
  *
- * Both fields are written to `config/projects.toml`; the image itself is not
- * — it lives in the machine-local data directory, and a name that resolves to
- * nothing on another machine is the ordinary case, not an error.
+ * Both live in this project's own local folder now (D24) — the accent in
+ * `project.toml`, the image as `background.<ext>` alongside it, never
+ * committed and never shipped.
  */
 export function ThemeSection({
   projects,
@@ -62,17 +62,17 @@ function ThemeRow({
 
   useEffect(() => {
     let live = true;
-    if (!project.background) {
+    if (!project.has_local_background) {
       setPreview(null);
       return;
     }
-    void invoke<string | null>("project_background_image", { filename: project.background })
+    void invoke<string | null>("project_background_image", { project: project.rel_path })
       .then((uri) => live && setPreview(uri))
       .catch((e: unknown) => live && setError(e instanceof Error ? e.message : String(e)));
     return () => {
       live = false;
     };
-  }, [project.background]);
+  }, [project.has_local_background, project.rel_path]);
 
   const setAccent = useCallback(
     async (hex: string | null) => {
@@ -197,7 +197,7 @@ function ThemeRow({
             </label>
             <button
               onClick={() => void setBackground(null, null)}
-              disabled={savingBackground || !project.background}
+              disabled={savingBackground || !project.has_local_background}
               className="rounded border border-line px-2 py-1 font-mono text-[10px] tracking-wider
                          text-ink-dim transition-colors hover:border-line-bright hover:text-ink
                          focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-signal
