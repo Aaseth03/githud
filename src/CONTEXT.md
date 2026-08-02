@@ -19,6 +19,8 @@ src/
 ├─ tsconfig.node.json
 ├─ .oxlintrc.json
 ├─ .gitignore
+├─ scripts/
+│  └─ check-rust.sh        preflight: is cargo on PATH, with install steps if not
 ├─ lessons/                the rules that bite, split by what they constrain — shared by both workspaces below
 │  ├─ boundary.md          the Rust↔TS wire
 │  ├─ process.md           processes, sessions, lifetime
@@ -37,6 +39,7 @@ src/
 | Write, change, or debug the React UI | [`ui/CONTEXT.md`](ui/CONTEXT.md) |
 | Write, change, or debug the Rust core (Tauri commands, PTY, git, agent adapters, guardrails) | [`src-tauri/CONTEXT.md`](src-tauri/CONTEXT.md) |
 | Build, run, or package the app | `../docs/guides/build-and-run.md` |
+| Change the cargo-on-PATH preflight | `scripts/check-rust.sh` |
 
 `lessons/` has no `CONTEXT.md` of its own — it is shared reference material, not
 a workspace. Each side's `CONTEXT.md` links to the one file in here that
