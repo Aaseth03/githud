@@ -226,6 +226,7 @@ export default function App() {
                 charactersError={charactersError}
                 library={library}
                 onProjectsChanged={rescan}
+                onLibraryChanged={reloadLibrary}
                 onOpenCharacters={handleOpenCharacters}
               />
             </div>

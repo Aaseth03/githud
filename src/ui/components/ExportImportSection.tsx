@@ -14,8 +14,11 @@ import type { ImportSummary } from "../types";
  */
 export function ExportImportSection({
   onProjectsChanged,
+  onLibraryChanged,
 }: {
   onProjectsChanged: () => Promise<void> | void;
+  /** A bundle can restore or overwrite a library character (D26), not just a project — the shared library `CharactersView` reads must reload too, or a re-imported character stays invisible until restart. */
+  onLibraryChanged: () => Promise<void> | void;
 }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -73,14 +76,16 @@ export function ExportImportSection({
       setImported(summary);
       // Every open tab must see the imported config immediately, not after a
       // restart — the same "reload rather than patch" posture every other
-      // Settings write in this app already takes.
-      await onProjectsChanged();
+      // Settings write in this app already takes. A bundle can restore or
+      // overwrite a library character as well as a project, so both shared
+      // stores need to reload, not just projects.
+      await Promise.all([onProjectsChanged(), onLibraryChanged()]);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
     }
-  }, [onProjectsChanged]);
+  }, [onProjectsChanged, onLibraryChanged]);
 
   return (
     <section className="glass-panel px-4 py-3.5">

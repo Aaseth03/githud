@@ -51,6 +51,7 @@ export function Settings({
   charactersError,
   library,
   onProjectsChanged,
+  onLibraryChanged,
   onOpenCharacters,
 }: {
   voice: VoiceControls;
@@ -65,6 +66,8 @@ export function Settings({
   /** The character library (D26) — see `CharacterSection`. */
   library: Characters;
   onProjectsChanged: () => Promise<void> | void;
+  /** Reloads the same shared library `CharactersView` reads — an import (D26) can add, overwrite, or restore a library character, not just a project. */
+  onLibraryChanged: () => Promise<void> | void;
   onOpenCharacters: () => void;
 }) {
   return (
@@ -99,7 +102,10 @@ export function Settings({
           onOpenCharacters={onOpenCharacters}
         />
         <ThemeSection projects={projects} onProjectsChanged={onProjectsChanged} />
-        <ExportImportSection onProjectsChanged={onProjectsChanged} />
+        <ExportImportSection
+          onProjectsChanged={onProjectsChanged}
+          onLibraryChanged={onLibraryChanged}
+        />
         <AudioSection />
         <MicrophoneTest />
         <VoiceSection />
