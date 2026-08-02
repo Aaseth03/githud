@@ -14,7 +14,7 @@ function project(
     kind,
     agent: kind === "external" ? "read-only" : "read-write",
     note: null,
-    has_local_character: false,
+    character_id: null,
     accent: null,
     has_local_background: false,
   };

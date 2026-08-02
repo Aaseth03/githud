@@ -13,10 +13,16 @@ githud/
 │  │  └─ icm.md                  what counts as an ICM workspace, and how it is detected
 │  └─ skills/icm-architect/      vendored procedure for building one (MIT, third-party)
 └─ characters/
-   ├─ parts_spec.md              the contract a layered part set must satisfy
    ├─ profiles/default.toml      the one character shipped — procedural, the fallback
-   └─ pipeline/                  scripts that produce a character's parts (D22)
+   ├─ layered/
+   │  ├─ parts_spec.md           the contract a layered part set must satisfy
+   │  └─ pipeline/                scripts that produce a character's parts (D22)
+   └─ frames/frames_spec.md      the contract a frame set must satisfy
 ```
+
+Each `sprite.kind` is its own sub-workspace (D25) — a type's spec and pipeline
+live inside it, not at the `characters/` root, because they do not generalise
+across types.
 
 **Nothing about a specific user's own projects lives in this half any more**
 (D24). `config/projects.toml` — the old declared-overrides file — is gone;

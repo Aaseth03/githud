@@ -1,4 +1,5 @@
 import {
+  CHARACTERS_TAB_KEY,
   MAIN_TAB_KEY,
   SETTINGS_TAB_KEY,
   tabKey,
@@ -55,6 +56,21 @@ export function openSettings(state: TabState): TabState {
   return {
     tabs: alreadyOpen ? state.tabs : [...state.tabs, { kind: "settings" }],
     activeKey: SETTINGS_TAB_KEY,
+  };
+}
+
+/**
+ * Open the character library, or focus it if it is already open.
+ *
+ * One of it, same reasoning as `openSettings` — two tabs would be two views
+ * of one library, and the second is a copy that can drift.
+ */
+export function openCharacters(state: TabState): TabState {
+  const alreadyOpen = state.tabs.some((t) => t.kind === "characters");
+
+  return {
+    tabs: alreadyOpen ? state.tabs : [...state.tabs, { kind: "characters" }],
+    activeKey: CHARACTERS_TAB_KEY,
   };
 }
 

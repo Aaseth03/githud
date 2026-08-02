@@ -88,10 +88,11 @@ export function ExportImportSection({
         Export / Import
       </h2>
       <p className="mt-1 text-[11px] text-ink-faint">
-        Every project's own local character, voice, accent, background and
-        note — nothing else, and none of it leaves this machine unless you
-        export it. Importing overwrites a named project's local config
-        wholesale; every other project already here is left untouched.
+        Every project's own local config, and the whole character library
+        (D26) it points into — nothing else, and none of it leaves this
+        machine unless you export it. Importing overwrites a named project's
+        or character's local folder wholesale; everything else already here
+        is left untouched.
       </p>
 
       <div className="mt-3 flex flex-wrap gap-2">
@@ -140,6 +141,22 @@ export function ExportImportSection({
               {imported.failed.map((f) => (
                 <li key={f.key} className="font-mono text-[10px] text-warn">
                   {f.key}: {f.error}
+                </li>
+              ))}
+            </ul>
+          )}
+          {imported.characters_imported.length > 0 && (
+            <p className="mt-1 font-mono text-[11px] text-go">
+              {imported.characters_imported.length} character
+              {imported.characters_imported.length === 1 ? "" : "s"}:{" "}
+              {imported.characters_imported.join(", ")}
+            </p>
+          )}
+          {imported.characters_failed.length > 0 && (
+            <ul className="mt-1 space-y-0.5">
+              {imported.characters_failed.map((f) => (
+                <li key={f.key} className="font-mono text-[10px] text-warn">
+                  character {f.key}: {f.error}
                 </li>
               ))}
             </ul>

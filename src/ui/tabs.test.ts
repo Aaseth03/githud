@@ -5,12 +5,13 @@ import {
   initialTabState,
   isTabVisible,
   liveProject,
+  openCharacters,
   openProject,
   openProjectKeys,
   openSettings,
   selectTab,
 } from "./tabs";
-import { MAIN_TAB_KEY, SETTINGS_TAB_KEY, type Project } from "./types";
+import { CHARACTERS_TAB_KEY, MAIN_TAB_KEY, SETTINGS_TAB_KEY, type Project } from "./types";
 
 function project(name: string, rel = name): Project {
   return {
@@ -22,7 +23,7 @@ function project(name: string, rel = name): Project {
     kind: "own",
     agent: "read-write",
     note: null,
-    has_local_character: false,
+    character_id: null,
     accent: null,
     has_local_background: false,
   };
@@ -155,6 +156,36 @@ describe("settings", () => {
   });
 });
 
+describe("characters", () => {
+  it("opens as its own tab and focuses it", () => {
+    const s = openCharacters(initialTabState);
+
+    expect(s.activeKey).toBe(CHARACTERS_TAB_KEY);
+    expect(activeTab(s).kind).toBe("characters");
+  });
+
+  it("focuses the existing one instead of opening a second", () => {
+    const once = openCharacters(initialTabState);
+    const twice = openCharacters(selectTab(once, MAIN_TAB_KEY));
+
+    expect(twice.tabs).toHaveLength(2);
+    expect(twice.activeKey).toBe(CHARACTERS_TAB_KEY);
+  });
+
+  it("closes, unlike the main tab", () => {
+    const s = closeTab(openCharacters(initialTabState), CHARACTERS_TAB_KEY);
+
+    expect(s.tabs).toHaveLength(1);
+    expect(s.activeKey).toBe(MAIN_TAB_KEY);
+  });
+
+  it("is not a project, so it never appears in the open project keys", () => {
+    const s = openProject(openCharacters(initialTabState), project("Hermes"));
+
+    expect(openProjectKeys(s)).toEqual(new Set(["Hermes"]));
+  });
+});
+
 describe("tab visibility — every open tab stays mounted", () => {
   // The bug this encodes: rendering only the active tab unmounts the others,
   // which destroys the terminal's xterm buffer while the PTY survives on the
@@ -198,7 +229,7 @@ describe("tab visibility — every open tab stays mounted", () => {
 describe("liveProject — refreshing a tab's snapshot against the current scan", () => {
   it("prefers the current scan's data over the tab's snapshot", () => {
     const opened = project("githud");
-    const rescanned = { ...opened, accent: "#52d9a8", has_local_character: true };
+    const rescanned = { ...opened, accent: "#52d9a8", character_id: "ada-3f2a" };
 
     expect(liveProject([rescanned], opened)).toEqual(rescanned);
   });

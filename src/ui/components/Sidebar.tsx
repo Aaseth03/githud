@@ -14,6 +14,7 @@ interface Props {
   onOpen: (project: Project) => void;
   onRescan: () => void;
   onSettings: () => void;
+  onCharacters: () => void;
   /**
    * A project's own accent (M8), keyed by `rel_path`. Absent means the
    * project has not chosen one, so the rail keeps the app's own signal
@@ -34,6 +35,7 @@ export function Sidebar({
   onOpen,
   onRescan,
   onSettings,
+  onCharacters,
   accents,
 }: Props) {
   return (
@@ -209,16 +211,28 @@ export function Sidebar({
           {uninitiated.length > 0 && ` · ${uninitiated.length} uninitiated`} ·
           depth ≤ 3
         </p>
-        <button
-          onClick={onSettings}
-          title="Settings — audio devices, voice, and what this webview can do"
-          className="shrink-0 rounded border border-line px-2 py-1 font-mono text-[10px]
-                     tracking-wider text-ink-dim transition-colors
-                     hover:border-signal-deep hover:text-signal
-                     focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal"
-        >
-          SET
-        </button>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <button
+            onClick={onCharacters}
+            title="Characters — the character library: create, edit, assign to a project"
+            className="shrink-0 rounded border border-line px-2 py-1 font-mono text-[10px]
+                       tracking-wider text-ink-dim transition-colors
+                       hover:border-signal-deep hover:text-signal
+                       focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal"
+          >
+            CHR
+          </button>
+          <button
+            onClick={onSettings}
+            title="Settings — audio devices, voice, and what this webview can do"
+            className="shrink-0 rounded border border-line px-2 py-1 font-mono text-[10px]
+                       tracking-wider text-ink-dim transition-colors
+                       hover:border-signal-deep hover:text-signal
+                       focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-signal"
+          >
+            SET
+          </button>
+        </div>
       </footer>
     </aside>
   );

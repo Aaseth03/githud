@@ -93,6 +93,13 @@ pub struct ProjectLocal {
     pub accent: Option<String>,
     /// Keep this project out of the sidebar entirely.
     pub hidden: bool,
+    /// A pointer into the character library (`characters_library_dir()`),
+    /// not an embedded character (D26). The pointer *is* the assignment —
+    /// there is no character data left in this file to disagree with it.
+    /// A pointer naming an id the library no longer has resolves to no
+    /// character rather than an error, the same tolerance every other
+    /// reference in this file already gets.
+    pub character_id: Option<String>,
 }
 
 impl ProjectLocal {
@@ -155,9 +162,12 @@ pub struct LocalSummary {
     pub note: Option<String>,
     pub accent: Option<String>,
     pub hidden: bool,
-    /// Whether `character.toml` exists — presence *is* the assignment (D24).
-    /// There is no name to look up any more.
-    pub has_character: bool,
+    /// This project's own pointer into the character library, if it has one
+    /// (D26). Unresolved here — a pointer naming a since-deleted id is passed
+    /// through as-is; resolving it against the library, and falling back to
+    /// the house character on a miss, is `ui/character.ts`'s job, the same
+    /// division this module already keeps for every other fact it reports.
+    pub character_id: Option<String>,
     pub has_background: bool,
 }
 
@@ -184,9 +194,39 @@ pub fn load_summary(local_root: &Path, rel_path: &str) -> Result<Option<LocalSum
         note: declared.note,
         accent: declared.accent,
         hidden: declared.hidden,
-        has_character: dir.join("character.toml").is_file(),
+        character_id: declared.character_id,
         has_background: crate::theme::has_background(&dir),
     }))
+}
+
+/// Clear every project's `character_id` pointer that names `id` (D26) —
+/// called when a library character is deleted, so no project is left
+/// pointing at one that no longer exists. Returns the keys of every project
+/// actually changed.
+///
+/// **One project failing to read does not stop the rest.** The character is
+/// already gone by the time this runs; a malformed `project.toml` elsewhere
+/// is that project's own pre-existing problem, not this cleanup's to solve
+/// or block on — the same tolerance `load_all` already has for one bad file
+/// among many good ones.
+pub fn clear_character_pointer(local_root: &Path, id: &str) -> Result<Vec<String>, String> {
+    let mut cleared = Vec::new();
+    for key in known_keys(local_root)? {
+        let path = local_root.join(&key).join("project.toml");
+        let Ok(declared) = ProjectLocal::load(&path) else {
+            continue;
+        };
+        if declared.character_id.as_deref() == Some(id) {
+            let updated = ProjectLocal {
+                character_id: None,
+                ..declared
+            };
+            if updated.save(&path).is_ok() {
+                cleared.push(key);
+            }
+        }
+    }
+    Ok(cleared)
 }
 
 /// Every project folder under `local_root`, by the `key_for` identity it is
@@ -228,7 +268,7 @@ pub fn load_all(local_root: &Path) -> BTreeMap<String, Result<LocalSummary, Stri
                     note: declared.note,
                     accent: declared.accent,
                     hidden: declared.hidden,
-                    has_character: dir.join("character.toml").is_file(),
+                    character_id: declared.character_id,
                     has_background: crate::theme::has_background(&dir),
                 }
             });
@@ -317,6 +357,7 @@ mod tests {
             model: None,
             accent: Some("#174920".into()),
             hidden: false,
+            character_id: Some("ada-3f2a".into()),
         };
 
         declared.save(&path).unwrap();
@@ -375,15 +416,15 @@ mod tests {
 
     #[test]
     fn a_folder_with_no_project_toml_still_summarises() {
-        // A character can exist with no declared project.toml at all — the
-        // folder existing at all is enough to probe it.
+        // The folder existing at all is enough to probe it, even with
+        // nothing declared inside — the same tolerance as before D26, just
+        // with nothing to report on the character axis.
         let fx = Fixture::new("character-only");
         fx.dir("githud");
-        fx.file("githud/character.toml", "display = \"HUD\"\n");
 
         let summary = load_summary(&fx.root, "githud").unwrap().unwrap();
         assert_eq!(summary.kind, ProjectKind::Own);
-        assert!(summary.has_character);
+        assert_eq!(summary.character_id, None);
         assert!(!summary.has_background);
     }
 
@@ -393,16 +434,15 @@ mod tests {
         fx.dir("HOME_AI_VAULT");
         fx.file(
             "HOME_AI_VAULT/project.toml",
-            "note = \"The vault. MIA is its character (D5).\"\n",
+            "note = \"The vault. MIA is its character (D5).\"\ncharacter_id = \"mia\"\n",
         );
-        fx.file("HOME_AI_VAULT/character.toml", "display = \"MIA\"\n");
 
         let summary = load_summary(&fx.root, "HOME_AI_VAULT").unwrap().unwrap();
         assert_eq!(
             summary.note.as_deref(),
             Some("The vault. MIA is its character (D5).")
         );
-        assert!(summary.has_character);
+        assert_eq!(summary.character_id.as_deref(), Some("mia"));
     }
 
     #[test]
@@ -413,6 +453,45 @@ mod tests {
 
         let err = load_summary(&fx.root, "broken").unwrap_err();
         assert!(err.contains("vendored"), "{err}");
+    }
+
+    #[test]
+    fn clear_character_pointer_clears_every_project_naming_it() {
+        let fx = Fixture::new("clear-pointer");
+        fx.file("githud/project.toml", "accent = \"#692323\"\ncharacter_id = \"ada\"\n");
+        fx.file("HOME_AI_VAULT/project.toml", "character_id = \"ada\"\n");
+        fx.file("Professor/project.toml", "character_id = \"someone-else\"\n");
+
+        let mut cleared = clear_character_pointer(&fx.root, "ada").unwrap();
+        cleared.sort();
+        assert_eq!(cleared, vec!["HOME_AI_VAULT", "githud"]);
+
+        let githud = ProjectLocal::load(&fx.root.join("githud/project.toml")).unwrap();
+        assert_eq!(githud.character_id, None);
+        assert_eq!(githud.accent.as_deref(), Some("#692323"), "nothing else changes");
+
+        let professor = ProjectLocal::load(&fx.root.join("Professor/project.toml")).unwrap();
+        assert_eq!(
+            professor.character_id.as_deref(),
+            Some("someone-else"),
+            "a different pointer is untouched"
+        );
+    }
+
+    #[test]
+    fn clear_character_pointer_skips_a_malformed_project_rather_than_failing() {
+        let fx = Fixture::new("clear-pointer-malformed");
+        fx.file("githud/project.toml", "character_id = \"ada\"\n");
+        fx.file("broken/project.toml", "kind = \"vendored\"\n");
+
+        let cleared = clear_character_pointer(&fx.root, "ada").unwrap();
+        assert_eq!(cleared, vec!["githud"]);
+    }
+
+    #[test]
+    fn clear_character_pointer_on_a_missing_root_is_empty_not_an_error() {
+        let missing = std::env::temp_dir().join("githud-local-no-such-root-clear");
+        assert_eq!(clear_character_pointer(&missing, "ada").unwrap(), Vec::<String>::new());
     }
 
     #[test]

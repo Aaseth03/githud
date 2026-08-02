@@ -11,6 +11,9 @@
 //! lives in `ui/character.ts` alongside the assignment it reads, and is tested
 //! there. This module parses and loads; it takes no view on who gets whom.
 
+pub mod library;
+pub mod migrate;
+
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -39,6 +42,10 @@ pub struct Profile {
     /// `None` means "whatever the app is set to" — a character is allowed to be
     /// a look without being a voice.
     pub voice: Option<String>,
+    /// Free text about the character — who they are, roleplay notes,
+    /// whatever the user wants to remember. Never read by the renderer; a
+    /// place to write, not a field anything branches on.
+    pub notes: Option<String>,
     pub palette: Palette,
     pub sprite: Sprite,
     pub temperament: Temperament,
@@ -87,7 +94,7 @@ pub enum Sprite {
     /// Layered parts, animated by transforms (D21).
     ///
     /// The one that reads as alive: motion is continuous rather than stepped.
-    /// See `../../../characters/parts_spec.md` for what the directory must hold.
+    /// See `../../../characters/layered/parts_spec.md` for what the directory must hold.
     Layered {
         dir: String,
         /// Where the eyes and mouth are drawn, since they are *not* in the art.
@@ -200,6 +207,20 @@ pub enum Eyes {
     Visor,
 }
 
+impl Eyes {
+    /// The TOML value this variant is written as — kept in step with
+    /// `#[serde(rename_all = "kebab-case")]` above by the wire-fixture test,
+    /// the same discipline the sprite tag itself already leans on.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Eyes::Round => "round",
+            Eyes::Wide => "wide",
+            Eyes::Narrow => "narrow",
+            Eyes::Visor => "visor",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Mouth {
@@ -207,6 +228,16 @@ pub enum Mouth {
     Round,
     Wide,
     Line,
+}
+
+impl Mouth {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Mouth::Round => "round",
+            Mouth::Wide => "wide",
+            Mouth::Line => "line",
+        }
+    }
 }
 
 /// The declared half of a profile — exactly what the TOML file may say.
@@ -219,6 +250,7 @@ pub enum Mouth {
 struct Declared {
     display: Option<String>,
     voice: Option<String>,
+    notes: Option<String>,
     #[serde(default)]
     palette: Palette,
     #[serde(default)]
@@ -340,6 +372,7 @@ impl Profile {
             name: name.to_string(),
             display: declared.display.unwrap_or_else(|| name.to_string()),
             voice: declared.voice,
+            notes: declared.notes,
             palette: declared.palette,
             sprite: declared.sprite,
             temperament: declared.temperament,
@@ -504,7 +537,7 @@ pub fn load_frames(characters_dir: &Path, dir: &str) -> Result<Vec<Frame>, Strin
 
 /// The parts a layered character is made of, in draw order, back to front.
 ///
-/// `../../../characters/parts_spec.md` is canonical for this list. `body` and
+/// `../../../characters/layered/parts_spec.md` is canonical for this list. `body` and
 /// `head` are required; `shadow` and `antenna` are optional, because a character
 /// with no antenna simply has no spring and one with no shadow floats.
 pub const LAYERS: [(&str, bool); 4] = [
@@ -624,6 +657,7 @@ pub fn seed_toml(
     let declared = Declared {
         display: Some(display.to_string()),
         voice: None,
+        notes: None,
         palette,
         sprite,
         temperament,
@@ -675,6 +709,58 @@ pub fn set_display(text: &str, display: Option<&str>) -> Result<String, String> 
     Ok(doc.to_string())
 }
 
+/// Set or clear a character's `notes`, preserving the rest of the file.
+///
+/// Pure, so the rule is testable without a filesystem.
+pub fn set_notes(text: &str, notes: Option<&str>) -> Result<String, String> {
+    let mut doc = text
+        .parse::<toml_edit::DocumentMut>()
+        .map_err(|e| format!("profile is malformed: {e}"))?;
+
+    match notes {
+        Some(n) => doc["notes"] = toml_edit::value(n),
+        None => {
+            doc.remove("notes");
+        }
+    }
+
+    Ok(doc.to_string())
+}
+
+/// Set a character's sprite to procedural with the given eyes and mouth,
+/// preserving the rest of the file.
+///
+/// **Always writes `kind = "procedural"`.** This is the procedural editor's
+/// own setter — the only one exposed anywhere in this plan's UI — so forcing
+/// the kind is correct rather than a silent surprise: a character edited
+/// through the procedural fields becomes a procedural character, the same
+/// way choosing a colour in the palette editor cannot leave a stray, no
+/// longer applicable `sprite.dir` from a different kind behind.
+///
+/// Pure, so the rule is testable without a filesystem.
+pub fn set_sprite_procedural(text: &str, eyes: Eyes, mouth: Mouth) -> Result<String, String> {
+    let mut doc = text
+        .parse::<toml_edit::DocumentMut>()
+        .map_err(|e| format!("profile is malformed: {e}"))?;
+
+    if !doc.contains_key("sprite") {
+        doc["sprite"] = toml_edit::table();
+    }
+    let Some(sprite) = doc["sprite"].as_table_mut() else {
+        return Err("sprite is not a table".to_string());
+    };
+    // Drop whatever the previous kind needed (`dir`, `face`, `pivot`) — none
+    // of it applies to procedural, and leaving it behind would round-trip as
+    // a sprite that claims to be procedural while still carrying another
+    // kind's fields.
+    sprite.clear();
+    sprite["kind"] = toml_edit::value("procedural");
+    sprite["eyes"] = toml_edit::value(eyes.as_str());
+    sprite["mouth"] = toml_edit::value(mouth.as_str());
+
+    Ok(doc.to_string())
+}
+
 /// Set or clear one field of a character's `[palette]` — `field` is `accent`,
 /// `glow`, or `field`, matching `Palette`'s own keys — preserving the rest of
 /// the file.
@@ -722,6 +808,7 @@ mod tests {
         assert_eq!(p.name, "hud");
         assert_eq!(p.display, "hud", "display falls back to the file stem");
         assert_eq!(p.voice, None);
+        assert_eq!(p.notes, None);
         assert_eq!(p.palette, Palette::default());
         assert_eq!(
             p.sprite,
@@ -1026,6 +1113,30 @@ mod tests {
     }
 
     #[test]
+    fn setting_notes_keeps_the_profile_s_commentary() {
+        let before = "# HUD — GIT HUD's own persona.\n\ndisplay = \"HUD\"\n";
+        let after = set_notes(before, Some("roleplay: dry, terse")).unwrap();
+
+        assert!(after.contains("# HUD — GIT HUD's own persona."));
+        assert_eq!(
+            Profile::parse("hud", &after).unwrap().notes.as_deref(),
+            Some("roleplay: dry, terse")
+        );
+    }
+
+    #[test]
+    fn notes_can_be_replaced_and_cleared() {
+        let one = set_notes("display = \"HUD\"\n", Some("a")).unwrap();
+        let two = set_notes(&one, Some("b")).unwrap();
+        assert_eq!(two.matches("notes").count(), 1);
+        assert_eq!(Profile::parse("x", &two).unwrap().notes.as_deref(), Some("b"));
+
+        let none = set_notes(&two, None).unwrap();
+        assert!(!none.contains("notes"), "{none}");
+        assert_eq!(Profile::parse("x", &none).unwrap().notes, None);
+    }
+
+    #[test]
     fn setting_display_keeps_the_profile_s_commentary() {
         let before = "# A hand-authored character.\n\n[palette]\naccent = \"#6ee7ff\"\n";
         let after = set_display(before, Some("Ada")).unwrap();
@@ -1083,6 +1194,40 @@ mod tests {
     fn clearing_a_palette_field_from_an_empty_profile_does_not_error() {
         let after = set_palette_field("display = \"Ada\"\n", "accent", None).unwrap();
         assert_eq!(Profile::parse("x", &after).unwrap().palette.accent, None);
+    }
+
+    #[test]
+    fn setting_the_procedural_sprite_keeps_the_profile_s_commentary() {
+        let before = "# HUD — GIT HUD's own persona.\n\ndisplay = \"HUD\"\n";
+        let after = set_sprite_procedural(before, Eyes::Visor, Mouth::Line).unwrap();
+
+        assert!(after.contains("# HUD — GIT HUD's own persona."));
+        let p = Profile::parse("hud", &after).unwrap();
+        assert_eq!(
+            p.sprite,
+            Sprite::Procedural {
+                eyes: Eyes::Visor,
+                mouth: Mouth::Line
+            }
+        );
+    }
+
+    #[test]
+    fn setting_the_procedural_sprite_replaces_a_different_kind_outright() {
+        // Switching a layered character to procedural through this setter
+        // must not leave `dir`/`face`/`pivot` behind claiming a kind the
+        // sprite no longer is.
+        let before = "[sprite]\nkind = \"layered\"\ndir = \"hud\"\n\n[sprite.pivot]\nhead = [0.5, 0.6]\n";
+        let after = set_sprite_procedural(before, Eyes::Wide, Mouth::Round).unwrap();
+
+        let p = Profile::parse("x", &after).unwrap();
+        assert_eq!(
+            p.sprite,
+            Sprite::Procedural {
+                eyes: Eyes::Wide,
+                mouth: Mouth::Round
+            }
+        );
     }
 
     #[test]

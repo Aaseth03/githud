@@ -42,7 +42,9 @@ src-tauri/
 │  │  └─ claude.rs      Claude Code adapter + line mapping + tests
 │  ├─ card.rs           the cached project card (D11)
 │  ├─ character/
-│  │  └─ mod.rs         character profiles (D9) — parse, load, frame sets
+│  │  ├─ mod.rs         character profiles (D9) — parse, load, frame sets
+│  │  ├─ library.rs     the character library (D26) — nested-folder CRUD, independent of any project
+│  │  └─ migrate.rs     embedded→library migration, and the same transform a v1 bundle upgrades through
 │  ├─ audio.rs          what the machine's audio devices actually are
 │  ├─ mic.rs            webview media permission policy (Linux)
 │  ├─ reap.rs           orphaned sandboxes, and teardown on a signal
@@ -78,8 +80,8 @@ do. Never hand-edit it; it is rebuilt.
 | Path | Contains | When to use |
 |---|---|---|
 | `src/scan/` | The walk, ICM detection | Changing discovery rules |
-| `src/local/` | A project's own local declaration (D24) — kind, agent access, note, character presence, accent, background. Reading **and writing** | Changing what can be declared about a project, or how it is saved |
-| `src/bundle/` | Export/import — bundling the local store into one file and back (D24) | Changing the export format, or what import validates |
+| `src/local/` | A project's own local declaration (D24) — kind, agent access, note, its character *pointer* (D26), accent, background. Reading **and writing** | Changing what can be declared about a project, or how it is saved |
+| `src/bundle/` | Export/import — bundling the local store and the character library into one file and back (D24, D26) | Changing the export format, or what import validates |
 | `src/machine/` | `machine.toml` — the custom scan root | Changing per-machine settings unrelated to a specific project |
 | `src/theme.rs` | A project's accent and background image, inside its own local folder | Anything about a project's own theme, not its character's |
 | `src/pty/` | Terminal sessions: spawn, write, resize, kill | Changing terminal behaviour |
@@ -88,7 +90,7 @@ do. Never hand-edit it; it is rebuilt.
 | `src/parse/` | The milestone contract | Never without changing `../../config/contracts/milestones.md` first |
 | `src/git/` | Status, diff, stack, tree | Anything the card or panels read |
 | `src/card.rs` | Assembling and caching the card | Changing what a project shows cold |
-| `src/character/` | Profile parsing, loading, frame sets (D9) | Changing what a character may declare |
+| `src/character/` | Profile parsing, loading, frame sets (D9); the character library and embedded→library migration (D26) | Changing what a character may declare, or how the library stores one |
 | `src/voice/` | Voicebox: health, voices, speech, transcription | Anything the app asks of Voicebox |
 | `src/mic.rs` | What the webview may access | Changing device permissions |
 | `src/reap.rs` | Reaping sandboxes a dead app left behind | Anything about process lifetime across a crash |

@@ -28,7 +28,9 @@ planning/
 │  ├─ 2026-07-29-m5-panels-and-cards.plan.md
 │  ├─ 2026-07-29-m6-voice.plan.md
 │  ├─ 2026-07-29-m6-settings-and-audio-devices.plan.md
-│  └─ 2026-07-30-m7-character.plan.md
+│  ├─ 2026-07-30-m7-character.plan.md
+│  ├─ 2026-08-02-m10-frames-pipeline.plan.md
+│  └─ 2026-08-02-character-library-shell.plan.md
 └─ decisions/
    ├─ 2026-07-28-D01-dual-channel.md
    ├─ 2026-07-28-D02-adapters-target-harnesses.md
@@ -53,7 +55,9 @@ planning/
    ├─ 2026-07-30-D21-character-is-layered-parts.md
    ├─ 2026-07-30-D22-python-in-tooling.md
    ├─ 2026-07-30-D23-characters-are-a-workspace.md
-   └─ 2026-08-01-D24-personal-config-goes-local.md
+   ├─ 2026-08-01-D24-personal-config-goes-local.md
+   ├─ 2026-08-02-D25-character-types-are-sub-workspaces.md
+   └─ 2026-08-02-D26-character-library-with-project-pointers.md
 ```
 
 `specs/` holds the detail a decision record deliberately does not carry.
@@ -72,7 +76,7 @@ later does not mean re-doing the comparison.
 | `plans/` | Implementation plans (`YYYY-MM-DD-title.plan.md`) | Planning a feature before coding — start from `plans/_TEMPLATE.plan.md` |
 | `specs/` | Feature specs (`feature-name_spec.md`) | Spec'ing a feature in detail, or recording an option deferred rather than dropped |
 
-## Decisions D1–D24
+## Decisions D1–D25
 
 D1–D15 were committed 2026-07-28 out of the design interview; D16–D18 followed
 the same day — D16 when a D7 assumption was tested and failed, D17 when M1 turned
@@ -120,6 +124,8 @@ its job on the day it is overturned.**
 | D22 | [Python is allowed in tooling](decisions/2026-07-30-D22-python-in-tooling.md), and stays out of the app — amends D4 |
 | D23 | [Characters are a workspace](decisions/2026-07-30-D23-characters-are-a-workspace.md), not a config folder — amends D9's location clause |
 | D24 | [Personal config goes local](decisions/2026-08-01-D24-personal-config-goes-local.md) — a project's own kind, note, character, and theme are gitignored, never shipped |
+| D25 | [Character types are sub-workspaces](decisions/2026-08-02-D25-character-types-are-sub-workspaces.md) — `procedural/`, `layered/`, `frames/` each hold their own spec, pipeline and lessons — amends D23's tree clause |
+| D26 | [Character library with project pointers](decisions/2026-08-02-D26-character-library-with-project-pointers.md) — a character lives in its own local library, keyed by id; a project holds a pointer, not an embedded copy — amends D24's storage-shape clause |
 
 ## Architecture
 
@@ -143,6 +149,8 @@ its job on the day it is overturned.**
 | 2026-07-29 | [M6 — voice](plans/2026-07-29-m6-voice.plan.md) | **Done** — validated by hand |
 | 2026-07-29 | [Settings — audio devices and voice diagnostics](plans/2026-07-29-m6-settings-and-audio-devices.plan.md) | **Done** — it found six bugs, then validated the fixes |
 | 2026-07-30 | [M7 — character](plans/2026-07-30-m7-character.plan.md) | **Done** — rescoped by D21 once the first face ran; its verdict became M8 and M9 |
+| 2026-08-02 | [M10 — the `frames` ComfyUI pipeline](plans/2026-08-02-m10-frames-pipeline.plan.md) | **Draft** |
+| 2026-08-02 | [M10 — the character library shell](plans/2026-08-02-character-library-shell.plan.md) | **Implemented** — `cargo test`, `tsc`, `vitest`, `oxlint` green |
 
 ## Plan contract
 

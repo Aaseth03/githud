@@ -449,11 +449,22 @@ motion, and the reason a character costs nothing to run).
       renders something (D21)
 
 ### M10 — Character design suite
-**Status:** not-started
+**Status:** in-progress
 **Validation:** one prompt produces a complete, valid character folder that the
 app renders without a code change, the same seed produces it again, and a
 character can also be built by hand in the procedural editor with no external
 tool at all.
+
+**The shell landed 2026-08-02** — the design-type registry, and the
+procedural editor, are real: an in-app Characters window lists every
+character (independent of any project now — D26 widened the local-config
+split from "one character per project" to a local library a project points
+into), creates a procedural one, and edits its eyes/mouth/palette/voice/
+notes/background directly. The ComfyUI pipeline below is still
+not-started; `2026-08-02-character-library-shell.plan.md` is the shell's own
+plan, `2026-08-02-m10-frames-pipeline.plan.md` (Draft) is the ComfyUI half's,
+and its own "design suite window" phase slots into this shell rather than
+building a second one.
 
 Split out of M7 deliberately. Automating a parts spec that nothing has rendered
 yet would be automating a guess, so M7 makes one character by hand first and
@@ -489,9 +500,10 @@ suite once it exists, before public launch — not assumed now, and not
 special-cased against the local-config split any longer (see the config
 milestone).
 
-- [ ] A design-type registry, closed and explicit like `Sprite`'s own kinds —
-      not an open plugin system
-- [ ] Procedural editor: in-app UI over `Sprite::Procedural`'s existing fields
+- [x] A design-type registry, closed and explicit like `Sprite`'s own kinds —
+      not an open plugin system. The Characters window's create flow: Procedural
+      real, `2D Frame` present but inert until its own pipeline lands
+- [x] Procedural editor: in-app UI over `Sprite::Procedural`'s existing fields
 - [ ] ComfyUI availability probed on this machine before the workflow is ever
       offered — absent is a state, not an error
 - [ ] `character-preview` — a prompt yields candidate portraits, front-facing
@@ -506,9 +518,10 @@ milestone).
       character with no mouth
 - [ ] Seeds committed with the character, so the same input reproduces it
 - [ ] Scripted, not prompted (D13) — it drives ComfyUI's HTTP API headlessly.
-      Whether these scripts still live in a committed `characters/pipeline/`
-      or move local with the profiles they produce is **open**, pending the
-      local-config milestone's shape
+      Whether these scripts still live in a committed `characters/layered/pipeline/`
+      (and a sibling `characters/frames/pipeline/` once that type is built —
+      D25) or move local with the profiles they produce is **open**, pending
+      the local-config milestone's shape
 
 ### M11 — Speech shaping
 **Status:** not-started

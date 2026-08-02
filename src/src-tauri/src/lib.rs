@@ -119,6 +119,17 @@ fn resolve_root() -> Result<ResolvedRoot, String> {
 fn scan_projects() -> Result<ScanResult, String> {
     let root = resolve_root()?.path;
     let local_dir = local_projects_dir()?;
+
+    // One-time, idempotent (D26): a project still holding an embedded
+    // `character.toml` from before the character library existed gets one
+    // created for it and the pointer set, before the scan reads summaries —
+    // so a migrated project reports correctly on the very first run after
+    // upgrading. A failure here must not take the whole scan down with it;
+    // it is logged and the scan proceeds against whatever state is on disk.
+    if let Err(e) = character::migrate::migrate_embedded(&local_dir, &characters_library_dir()?) {
+        log::warn!("character library migration failed: {e}");
+    }
+
     Ok(scan::scan_with(&root, DEFAULT_MAX_DEPTH, Some(&local_dir)))
 }
 
@@ -131,6 +142,20 @@ fn characters_dir() -> PathBuf {
     }
     // src-tauri/ → src/ → repo root → characters/profiles/
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../characters/profiles")
+}
+
+/// Where every character in the library lives (D26) — gitignored, never
+/// shipped, one folder per character, independent of any project.
+///
+/// The independent `GITHUD_*` override follows the same convention
+/// `characters_dir()`/`local_projects_dir()` already use, for the same
+/// test-isolation reason.
+fn characters_library_dir() -> Result<PathBuf, String> {
+    if let Ok(explicit) = std::env::var("GITHUD_CHARACTERS_LIBRARY_DIR") {
+        return Ok(PathBuf::from(explicit));
+    }
+    let data_home = dirs::data_local_dir().ok_or("could not resolve the data directory")?;
+    Ok(data_home.join("githud/characters"))
 }
 
 /// Where every project's personal, local declaration lives (D24) —
@@ -154,10 +179,6 @@ fn project_local_dir(project: &str) -> Result<PathBuf, String> {
     Ok(local::project_dir(&local_projects_dir()?, project))
 }
 
-fn project_character_path(project: &str) -> Result<PathBuf, String> {
-    Ok(project_local_dir(project)?.join("character.toml"))
-}
-
 /// Read, apply, and write back one project's `project.toml` — the temp-file-
 /// then-rename dance every writer here needs, so a crash mid-write cannot
 /// leave a truncated declaration. That file decides whether the agent may
@@ -172,17 +193,18 @@ fn update_project_local(
     apply(current).save(&path)
 }
 
-/// Read, apply, and write back one project's `character.toml` — the same
-/// temp-file-then-rename dance, so a crash cannot leave a half-written
-/// character. `apply` is one of `character::set_display` /
-/// `set_palette_field` / `set_voice`, the same pure text-transforms used
-/// everywhere else, applied here to the file's new location rather than the
-/// old shared registry's.
-fn update_character_local(
-    project: &str,
+/// Read, apply, and write back one library character's `character.toml` —
+/// the same temp-file-then-rename dance every writer here uses, so a crash
+/// cannot leave a half-written character. `apply` is one of
+/// `character::set_display` / `set_voice` / `set_notes` /
+/// `set_palette_field` / `set_sprite_procedural`, the same pure
+/// text-transforms the pre-D26 project-keyed setters already used, applied
+/// here to the library entry's path instead of a project's.
+fn update_character_library(
+    id: &str,
     apply: impl FnOnce(&str) -> Result<String, String>,
 ) -> Result<(), String> {
-    let path = project_character_path(project)?;
+    let path = character::library::character_path(&characters_library_dir()?, id);
     let text = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
     let updated = apply(&text)?;
 
@@ -721,103 +743,135 @@ fn project_background_image(project: String) -> Result<Option<String>, String> {
     theme::read_background(&project_local_dir(&project)?)
 }
 
-/// This project's own character, if it has one (D24) — `None` when
-/// unconfigured, which resolves to the house character in `ui/character.ts`.
-/// There is no name to look up any more; presence is the whole fact.
+// ── The character library (D26) ─────────────────────────────────────────────
+//
+// Every character that exists, independent of any project — created here,
+// assigned to a project by pointer (`project_character_assign`), never
+// embedded in a project's own folder again.
+
+/// Every character in the library, errors carried alongside the same way
+/// `characters_list` already does for the shipped house registry.
 #[tauri::command]
-fn project_character(project: String) -> Result<Option<character::Profile>, String> {
-    let path = project_character_path(&project)?;
-    if !path.is_file() {
-        return Ok(None);
-    }
-    let text = std::fs::read_to_string(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-    character::Profile::parse(&project, &text).map(Some)
+fn character_library_list() -> Result<character::Characters, String> {
+    Ok(character::library::load_all(&characters_library_dir()?))
 }
 
-/// The PNG frame set a project's own character points at, in mouth order.
+/// Create a new procedural character, seeded with considered defaults.
+/// Returns its id.
+///
+/// Procedural-only: it is the only design type this command's callers can
+/// build yet (M10). A `2D Frame` character is authored by a different flow
+/// entirely once that pipeline exists, not by this command with a `kind`
+/// argument bolted on.
 #[tauri::command]
-fn project_character_frames(project: String, dir: String) -> Result<Vec<character::Frame>, String> {
-    character::load_frames(&project_local_dir(&project)?, &dir)
+fn character_library_create(display: String) -> Result<String, String> {
+    character::library::create(&characters_library_dir()?, &display)
 }
 
-/// A project's own layered character parts, in draw order and validated
-/// against the spec.
+/// Delete a library character outright, then clear every project's pointer
+/// that named it — a project pointing at a character that no longer exists
+/// would otherwise silently fall back to the house character with no
+/// explanation, when the explanation is right here at the moment of
+/// deletion. One project's local folder failing to read is skipped rather
+/// than aborting the whole delete; the character itself is already gone by
+/// the time this loop runs.
 #[tauri::command]
-fn project_character_parts(project: String, dir: String) -> Result<Vec<character::Part>, String> {
-    character::load_layers(&project_local_dir(&project)?, &dir)
-}
-
-/// Give this project its own character, seeded from `default`'s palette,
-/// sprite and temperament — a freshly enabled character starts considered
-/// rather than blank (the same reasoning D9 already applies to the house
-/// character's own defaults). Refuses to overwrite one that already exists;
-/// clear it first to start over.
-#[tauri::command]
-fn character_local_enable(project: String) -> Result<(), String> {
-    let path = project_character_path(&project)?;
-    if path.is_file() {
-        return Err(format!("{project} already has its own character"));
-    }
-
-    let house_path = character::profile_path(&characters_dir(), character::HOUSE);
-    let house_text = std::fs::read_to_string(&house_path)
-        .map_err(|e| format!("{}: {e}", house_path.display()))?;
-    let house = character::Profile::parse(character::HOUSE, &house_text)?;
-
-    let toml = character::seed_toml(&project, house.palette, house.sprite, house.temperament)?;
-
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
-    }
-    let temp = path.with_extension("toml.tmp");
-    std::fs::write(&temp, &toml).map_err(|e| format!("{}: {e}", temp.display()))?;
-    std::fs::rename(&temp, &path).map_err(|e| format!("{}: {e}", path.display()))
-}
-
-/// Remove this project's own character. Leaves any hand-added art directory
-/// alone — deleting art on a toggle would be a surprising way to lose work;
-/// only the pointer that makes it the assignment goes away.
-#[tauri::command]
-fn character_local_disable(project: String) -> Result<(), String> {
-    let path = project_character_path(&project)?;
-    if path.is_file() {
-        std::fs::remove_file(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-    }
+fn character_library_delete(id: String) -> Result<(), String> {
+    character::library::delete(&characters_library_dir()?, &id)?;
+    local::clear_character_pointer(&local_projects_dir()?, &id)?;
     Ok(())
 }
 
 #[tauri::command]
-fn character_local_set_display(project: String, display: Option<String>) -> Result<(), String> {
-    update_character_local(&project, |text| {
-        character::set_display(text, display.as_deref())
-    })
+fn character_library_set_display(id: String, display: Option<String>) -> Result<(), String> {
+    update_character_library(&id, |text| character::set_display(text, display.as_deref()))
 }
 
 #[tauri::command]
-fn character_local_set_palette(
-    project: String,
-    field: String,
-    value: Option<String>,
-) -> Result<(), String> {
+fn character_library_set_voice(id: String, voice: Option<String>) -> Result<(), String> {
+    update_character_library(&id, |text| character::set_voice(text, voice.as_deref()))
+}
+
+#[tauri::command]
+fn character_library_set_notes(id: String, notes: Option<String>) -> Result<(), String> {
+    update_character_library(&id, |text| character::set_notes(text, notes.as_deref()))
+}
+
+#[tauri::command]
+fn character_library_set_palette(id: String, field: String, value: Option<String>) -> Result<(), String> {
     if let Some(hex) = &value {
         if !theme::valid_hex_color(hex) {
             return Err(format!("not a hex colour: {hex} — expected #rrggbb"));
         }
     }
-    update_character_local(&project, |text| {
+    update_character_library(&id, |text| {
         character::set_palette_field(text, &field, value.as_deref())
     })
 }
 
-/// Give this project's character a voice, or clear it.
-///
-/// Unlike before D24, a voice no longer needs to belong to a *named*
-/// character shared across projects — each project has at most one character
-/// now, so the voice simply lives in that character's own file.
+/// The procedural editor's own setter — the eyes/mouth fields M10 commits to
+/// exposing in-app (`Sprite::Procedural`'s existing fields).
 #[tauri::command]
-fn character_local_set_voice(project: String, voice: Option<String>) -> Result<(), String> {
-    update_character_local(&project, |text| {
-        character::set_voice(text, voice.as_deref())
+fn character_library_set_sprite_procedural(
+    id: String,
+    eyes: character::Eyes,
+    mouth: character::Mouth,
+) -> Result<(), String> {
+    update_character_library(&id, |text| character::set_sprite_procedural(text, eyes, mouth))
+}
+
+/// Upload or clear a library character's own background image — separate
+/// from, and taking precedence over, the project's own background it may be
+/// assigned to (`ui/character.ts` resolves the precedence; this command only
+/// stores the bytes). Same shape as `project_background_set`.
+#[tauri::command]
+fn character_library_background_set(
+    id: String,
+    image_base64: Option<String>,
+    ext: Option<String>,
+) -> Result<(), String> {
+    let dir = character::library::entry_dir(&characters_library_dir()?, &id);
+    match (image_base64, ext) {
+        (Some(b64), Some(ext)) => {
+            use base64::Engine as _;
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(&b64)
+                .map_err(|e| format!("bad image encoding: {e}"))?;
+            theme::save_background(&dir, &bytes, &ext)
+        }
+        _ => {
+            theme::clear_background(&dir);
+            Ok(())
+        }
+    }
+}
+
+#[tauri::command]
+fn character_library_background_image(id: String) -> Result<Option<String>, String> {
+    theme::read_background(&character::library::entry_dir(&characters_library_dir()?, &id))
+}
+
+/// The PNG frame set a library character points at, in mouth order.
+#[tauri::command]
+fn character_library_frames(id: String, dir: String) -> Result<Vec<character::Frame>, String> {
+    character::load_frames(&character::library::entry_dir(&characters_library_dir()?, &id), &dir)
+}
+
+/// A library character's layered parts, in draw order and validated against
+/// the spec.
+#[tauri::command]
+fn character_library_parts(id: String, dir: String) -> Result<Vec<character::Part>, String> {
+    character::load_layers(&character::library::entry_dir(&characters_library_dir()?, &id), &dir)
+}
+
+/// Point this project at a library character, or clear the pointer (D26).
+/// The pointer is the whole assignment — no embedded copy, nothing else to
+/// write.
+#[tauri::command]
+fn project_character_assign(project: String, character_id: Option<String>) -> Result<(), String> {
+    update_project_local(&project, |current| local::ProjectLocal {
+        character_id,
+        ..current
     })
 }
 
@@ -826,15 +880,16 @@ fn character_local_set_voice(project: String, voice: Option<String>) -> Result<(
 // Moving config between machines is explicit, not automatic sync — see
 // `bundle`'s own module doc for why.
 
-/// Bundle every local project into one file at `dest_path`. Returns the
-/// project keys that made it in; one project's files failing to read is
-/// logged and skipped rather than failing the whole export.
+/// Bundle every local project and every library character into one file at
+/// `dest_path` (D26). Returns the project keys that made it in; one
+/// project's or character's files failing to read is logged and skipped
+/// rather than failing the whole export.
 #[tauri::command]
 fn export_config(dest_path: String) -> Result<Vec<String>, String> {
-    let (b, failed) = bundle::build(&local_projects_dir()?);
+    let (b, failed) = bundle::build(&local_projects_dir()?, &characters_library_dir()?);
     if !failed.is_empty() {
         log::warn!(
-            "export_config skipped {} project(s): {failed:?}",
+            "export_config skipped {} entr(y/ies): {failed:?}",
             failed.len()
         );
     }
@@ -842,13 +897,18 @@ fn export_config(dest_path: String) -> Result<Vec<String>, String> {
     Ok(b.projects.keys().cloned().collect())
 }
 
-/// Unpack a bundle at `src_path` into the local store. Every project it names
-/// overwrites that project's local folder wholesale; every other local
-/// project is untouched.
+/// Unpack a bundle at `src_path` into the local store. Every project and
+/// every library character it names overwrites that project's or
+/// character's own folder wholesale; everything else already on this
+/// machine is untouched.
 #[tauri::command]
 fn import_config(src_path: String) -> Result<bundle::ImportSummary, String> {
     let b = bundle::read(std::path::Path::new(&src_path))?;
-    Ok(bundle::apply(&b, &local_projects_dir()?))
+    Ok(bundle::apply(
+        &b,
+        &local_projects_dir()?,
+        &characters_library_dir()?,
+    ))
 }
 
 /// Can this webview give a GPU canvas?
@@ -950,14 +1010,19 @@ pub fn run() {
             characters_list,
             character_frames,
             character_parts,
-            project_character,
-            project_character_frames,
-            project_character_parts,
-            character_local_enable,
-            character_local_disable,
-            character_local_set_display,
-            character_local_set_palette,
-            character_local_set_voice,
+            character_library_list,
+            character_library_create,
+            character_library_delete,
+            character_library_set_display,
+            character_library_set_voice,
+            character_library_set_notes,
+            character_library_set_palette,
+            character_library_set_sprite_procedural,
+            character_library_background_set,
+            character_library_background_image,
+            character_library_frames,
+            character_library_parts,
+            project_character_assign,
             project_note_set,
             project_accent_set,
             project_background_set,

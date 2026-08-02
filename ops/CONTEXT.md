@@ -23,9 +23,10 @@ ops/
 | `scripts/check-context.sh` | The tree-matches-disk check, for every `CONTEXT.md` in the repo | Before committing any change that adds, moves, or deletes a file |
 | `scripts/handoff-state.sh` | Rewrites the State table in `../planning/handoff.md` from `../planning/milestones.md` | After a milestone's `**Status:**` changes. Never hand-edit that table |
 
-**Character tooling is not here** (D23). `character-decompose.py` lives in
-`../characters/pipeline/`, beside the parts it cuts and the spec it satisfies.
-This directory holds scripts about the *repo*; that one is a step in a workspace.
+**Character tooling is not here** (D23, D25). `character-decompose.py` lives in
+`../characters/layered/pipeline/`, beside the parts it cuts and the spec it
+satisfies. This directory holds scripts about the *repo*; that one is a step in
+a character type's own sub-workspace.
 
 ## Rules for scripts here
 

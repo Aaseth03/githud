@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   accentOf,
   characterFor,
+  libraryCharacter,
   resolveCharacter,
   UNTHEMED,
   voiceFor,
@@ -134,6 +135,24 @@ describe("resolveCharacter", () => {
   it("resolves straight from the house registry and a fetched own profile", () => {
     expect(characterFor(WIRE, null).profile?.name).toBe("default");
     expect(characterFor(WIRE, own).profile).toBe(own);
+  });
+});
+
+describe("libraryCharacter", () => {
+  const mia = WIRE.profiles[2]!; // name: "mia"
+
+  it("finds a library entry by its pointer", () => {
+    expect(libraryCharacter(WIRE, "mia")).toBe(mia);
+  });
+
+  it("resolves no pointer to no character", () => {
+    expect(libraryCharacter(WIRE, null)).toBeNull();
+  });
+
+  it("resolves a dangling pointer to no character rather than an error", () => {
+    // A pointer naming an id the library no longer has — a deleted
+    // character, or a hand-edited project.toml (D26).
+    expect(libraryCharacter(WIRE, "someone-deleted")).toBeNull();
   });
 });
 

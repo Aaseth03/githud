@@ -83,12 +83,11 @@ pub struct Project {
     /// Why this project is declared the way it is, from this project's own
     /// local folder. Personal (D24) — never committed, never shipped.
     pub note: Option<String>,
-    /// Whether this project has its own local `character.toml`.
-    ///
-    /// **Presence is the assignment** (D24) — there is no longer a name to
-    /// look up in a shared registry. `false` resolves to the house character;
-    /// resolution happens in `ui/character.ts`, the scan only reports the fact.
-    pub has_local_character: bool,
+    /// This project's own pointer into the character library, if it has one
+    /// (D26) — the pointer *is* the assignment. `None`, or an id the library
+    /// no longer has, resolves to the house character; resolution happens in
+    /// `ui/character.ts`, the scan only reports the fact.
+    pub character_id: Option<String>,
     /// A project's own accent (M8), independent of its character — the tab
     /// rail and glass tint for the room, not the resident. `None` means the
     /// app's own signal colour.
@@ -179,7 +178,7 @@ pub fn scan_with(root: &Path, max_depth: usize, local_root: Option<&Path>) -> Sc
                     project.agent = summary.agent;
                     project.note = summary.note;
                     project.accent = summary.accent;
-                    project.has_local_character = summary.has_character;
+                    project.character_id = summary.character_id;
                     project.has_local_background = summary.has_background;
                 }
                 Ok(None) => {}
@@ -285,7 +284,7 @@ fn describe(root: &Path, path: &Path, depth: usize) -> Project {
         kind: ProjectKind::default(),
         agent: AgentAccess::default(),
         note: None,
-        has_local_character: false,
+        character_id: None,
         accent: None,
         has_local_background: false,
     }
@@ -381,12 +380,10 @@ mod tests {
             fs::write(dir.join("project.toml"), toml).unwrap();
         }
 
-        /// Declare a project's local `character.toml`, so `has_local_character`
-        /// reports true for it.
-        fn local_character(&self, key: &str) {
-            let dir = self.local.join(key);
-            fs::create_dir_all(&dir).unwrap();
-            fs::write(dir.join("character.toml"), "").unwrap();
+        /// Declare a project's `character_id` pointer (D26), so
+        /// `character_id` reports it for that project.
+        fn local_character(&self, key: &str, character_id: &str) {
+            self.local_project(key, &format!("character_id = \"{character_id}\"\n"));
         }
     }
 
@@ -684,7 +681,7 @@ mod tests {
         let fx = Fixture::new("kind-character");
         fx.repo("vault");
         fx.repo("plain");
-        fx.local_character("vault");
+        fx.local_character("vault", "mia");
 
         let result = scan_with(&fx.root, DEFAULT_MAX_DEPTH, Some(&fx.local));
         let plain = result
@@ -698,9 +695,9 @@ mod tests {
             .find(|p| p.rel_path == "vault")
             .unwrap();
 
-        assert!(vault.has_local_character);
-        assert!(
-            !plain.has_local_character,
+        assert_eq!(vault.character_id.as_deref(), Some("mia"));
+        assert_eq!(
+            plain.character_id, None,
             "unconfigured is a state, not a default"
         );
     }

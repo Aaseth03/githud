@@ -11,7 +11,7 @@ import {
   type Motion,
 } from "../motion";
 import type { LiveSpeech } from "../useVoice";
-import type { Eyes, MouthShape, Part, Point, Profile } from "../types";
+import { HOUSE_CHARACTER, type Eyes, type MouthShape, type Part, type Point, type Profile } from "../types";
 
 /**
  * The character, moving with what is being said and with what is happening.
@@ -27,7 +27,6 @@ import type { Eyes, MouthShape, Part, Point, Profile } from "../types";
  */
 export function CharacterStage({
   profile,
-  project,
   live,
   speaking,
   state,
@@ -36,13 +35,6 @@ export function CharacterStage({
   size = "stage",
 }: {
   profile: Profile | null;
-  /**
-   * Whose local folder `profile`'s art (if it needs any) lives in — a
-   * project's `rel_path` when `profile` is that project's own character, or
-   * `null` for the shipped default (D24). Determines which Tauri command
-   * `useFrames`/`useParts` calls.
-   */
-  project: string | null;
   /** What is sounding, read imperatively. See `LiveSpeech`. */
   live: React.RefObject<LiveSpeech | null>;
   speaking: boolean;
@@ -62,8 +54,8 @@ export function CharacterStage({
   const frameEls = useRef<(HTMLImageElement | null)[]>([]);
   const springs = useRef<Motion>(motion());
 
-  const { frames, error: frameError } = useFrames(profile, project);
-  const { parts, error: partsError } = useParts(profile, project);
+  const { frames, error: frameError } = useFrames(profile);
+  const { parts, error: partsError } = useParts(profile);
   const [synthetic, setSynthetic] = useState<string | null>(null);
 
   const temperament = profile?.temperament;
@@ -491,24 +483,26 @@ function Mouth({ shape }: { shape: MouthShape }) {
  * the procedural face — a character quietly rendering as something else is how
  * an afternoon goes into looking for a bug in a palette.
  */
-function useParts(profile: Profile | null, project: string | null) {
+function useParts(profile: Profile | null) {
   const [parts, setParts] = useState<Part[]>([]);
   const [error, setError] = useState<string | null>(null);
   const dir = profile?.sprite.kind === "layered" ? profile.sprite.dir : null;
+  const id = profile?.name ?? null;
 
   useEffect(() => {
-    if (!dir) {
+    if (!dir || !id) {
       setParts([]);
       setError(null);
       return;
     }
     let live = true;
-    // A project's own character's art lives in its local folder (D24); the
-    // shipped default's lives centrally — two different Tauri commands, same
-    // shape back.
-    const load = project
-      ? invoke<Part[]>("project_character_parts", { project, dir })
-      : invoke<Part[]>("character_parts", { dir });
+    // The shipped default's art lives centrally; every other character's
+    // lives in the library, keyed by id (D26) — two different Tauri
+    // commands, same shape back.
+    const load =
+      id === HOUSE_CHARACTER
+        ? invoke<Part[]>("character_parts", { dir })
+        : invoke<Part[]>("character_library_parts", { id, dir });
     void load
       .then((p) => {
         if (!live) return;
@@ -523,27 +517,29 @@ function useParts(profile: Profile | null, project: string | null) {
     return () => {
       live = false;
     };
-  }, [dir, project]);
+  }, [dir, id]);
 
   return { parts, error };
 }
 
 /** Load a profile's PNG frame set, if it has one. */
-function useFrames(profile: Profile | null, project: string | null) {
+function useFrames(profile: Profile | null) {
   const [frames, setFrames] = useState<{ name: string; src: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
   const dir = profile?.sprite.kind === "frames" ? profile.sprite.dir : null;
+  const id = profile?.name ?? null;
 
   useEffect(() => {
-    if (!dir) {
+    if (!dir || !id) {
       setFrames([]);
       setError(null);
       return;
     }
     let live = true;
-    const load = project
-      ? invoke<{ name: string; src: string }[]>("project_character_frames", { project, dir })
-      : invoke<{ name: string; src: string }[]>("character_frames", { dir });
+    const load =
+      id === HOUSE_CHARACTER
+        ? invoke<{ name: string; src: string }[]>("character_frames", { dir })
+        : invoke<{ name: string; src: string }[]>("character_library_frames", { id, dir });
     void load
       .then((f) => {
         if (!live) return;
@@ -558,7 +554,7 @@ function useFrames(profile: Profile | null, project: string | null) {
     return () => {
       live = false;
     };
-  }, [dir, project]);
+  }, [dir, id]);
 
   return { frames, error };
 }

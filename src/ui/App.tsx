@@ -5,25 +5,27 @@ import { TabStrip } from "./components/TabStrip";
 import { MainView } from "./components/MainView";
 import { ProjectView } from "./components/ProjectView";
 import { Settings } from "./components/Settings";
+import { CharactersView } from "./components/CharactersView";
 import { VoicePill } from "./components/VoicePill";
 import { useVoice } from "./useVoice";
 import { useProjects } from "./hooks/useProjects";
 import { useCharacters } from "./hooks/useCharacters";
 import { useProjectBackground } from "./hooks/useProjectBackground";
-import { useProjectCharacters } from "./hooks/useProjectCharacters";
-import { accentOf, characterFor } from "./character";
+import { useCharacterLibrary } from "./hooks/useCharacterLibrary";
+import { accentOf, characterFor, libraryCharacter } from "./character";
 import {
   activeTab,
   closeTab,
   initialTabState,
   isTabVisible,
   liveProject,
+  openCharacters,
   openProject,
   openProjectKeys,
   openSettings,
   selectTab,
 } from "./tabs";
-import { MAIN_TAB_KEY, SETTINGS_TAB_KEY, type Project } from "./types";
+import { CHARACTERS_TAB_KEY, MAIN_TAB_KEY, SETTINGS_TAB_KEY, type Project } from "./types";
 
 export default function App() {
   const {
@@ -60,15 +62,12 @@ export default function App() {
   const house = characterFor(characters, null);
 
   /**
-   * A project's own character now lives in its own local folder (D24) — no
-   * more shared registry a project's assignment points into — so it is
-   * fetched per open project rather than resolved from what `useCharacters`
-   * already holds.
+   * The character library (D26), loaded once here — same reasoning as the
+   * house registry above. A project's own character resolves against this
+   * by pointer (`libraryCharacter`), a synchronous lookup rather than a
+   * per-project fetch, since the whole library is already in memory.
    */
-  const openRelPaths = tabState.tabs.flatMap((t) =>
-    t.kind === "project" ? [t.project.rel_path] : [],
-  );
-  const projectCharacters = useProjectCharacters(openRelPaths, projects);
+  const { characters: library, reload: reloadLibrary } = useCharacterLibrary();
 
   const handleOpen = useCallback((project: Project) => {
     setTabState((s) => openProject(s, project));
@@ -78,11 +77,16 @@ export default function App() {
     setTabState(openSettings);
   }, []);
 
+  const handleOpenCharacters = useCallback(() => {
+    setTabState(openCharacters);
+  }, []);
+
   const handleClose = useCallback((key: string) => {
     setTabState((s) => closeTab(s, key));
-    // Settings owns no process. Asking Rust to release one would be harmless
-    // and misleading — the key is not a project id.
-    if (key === SETTINGS_TAB_KEY) return;
+    // Settings and the character library own no process. Asking Rust to
+    // release one would be harmless and misleading — the key is not a
+    // project id.
+    if (key === SETTINGS_TAB_KEY || key === CHARACTERS_TAB_KEY) return;
     // Closing the tab kills its shell. Without this every closed tab leaks a
     // login shell — invisible until there are forty of them. Closing a tab
     // whose terminal was never opened is a no-op on the Rust side.
@@ -140,6 +144,7 @@ export default function App() {
         onOpen={handleOpen}
         onRescan={() => void rescan()}
         onSettings={handleOpenSettings}
+        onCharacters={handleOpenCharacters}
         accents={Object.fromEntries(
           projects.flatMap((p) => (p.accent ? [[p.rel_path, p.accent]] : [])),
         )}
@@ -160,7 +165,7 @@ export default function App() {
               const current = liveProject(projects, t.project);
               // A project's own theme (M8) wins over its character's — the
               // room's own choice over the resident's, when it has made one.
-              const own = projectCharacters[current.rel_path] ?? null;
+              const own = libraryCharacter(library, current.character_id);
               const accent =
                 current.accent ?? accentOf(characterFor(characters, own).profile)["--accent"];
               return [[t.key, accent]];
@@ -219,6 +224,24 @@ export default function App() {
                 rootWarning={rootWarning}
                 characters={characters}
                 charactersError={charactersError}
+                library={library}
+                onProjectsChanged={rescan}
+                onOpenCharacters={handleOpenCharacters}
+              />
+            </div>
+          )}
+
+          {tabState.tabs.some((t) => t.kind === "characters") && (
+            <div
+              className={`absolute inset-0 ${
+                isTabVisible(tabState, CHARACTERS_TAB_KEY) ? "" : "hidden"
+              }`}
+            >
+              <CharactersView
+                voice={voice}
+                projects={projects}
+                library={library}
+                onLibraryChanged={reloadLibrary}
                 onProjectsChanged={rescan}
               />
             </div>
@@ -241,7 +264,10 @@ export default function App() {
                   project={current}
                   visible={isTabVisible(tabState, tab.key)}
                   voice={voice}
-                  character={characterFor(characters, projectCharacters[current.rel_path] ?? null)}
+                  character={characterFor(
+                    characters,
+                    libraryCharacter(library, current.character_id),
+                  )}
                 />
               </div>
             );

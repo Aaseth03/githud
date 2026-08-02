@@ -34,12 +34,11 @@ export interface Project {
    */
   note: string | null;
   /**
-   * Whether this project has its own local `character.toml`.
-   *
-   * **Presence is the assignment** (D24) — there is no longer a shared
-   * registry to name a profile in. `false` resolves to the house character.
+   * This project's own pointer into the character library, if it has one
+   * (D26) — the pointer *is* the assignment. `null`, or an id the library no
+   * longer has, resolves to the house character.
    */
-  has_local_character: boolean;
+  character_id: string | null;
   /**
    * A project's own accent (M8), independent of its character — the tab rail
    * and glass tint for the room, not the resident. `null` means the app's
@@ -126,6 +125,8 @@ export interface Profile {
   display: string;
   /** The Voicebox voice this character speaks with, if it has an opinion. */
   voice: string | null;
+  /** Free text about the character — never read by the renderer. */
+  notes: string | null;
   palette: Palette;
   sprite: Sprite;
   temperament: Temperament;
@@ -209,16 +210,20 @@ export interface ScanRootInfo {
   warning: string | null;
 }
 
-/** Mirrors `bundle::ImportFailure` — one project a bundle named that could not be applied. */
+/** Mirrors `bundle::ImportFailure` — one project or character a bundle named that could not be applied. */
 export interface ImportFailure {
   key: string;
   error: string;
 }
 
-/** Mirrors `bundle::ImportSummary` — what `import_config` actually did (D24). */
+/** Mirrors `bundle::ImportSummary` — what `import_config` actually did (D24, D26). */
 export interface ImportSummary {
   imported: string[];
   failed: ImportFailure[];
+  /** The library-character half of the import (D26), reported separately —
+   * a character id and a project key are drawn from different namespaces. */
+  characters_imported: string[];
+  characters_failed: ImportFailure[];
 }
 
 /**
@@ -229,10 +234,12 @@ export interface ImportSummary {
 export type Tab =
   | { kind: "main" }
   | { kind: "settings" }
+  | { kind: "characters" }
   | { kind: "project"; key: string; project: Project };
 
 export const MAIN_TAB_KEY = "__main__";
 export const SETTINGS_TAB_KEY = "__settings__";
+export const CHARACTERS_TAB_KEY = "__characters__";
 
 export function tabKey(tab: Tab): string {
   switch (tab.kind) {
@@ -240,6 +247,8 @@ export function tabKey(tab: Tab): string {
       return MAIN_TAB_KEY;
     case "settings":
       return SETTINGS_TAB_KEY;
+    case "characters":
+      return CHARACTERS_TAB_KEY;
     case "project":
       return tab.key;
   }
@@ -252,6 +261,8 @@ export function tabTitle(tab: Tab): string {
       return "HUD";
     case "settings":
       return "Settings";
+    case "characters":
+      return "Characters";
     case "project":
       return tab.project.name;
   }

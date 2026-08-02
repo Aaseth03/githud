@@ -59,8 +59,8 @@ ui/
 ├─ hooks/
 │  ├─ useProjects.ts    calls the scan command; parses nothing
 │  ├─ useCharacters.ts  loads every profile once, for the whole app
+│  ├─ useCharacterLibrary.ts  loads the character library once, for the whole app (D26)
 │  ├─ useCharacterState.ts  a posture, reduced from the agent stream
-│  ├─ useProjectCharacters.ts  every open project's own character, keyed by rel_path (D24)
 │  └─ useProjectBackground.ts  a project's background image, fetched as a data URI (D24)
 ├─ components/
 │  ├─ Sidebar.tsx
@@ -75,12 +75,15 @@ ui/
 │  ├─ Splitter.tsx      draggable column separator
 │  ├─ RowSplitter.tsx   draggable row separator for the character stage's height
 │  ├─ Select.tsx        the app's dropdown — the platform's could not be styled
+│  ├─ ConfirmDialog.tsx  the app's one confirmation modal, portal-based like `Select.tsx`'s menu
 │  ├─ FileViewer.tsx    read-only file pane, bounded
 │  ├─ CharacterStage.tsx  the character — layered parts, procedural face or frames, and the rAF loop
-│  ├─ CharacterSection.tsx  Settings: toggle a project's own character, edit it minimally, WebGL facts
+│  ├─ CharactersView.tsx  the character library window — create, and the card grid (M10, D26)
+│  ├─ CharacterCard.tsx  one library character's card — thumbnail, fields, project assignment, delete
+│  ├─ CharacterSection.tsx  Settings: which library character a project is pointed at, WebGL facts
 │  ├─ ThemeSection.tsx  Settings: a project's accent colour, against the app's own default
 │  ├─ VoicePill.tsx     Voicebox status, voice choice, MUTE — in the tab strip
-│  ├─ ExportImportSection.tsx  Settings: bundle the local store, or unpack one (D24)
+│  ├─ ExportImportSection.tsx  Settings: bundle the local store and the character library, or unpack one (D24, D26)
 │  ├─ ProjectFolderSection.tsx  Settings: the per-machine scan root (`machine.toml`)
 │  ├─ Settings.tsx      audio devices, mic test, voice test, webview facts
 │  └─ Terminal.tsx      xterm.js — the only file that touches it
@@ -102,7 +105,7 @@ ui/
 | `capture.ts` | Recording, and the WAV that leaves the webview | Anything about how audio is captured |
 | `voice.ts` | What is worth speaking (D15), health labels | Changing spoken output |
 | `sprite.ts` | The amplitude envelope and what the mouth does with it | Anything about how a character's mouth moves |
-| `character.ts` | Resolving a project to a profile, its accent and its voice | Anything about which character a project gets |
+| `character.ts` | Resolving a project's pointer to a library profile (D26), its accent and its voice | Anything about which character a project gets |
 | `motion.ts` | Springs, blink scheduling, breathing, the five state poses | Anything about how a character *moves* |
 | `listbox.ts` | Menu placement near a window edge, highlight keys | Changing how a dropdown opens or is driven |
 | `highlight.ts` | The registered grammars, and the language for a path | Adding a language to the file viewer |

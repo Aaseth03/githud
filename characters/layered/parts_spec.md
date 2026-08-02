@@ -1,7 +1,7 @@
 # Spec: the layered part set
 
 **Date:** 2026-07-30 · **Implements:**
-[D21](../planning/decisions/2026-07-30-D21-character-is-layered-parts.md) ·
+[D21](../../planning/decisions/2026-07-30-D21-character-is-layered-parts.md) ·
 **Status:** in use by `hud`
 
 The contract a `sprite.kind = "layered"` character must satisfy. The app validates

@@ -7,10 +7,12 @@
  * kind of thing that belongs in a tested module instead of inside a
  * component.
  *
- * D24: characters are local and per-project, never a shared, named registry.
- * A project either has its own `character.toml` or it does not — there is no
- * name to look up any more, so unlike before there is no "assigned to a name
- * that does not resolve" state left to represent.
+ * D24: characters are local, never committed or shipped. D26 narrows that
+ * further: a character lives in its own local library, independent of any
+ * project, and a project holds a pointer (`character_id`) into it rather
+ * than embedding one. A pointer naming an id the library no longer has is a
+ * real state again (a dangling pointer), resolved the same way an absent one
+ * always was — the house character, never an error.
  */
 
 import { HOUSE_CHARACTER, type Characters, type Palette, type Profile } from "./types";
@@ -54,6 +56,17 @@ export function resolveCharacter(house: Profile | null, own: Profile | null): Re
 /** Resolve straight from the house registry and a project's own profile. */
 export function characterFor(characters: Characters, own: Profile | null): Resolved {
   return resolveCharacter(houseCharacter(characters), own);
+}
+
+/**
+ * Look up a project's own character in the fetched library by its pointer
+ * (D26). `null` — no pointer, or one naming an id the library no longer has
+ * — is a real, expected state, not an error: `resolveCharacter`/
+ * `characterFor` already fall back to the house character for it.
+ */
+export function libraryCharacter(library: Characters, id: string | null): Profile | null {
+  if (!id) return null;
+  return library.profiles.find((p) => p.name === id) ?? null;
 }
 
 /**

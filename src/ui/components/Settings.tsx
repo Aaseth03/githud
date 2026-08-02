@@ -49,7 +49,9 @@ export function Settings({
   rootWarning,
   characters,
   charactersError,
+  library,
   onProjectsChanged,
+  onOpenCharacters,
 }: {
   voice: VoiceControls;
   /** Owned by `App`, so a save here applies in every open tab. */
@@ -60,7 +62,10 @@ export function Settings({
   rootWarning: string | null;
   characters: Characters;
   charactersError: string | null;
+  /** The character library (D26) — see `CharacterSection`. */
+  library: Characters;
   onProjectsChanged: () => Promise<void> | void;
+  onOpenCharacters: () => void;
 }) {
   return (
     <div className="h-full overflow-y-auto px-8 py-6">
@@ -88,8 +93,10 @@ export function Settings({
           voice={voice}
           projects={projects}
           characters={characters}
+          library={library}
           loadError={charactersError}
           onProjectsChanged={onProjectsChanged}
+          onOpenCharacters={onOpenCharacters}
         />
         <ThemeSection projects={projects} onProjectsChanged={onProjectsChanged} />
         <ExportImportSection onProjectsChanged={onProjectsChanged} />

@@ -4,6 +4,7 @@
       "name": "default",
       "display": "GIT HUD",
       "voice": null,
+      "notes": null,
       "palette": {
         "accent": "#6ee7ff",
         "glow": "#1e6f85",
@@ -26,6 +27,7 @@
       "name": "hud",
       "display": "HUD",
       "voice": null,
+      "notes": null,
       "palette": {
         "accent": "#6ee7ff",
         "glow": "#1e6f85",
@@ -82,6 +84,7 @@
       "name": "mia",
       "display": "MIA",
       "voice": "a823c0d8-da12-4044-af22-ee903adc2e05",
+      "notes": "a test character",
       "palette": {
         "accent": "#a78bfa",
         "glow": null,
@@ -104,6 +107,7 @@
       "name": "relic",
       "display": "relic",
       "voice": null,
+      "notes": null,
       "palette": {
         "accent": "#ffb454",
         "glow": null,
