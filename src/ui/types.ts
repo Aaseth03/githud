@@ -60,9 +60,10 @@ export interface Palette {
   field: string | null;
 }
 
-/** Mirrors `character::Eyes` and `character::Mouth`. */
+/** Mirrors `character::Eyes`, `character::Mouth`, and `character::Headwear`. */
 export type Eyes = "round" | "wide" | "narrow" | "visor";
 export type MouthShape = "round" | "wide" | "line";
+export type Headwear = "none" | "antenna" | "horns" | "halo";
 
 /**
  * Mirrors `character::Sprite`.
@@ -73,7 +74,7 @@ export type MouthShape = "round" | "wide" | "line";
  * see, because both were internally consistent and disagreed only on the wire.
  */
 export type Sprite =
-  | { kind: "procedural"; eyes: Eyes; mouth: MouthShape }
+  | { kind: "procedural"; eyes: Eyes; mouth: MouthShape; headwear: Headwear }
   | { kind: "frames"; dir: string }
   | { kind: "layered"; dir: string; face: Face | null; pivot: Pivots };
 
@@ -127,6 +128,8 @@ export interface Profile {
   voice: string | null;
   /** Free text about the character — never read by the renderer. */
   notes: string | null;
+  /** Whether this character has its own background image (D26/M10). */
+  has_background: boolean;
   palette: Palette;
   sprite: Sprite;
   temperament: Temperament;

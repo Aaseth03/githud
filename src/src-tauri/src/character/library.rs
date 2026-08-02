@@ -72,7 +72,10 @@ pub fn load_all(dir: &Path) -> Characters {
                 error: e.to_string(),
             }),
             Ok(text) => match Profile::parse(id, &text) {
-                Ok(p) => out.profiles.push(p),
+                Ok(p) => out.profiles.push(Profile {
+                    has_background: crate::theme::has_background(&path),
+                    ..p
+                }),
                 Err(error) => out.errors.push(ProfileError {
                     name: id.to_string(),
                     error,

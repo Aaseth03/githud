@@ -5,6 +5,7 @@
       "display": "GIT HUD",
       "voice": null,
       "notes": null,
+      "has_background": false,
       "palette": {
         "accent": "#6ee7ff",
         "glow": "#1e6f85",
@@ -13,7 +14,8 @@
       "sprite": {
         "kind": "procedural",
         "eyes": "visor",
-        "mouth": "line"
+        "mouth": "line",
+        "headwear": "none"
       },
       "temperament": {
         "idle": 0.5,
@@ -28,6 +30,7 @@
       "display": "HUD",
       "voice": null,
       "notes": null,
+      "has_background": false,
       "palette": {
         "accent": "#6ee7ff",
         "glow": "#1e6f85",
@@ -85,6 +88,7 @@
       "display": "MIA",
       "voice": "a823c0d8-da12-4044-af22-ee903adc2e05",
       "notes": "a test character",
+      "has_background": false,
       "palette": {
         "accent": "#a78bfa",
         "glow": null,
@@ -93,7 +97,8 @@
       "sprite": {
         "kind": "procedural",
         "eyes": "wide",
-        "mouth": "round"
+        "mouth": "round",
+        "headwear": "none"
       },
       "temperament": {
         "idle": 0.75,
@@ -108,6 +113,7 @@
       "display": "relic",
       "voice": null,
       "notes": null,
+      "has_background": false,
       "palette": {
         "accent": "#ffb454",
         "glow": null,

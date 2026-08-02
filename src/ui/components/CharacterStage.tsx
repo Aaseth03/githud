@@ -11,7 +11,8 @@ import {
   type Motion,
 } from "../motion";
 import type { LiveSpeech } from "../useVoice";
-import { HOUSE_CHARACTER, type Eyes, type MouthShape, type Part, type Point, type Profile } from "../types";
+import { HOUSE_CHARACTER, type Eyes, type Headwear, type MouthShape, type Part, type Point, type Profile } from "../types";
+import { Eye, HeadwearGlyph, MouthGlyph } from "./proceduralParts";
 
 /**
  * The character, moving with what is being said and with what is happening.
@@ -27,6 +28,7 @@ import { HOUSE_CHARACTER, type Eyes, type MouthShape, type Part, type Point, typ
  */
 export function CharacterStage({
   profile,
+  background = null,
   live,
   speaking,
   state,
@@ -35,6 +37,13 @@ export function CharacterStage({
   size = "stage",
 }: {
   profile: Profile | null;
+  /**
+   * The character's own background image, if it has one — a data URI, drawn
+   * behind the figure and cropped to this stage's own box. `null` draws
+   * nothing here, leaving whatever the caller put behind the stage (the
+   * starfield, a project's own background) showing through.
+   */
+  background?: string | null;
   /** What is sounding, read imperatively. See `LiveSpeech`. */
   live: React.RefObject<LiveSpeech | null>;
   speaking: boolean;
@@ -145,6 +154,15 @@ export function CharacterStage({
       style={accentOf(profile) as React.CSSProperties}
       data-state={state}
     >
+      {background && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 bg-cover bg-center"
+          style={{
+            backgroundImage: `linear-gradient(180deg, rgba(5,6,11,0.25), rgba(5,6,11,0.5)), url(${background})`,
+          }}
+        />
+      )}
       <div className="character-field pointer-events-none absolute inset-0" />
 
       <div
@@ -409,6 +427,7 @@ function ProceduralFace({
   const sprite = profile?.sprite;
   const eyes: Eyes = sprite?.kind === "procedural" ? sprite.eyes : "round";
   const mouth: MouthShape = sprite?.kind === "procedural" ? sprite.mouth : "round";
+  const headwear: Headwear = sprite?.kind === "procedural" ? sprite.headwear : "none";
 
   return (
     <div ref={headRef} className="absolute inset-0" style={{ transformOrigin: "50% 70%" }}>
@@ -432,48 +451,19 @@ function ProceduralFace({
           strokeWidth="1.2"
         />
 
+        <HeadwearGlyph shape={headwear} />
+
         <g ref={eyesRef} className="character-eyes">
           <Eye shape={eyes} side="left" />
           <Eye shape={eyes} side="right" />
         </g>
 
         <g ref={mouthRef} className="character-mouth">
-          <Mouth shape={mouth} />
+          <MouthGlyph shape={mouth} />
         </g>
       </svg>
     </div>
   );
-}
-
-function Eye({ shape, side }: { shape: Eyes; side: "left" | "right" }) {
-  const x = side === "left" ? 37 : 63;
-  const fill = "var(--accent)";
-
-  switch (shape) {
-    case "wide":
-      return <circle cx={x} cy="44" r="6.5" fill={fill} />;
-    case "narrow":
-      return <rect x={x - 7} y="42" width="14" height="3.4" rx="1.7" fill={fill} />;
-    case "visor":
-      // One band across both, so it reads as an instrument rather than a face.
-      return side === "left" ? (
-        <rect x="27" y="40" width="46" height="8" rx="4" fill={fill} fillOpacity="0.85" />
-      ) : null;
-    case "round":
-      return <circle cx={x} cy="44" r="4.6" fill={fill} />;
-  }
-}
-
-function Mouth({ shape }: { shape: MouthShape }) {
-  const fill = "var(--accent)";
-  switch (shape) {
-    case "wide":
-      return <ellipse cx="50" cy="66" rx="17" ry="9" fill={fill} fillOpacity="0.9" />;
-    case "line":
-      return <rect x="34" y="62" width="32" height="8" rx="4" fill={fill} fillOpacity="0.9" />;
-    case "round":
-      return <ellipse cx="50" cy="66" rx="11" ry="9" fill={fill} fillOpacity="0.9" />;
-  }
 }
 
 /**

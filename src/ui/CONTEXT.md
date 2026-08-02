@@ -52,6 +52,7 @@ ui/
 ├─ listbox.test.ts
 ├─ highlight.ts         syntax highlighting — only the grammars this machine has
 ├─ highlight.test.ts
+├─ proceduralOptions.ts  every value each procedural field can take — pure data, no JSX
 ├─ fixtures/
 │  ├─ voicebox-speech.wav  2.5s of real Voicebox output — silence, speech, a pause, speech
 │  └─ characters.json      the character wire shape, asserted from both sides
@@ -61,6 +62,8 @@ ui/
 │  ├─ useCharacters.ts  loads every profile once, for the whole app
 │  ├─ useCharacterLibrary.ts  loads the character library once, for the whole app (D26)
 │  ├─ useCharacterState.ts  a posture, reduced from the agent stream
+│  ├─ useCharacterBackground.ts  a library character's own background image, fetched as a data URI (D26)
+│  ├─ usePreviewVoice.ts  try a voice and watch the character talk, independent of the app's own voice (M10)
 │  └─ useProjectBackground.ts  a project's background image, fetched as a data URI (D24)
 ├─ components/
 │  ├─ Sidebar.tsx
@@ -78,8 +81,10 @@ ui/
 │  ├─ ConfirmDialog.tsx  the app's one confirmation modal, portal-based like `Select.tsx`'s menu
 │  ├─ FileViewer.tsx    read-only file pane, bounded
 │  ├─ CharacterStage.tsx  the character — layered parts, procedural face or frames, and the rAF loop
-│  ├─ CharactersView.tsx  the character library window — create, and the card grid (M10, D26)
-│  ├─ CharacterCard.tsx  one library character's card — thumbnail, fields, project assignment, delete
+│  ├─ proceduralParts.tsx  the procedural face's own shapes — shared by the stage and the suite's button previews
+│  ├─ CharactersView.tsx  the character library window — read-only cards, EDIT opens a type's own suite (M10, D26)
+│  ├─ CharacterCard.tsx  one library character's card — read-only info, delete, EDIT
+│  ├─ ProceduralSuite.tsx  the procedural type's own suite — big preview, button-grid fields, save/cancel staging
 │  ├─ CharacterSection.tsx  Settings: which library character a project is pointed at, WebGL facts
 │  ├─ ThemeSection.tsx  Settings: a project's accent colour, against the app's own default
 │  ├─ VoicePill.tsx     Voicebox status, voice choice, MUTE — in the tab strip

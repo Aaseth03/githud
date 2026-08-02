@@ -1,20 +1,22 @@
 import { useCallback, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { CharacterCard } from "./CharacterCard";
+import { ProceduralSuite } from "./ProceduralSuite";
 import type { Characters, Project } from "../types";
 import type { VoiceControls } from "../useVoice";
 
 /**
  * The character design suite's own window (M10) — every character that
- * exists, independent of any project (D26): create one, edit its fields,
- * point a project at it, delete it.
+ * exists, independent of any project (D26): create one, point a project at
+ * it, delete it, or open its own type-specific suite to customize it.
  *
- * This is the shared top-level shell the design-type registry lives in.
- * **Procedural** is the only type this window can actually create yet — its
- * fields (eyes, mouth, palette) are edited straight on the card. **2D
- * Frame** appears in the create flow so the registry reads as what M10
- * commits to, but stays inert: its own authoring screen is a separate,
- * larger pipeline (the ComfyUI plan) this window does not build.
+ * **Two levels, deliberately.** This window shows every character with the
+ * same read-only shape regardless of type — it is the list, not an editor.
+ * Editing happens one level down, in a type's own suite (`ProceduralSuite`
+ * is the only one built; `2D Frame` and future types get their own),
+ * replacing the grid while open rather than living inside a card. A type's
+ * own rules — buttons instead of dropdowns, a live preview, its own
+ * save/cancel — belong to that suite, not to this shell.
  */
 export function CharactersView({
   voice,
@@ -30,14 +32,45 @@ export function CharactersView({
   onProjectsChanged: () => Promise<void> | void;
 }) {
   const [creating, setCreating] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
-  // A card's own edit can change either half of what this window shows —
+  // Editing a character can change either half of what this window shows —
   // its own fields, live in `library`, and which project it is pointed at,
-  // live in `projects` — so both reload together rather than the caller
+  // live in `projects` — so both reload together rather than every caller
   // having to know which one a given edit touched.
   const onChanged = useCallback(async () => {
     await Promise.all([onLibraryChanged(), onProjectsChanged()]);
   }, [onLibraryChanged, onProjectsChanged]);
+
+  const editing = library.profiles.find((c) => c.name === editingId) ?? null;
+
+  if (editing) {
+    return (
+      <div className="h-full overflow-y-auto px-8 py-6">
+        <header className="mb-4">
+          <button
+            onClick={() => setEditingId(null)}
+            className="font-mono text-[10px] tracking-wider text-ink-faint hover:text-ink"
+          >
+            ← back to characters
+          </button>
+          <h1 className="mt-1 text-sm font-semibold tracking-[0.18em] text-ink uppercase">
+            {editing.display}
+          </h1>
+        </header>
+        <ProceduralSuite
+          character={editing}
+          projects={projects}
+          voice={voice}
+          onSaved={async () => {
+            await onChanged();
+            setEditingId(null);
+          }}
+          onCancel={() => setEditingId(null)}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="h-full overflow-y-auto px-8 py-6">
@@ -47,11 +80,11 @@ export function CharactersView({
             Characters
           </h1>
           <p className="mt-1 max-w-xl text-xs text-ink-faint">
-            Every character you have made, independent of any project. Point
-            a project at one from here, or from that project's own row in
-            Settings. Lives entirely in GIT HUD's own local config — nothing
-            here ever touches a project's own folder or repo, and it all
-            travels together with export/import.
+            Every character you have made, independent of any project. Read-
+            only here — hit EDIT to open a character's own suite. Lives
+            entirely in GIT HUD's own local config — nothing here ever
+            touches a project's own folder or repo, and it all travels
+            together with export/import.
           </p>
         </div>
         <button
@@ -67,9 +100,12 @@ export function CharactersView({
 
       {creating && (
         <CreatePanel
-          onCreated={async () => {
+          onCreated={async (id) => {
             setCreating(false);
             await onLibraryChanged();
+            // Straight into its own suite — a blank character with nobody
+            // looking at it yet is not a useful stop on the way.
+            setEditingId(id);
           }}
         />
       )}
@@ -96,8 +132,8 @@ export function CharactersView({
             key={character.name}
             character={character}
             projects={projects}
-            voice={voice}
-            onChanged={onChanged}
+            onEdit={() => setEditingId(character.name)}
+            onDeleted={onChanged}
           />
         ))}
       </div>
@@ -110,7 +146,7 @@ export function CharactersView({
  * character, not a free-form plugin surface. Only one entry is wired to
  * anything yet.
  */
-function CreatePanel({ onCreated }: { onCreated: () => Promise<void> | void }) {
+function CreatePanel({ onCreated }: { onCreated: (id: string) => Promise<void> | void }) {
   const [display, setDisplay] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -119,9 +155,11 @@ function CreatePanel({ onCreated }: { onCreated: () => Promise<void> | void }) {
     setBusy(true);
     setError(null);
     try {
-      await invoke("character_library_create", { display: display.trim() || "New character" });
+      const id = await invoke<string>("character_library_create", {
+        display: display.trim() || "New character",
+      });
       setDisplay("");
-      await onCreated();
+      await onCreated(id);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -150,7 +188,7 @@ function CreatePanel({ onCreated }: { onCreated: () => Promise<void> | void }) {
         >
           <span className="block text-sm text-ink">Procedural</span>
           <span className="block font-mono text-[10px] text-ink-faint">
-            eyes, mouth, palette — no art, always available
+            eyes, mouth, headwear, palette — no art, always available
           </span>
         </button>
         <div

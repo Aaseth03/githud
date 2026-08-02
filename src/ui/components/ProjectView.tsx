@@ -10,6 +10,7 @@ import { FileViewer } from "./FileViewer";
 import { ProjectCard } from "./ProjectCard";
 import { CharacterStage } from "./CharacterStage";
 import { accentOf, voiceFor, type Resolved } from "../character";
+import { useCharacterBackground } from "../hooks/useCharacterBackground";
 import { useCharacterState } from "../hooks/useCharacterState";
 import type { Card } from "../card";
 import type { VoiceControls } from "../useVoice";
@@ -68,6 +69,13 @@ export function ProjectView({
     project.rel_path,
     voice.speaking !== null,
     listening,
+  );
+  // The character's own background wins over whatever is behind this box —
+  // absent, the box is transparent and the app's own scene (which already
+  // resolves the project's own background) shows through unchanged.
+  const characterBackground = useCharacterBackground(
+    character.profile?.name ?? null,
+    character.profile?.has_background ?? false,
   );
   // The room's own voice, if its character has one this machine can speak with.
   // Two projects with two characters is two voices — which is half of what M7
@@ -218,6 +226,7 @@ export function ProjectView({
             >
               <CharacterStage
                 profile={character.profile}
+                background={characterBackground}
                 live={voice.live}
                 speaking={voice.speaking !== null}
                 state={characterState}

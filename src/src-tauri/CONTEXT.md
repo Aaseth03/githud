@@ -64,6 +64,7 @@ src-tauri/
 │     └─ mod.rs         repo discovery, ICM detection, unit tests
 └─ tests/               all `#[ignore]`d — each needs something real
    ├─ real_root.rs      scans the real ~/github (M1's validation)
+   ├─ real_migration.rs  D26 migration against a copy of this machine's real local config
    ├─ agent_live.rs     the agent channel against the real `claude` binary
    ├─ guardrails.rs     the default-deny suite
    ├─ sweep_proof.rs    the orphan sweep against a real process

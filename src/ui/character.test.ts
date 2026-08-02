@@ -63,6 +63,7 @@ describe("the wire shape", () => {
     if (procedural.kind !== "procedural") throw new Error("wrong variant");
     expect(procedural.eyes).toBe("wide");
     expect(procedural.mouth).toBe("round");
+    expect(procedural.headwear).toBe("none");
 
     if (frames.kind !== "frames") throw new Error("wrong variant");
     expect(frames.dir).toBe("relic");

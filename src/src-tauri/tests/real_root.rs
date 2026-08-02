@@ -68,8 +68,8 @@ fn finds_every_repo_under_the_real_root_including_the_nested_vault() {
     assert_eq!(vault.depth, 1);
     assert!(vault.icm.layer0, "the vault has AGENTS.md");
     assert!(
-        vault.has_local_character,
-        "the vault's own character.toml must resolve against the real scan"
+        vault.character_id.is_some(),
+        "the vault's own character pointer (D26) must resolve against the real scan"
     );
 
     // GIT HUD itself must be conformant — it is the reference for the badge.
@@ -82,8 +82,8 @@ fn finds_every_repo_under_the_real_root_including_the_nested_vault() {
         "githud has both AGENTS.md and CONTEXT.md"
     );
     assert!(
-        githud.has_local_character,
-        "githud's own character.toml must resolve against the real scan"
+        githud.character_id.is_some(),
+        "githud's own character pointer (D26) must resolve against the real scan"
     );
 
     // Professor keeps Layer 1 *inside* AGENTS.md. If the fallback chain is
