@@ -257,6 +257,90 @@ fn reset_project_root() -> Result<(), String> {
     config.save(&machine_toml_path()?)
 }
 
+/// Which port Voicebox listens on: this machine's own choice if it has set
+/// one, else the default that ships with the app.
+///
+/// Unlike a project root, a port cannot go stale by moving or being deleted —
+/// so there is nothing here to fall back from at read time, only a value to
+/// pick between the two sources.
+struct ResolvedPort {
+    port: u16,
+    is_custom: bool,
+    warning: Option<String>,
+}
+
+fn resolve_voicebox_port() -> ResolvedPort {
+    let (config, warning) = load_machine_config();
+    match config.voicebox_port {
+        None => ResolvedPort {
+            port: voice::DEFAULT_PORT,
+            is_custom: false,
+            warning,
+        },
+        Some(port) => ResolvedPort {
+            port,
+            is_custom: true,
+            warning,
+        },
+    }
+}
+
+/// The URL every Voicebox call should hit — this machine's configured port,
+/// or the one that ships with the app.
+fn voicebox_base() -> String {
+    voice::base_url(resolve_voicebox_port().port)
+}
+
+/// The port Voicebox is expected on, whether custom or default, and any
+/// problem reading `machine.toml` — so Settings can show the truth rather
+/// than a guess (mirrors `ScanRootInfo`).
+#[derive(Clone, serde::Serialize)]
+struct VoiceboxPortInfo {
+    port: u16,
+    is_custom: bool,
+    warning: Option<String>,
+}
+
+#[tauri::command]
+fn voicebox_port() -> VoiceboxPortInfo {
+    let resolved = resolve_voicebox_port();
+    VoiceboxPortInfo {
+        port: resolved.port,
+        is_custom: resolved.is_custom,
+        warning: resolved.warning,
+    }
+}
+
+/// Save a custom Voicebox port for this machine (D8: machine-local, never
+/// synced) — for a Voicebox reachable on a different port than the one that
+/// ships with the app, e.g. running on another machine.
+#[tauri::command]
+fn set_voicebox_port(port: u16) -> Result<u16, String> {
+    let port = machine::resolve_voicebox_port(port)?;
+    let (mut config, _) = load_machine_config();
+    config.voicebox_port = Some(port);
+    config.save(&machine_toml_path()?)?;
+    Ok(port)
+}
+
+/// Clear the custom port, reverting to the default that ships with the app.
+#[tauri::command]
+fn reset_voicebox_port() -> Result<(), String> {
+    let (mut config, _) = load_machine_config();
+    config.voicebox_port = None;
+    config.save(&machine_toml_path()?)
+}
+
+/// Test whether Voicebox answers on a given port, without saving anything.
+///
+/// Settings' probe button calls this against whatever is currently typed in
+/// the field, so a port that goes nowhere is caught before it is ever written
+/// to `machine.toml`.
+#[tauri::command]
+async fn voice_probe(port: u16) -> voice::Health {
+    voice::health(&voice::base_url(port)).await
+}
+
 // ── Channel 1: the terminal (D1) ─────────────────────────────────────────────
 //
 // Raw bytes both ways. Nothing here parses anything, and nothing here emits an
@@ -424,9 +508,10 @@ fn project_diff(cwd: String) -> git::Diff {
 
 #[tauri::command]
 async fn voice_health() -> voice::Health {
-    let health = voice::health().await;
+    let base = voicebox_base();
+    let health = voice::health(&base).await;
     if let voice::Health::Down { reason } | voice::Health::Impaired { reason } = &health {
-        log::warn!("voicebox {}: {reason}", voice::BASE);
+        log::warn!("voicebox {base}: {reason}");
     }
     health
 }
@@ -438,14 +523,14 @@ async fn voice_health() -> voice::Health {
 /// a 200. Folding that into the health pill would call a working server broken.
 #[tauri::command]
 async fn voice_readiness() -> Result<voice::Readiness, String> {
-    voice::readiness()
+    voice::readiness(&voicebox_base())
         .await
         .inspect_err(|e| log::warn!("voice_readiness: {e}"))
 }
 
 #[tauri::command]
 async fn voice_voices() -> Result<Vec<voice::Voice>, String> {
-    voice::voices()
+    voice::voices(&voicebox_base())
         .await
         .inspect_err(|e| log::warn!("voice_voices: {e}"))
 }
@@ -462,7 +547,7 @@ async fn voice_speak(
     voice_id: String,
     engine: Option<String>,
 ) -> Result<voice::Speech, String> {
-    voice::speak(&text, &voice_id, engine.as_deref())
+    voice::speak(&voicebox_base(), &text, &voice_id, engine.as_deref())
         .await
         .inspect_err(|e| log::warn!("voice_speak (voice {voice_id}, engine {engine:?}): {e}"))
 }
@@ -485,7 +570,7 @@ async fn voice_transcribe(audio: String, mime: String) -> Result<String, String>
         .decode(audio)
         .map_err(|e| format!("bad audio encoding: {e}"))?;
     log::info!("transcribing {} bytes of {mime}", bytes.len());
-    voice::transcribe(&bytes, &mime)
+    voice::transcribe(&voicebox_base(), &bytes, &mime)
         .await
         .inspect_err(|e| log::warn!("voice_transcribe: {e}"))
 }
@@ -1009,6 +1094,10 @@ pub fn run() {
             voice_voices,
             voice_speak,
             voice_transcribe,
+            voice_probe,
+            voicebox_port,
+            set_voicebox_port,
+            reset_voicebox_port,
             audio_devices,
             characters_list,
             character_frames,

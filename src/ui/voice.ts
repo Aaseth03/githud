@@ -20,6 +20,28 @@ export interface Voice {
   engine: string | null;
 }
 
+/** Mirrors `VoiceboxPortInfo` — the port Voicebox is expected on, and where it came from. */
+export interface VoiceboxPortInfo {
+  port: number;
+  is_custom: boolean;
+  warning: string | null;
+}
+
+/**
+ * Turn whatever is typed in the port field into a real port, or nothing.
+ *
+ * A port is a `u16` on the Rust side — 0 is not a real listener, and neither
+ * is anything above 65535 or anything that is not a whole number. Parsing
+ * this in one place means the field, the probe button, and the save button
+ * all agree on what counts as a port before a single request is made.
+ */
+export function parsePort(input: string): number | null {
+  const trimmed = input.trim();
+  if (!/^\d+$/.test(trimmed)) return null;
+  const n = Number(trimmed);
+  return n >= 1 && n <= 65535 ? n : null;
+}
+
 /**
  * Mirrors `voice::Readiness`.
  *

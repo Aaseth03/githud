@@ -6,12 +6,40 @@ import {
   describeMediaError,
   healthLabel,
   healthTone,
+  parsePort,
   prepareSpeech,
   speakableText,
   SPOKEN_CHUNK,
   splitForSpeech,
   type VoiceHealth,
 } from "./voice";
+
+describe("parsing a typed port", () => {
+  it("accepts a real port number", () => {
+    expect(parsePort("17600")).toBe(17600);
+    expect(parsePort("1")).toBe(1);
+    expect(parsePort("65535")).toBe(65535);
+  });
+
+  it("trims surrounding whitespace", () => {
+    expect(parsePort("  17600  ")).toBe(17600);
+  });
+
+  it("rejects zero — nothing answers on it", () => {
+    expect(parsePort("0")).toBeNull();
+  });
+
+  it("rejects anything above the u16 range", () => {
+    expect(parsePort("65536")).toBeNull();
+    expect(parsePort("999999")).toBeNull();
+  });
+
+  it("rejects non-numeric or empty input rather than guessing", () => {
+    for (const input of ["", "  ", "abc", "17600.5", "-1"]) {
+      expect(parsePort(input)).toBeNull();
+    }
+  });
+});
 
 describe("health", () => {
   const up: VoiceHealth = { status: "up", model_loaded: true, gpu: "CUDA" };

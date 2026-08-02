@@ -21,6 +21,11 @@ use serde::{Deserialize, Serialize};
 pub struct MachineConfig {
     /// Where to scan for projects. `None` means the default (`~/github`).
     pub project_root: Option<PathBuf>,
+    /// Which port this machine's Voicebox listens on. `None` means the
+    /// default that ships with the app (`voice::DEFAULT_PORT`) — set this
+    /// when Voicebox is reachable on a different port, e.g. a second machine
+    /// running it elsewhere.
+    pub voicebox_port: Option<u16>,
 }
 
 impl MachineConfig {
@@ -71,6 +76,17 @@ pub fn resolve_project_root(input: &Path) -> Result<PathBuf, String> {
         return Err(format!("{} is not a folder", real.display()));
     }
     Ok(real)
+}
+
+/// Reject a port that could never be a real Voicebox listener.
+///
+/// `u16` already bounds the range to 0..=65535; the only value left to catch
+/// is 0, which is not a port anything answers on.
+pub fn resolve_voicebox_port(input: u16) -> Result<u16, String> {
+    if input == 0 {
+        return Err("port must be between 1 and 65535".into());
+    }
+    Ok(input)
 }
 
 #[cfg(test)]
@@ -140,6 +156,7 @@ mod tests {
         let path = fx.root.join("nested/machine.toml");
         let config = MachineConfig {
             project_root: Some(PathBuf::from("/home/someone/projects")),
+            voicebox_port: Some(17601),
         };
 
         config.save(&path).unwrap();
@@ -208,6 +225,18 @@ mod tests {
         // path, not a symlink that could later be repointed elsewhere.
         assert_eq!(resolved, fs::canonicalize(&real).unwrap());
         assert_ne!(resolved, link);
+    }
+
+    #[test]
+    fn resolve_voicebox_port_rejects_zero() {
+        assert!(resolve_voicebox_port(0).is_err());
+    }
+
+    #[test]
+    fn resolve_voicebox_port_accepts_any_nonzero_port() {
+        for port in [1, 80, 17600, 65535] {
+            assert_eq!(resolve_voicebox_port(port), Ok(port));
+        }
     }
 
     #[cfg(unix)]

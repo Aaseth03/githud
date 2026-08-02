@@ -16,12 +16,21 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
-/// Where Voicebox listens.
+/// The port Voicebox listens on by default — ships with the app, used until a
+/// machine sets its own in `machine.toml` (D8).
 ///
 /// Verified 2026-07-29 against a running instance. Voicebox's own README says
 /// `17493`, which is the container-internal port — the discrepancy flagged at
 /// M0 resolves in favour of this one.
-pub const BASE: &str = "http://127.0.0.1:17600";
+pub const DEFAULT_PORT: u16 = 17600;
+
+/// The URL Voicebox answers on for a given port.
+///
+/// Always loopback, whatever the port — see the module doc: nothing here may
+/// reach off the machine.
+pub fn base_url(port: u16) -> String {
+    format!("http://127.0.0.1:{port}")
+}
 
 /// Health checks must fail fast; a hung probe would stall the status pill.
 const PROBE_TIMEOUT: Duration = Duration::from_secs(3);
@@ -89,18 +98,18 @@ fn client(timeout: Duration) -> Result<reqwest::Client, String> {
         .map_err(|e| format!("could not build an http client: {e}"))
 }
 
-/// Is Voicebox up?
+/// Is Voicebox up at `base`?
 ///
 /// Never returns `Err`: "down" is a state the UI renders, not a failure that
 /// interrupts anything. The app is required to keep working without it.
-pub async fn health() -> Health {
+pub async fn health(base: &str) -> Health {
     let Ok(c) = client(PROBE_TIMEOUT) else {
         return Health::Down {
             reason: "could not build an http client".into(),
         };
     };
 
-    match c.get(format!("{BASE}/health")).send().await {
+    match c.get(format!("{base}/health")).send().await {
         Err(e) if e.is_connect() => Health::Down {
             reason: "not running".into(),
         },
@@ -121,7 +130,7 @@ pub async fn health() -> Health {
                 // Answering is not the same as working. Voicebox reports its
                 // own writability separately, and a failure there produces
                 // generations that start and then never yield audio.
-                if let Some(reason) = filesystem_problem(&c).await {
+                if let Some(reason) = filesystem_problem(&c, base).await {
                     return Health::Impaired { reason };
                 }
                 Health::Up {
@@ -140,9 +149,9 @@ pub async fn health() -> Health {
 }
 
 /// The first unwritable directory Voicebox reports, if any.
-async fn filesystem_problem(c: &reqwest::Client) -> Option<String> {
+async fn filesystem_problem(c: &reqwest::Client, base: &str) -> Option<String> {
     let v: serde_json::Value = c
-        .get(format!("{BASE}/health/filesystem"))
+        .get(format!("{base}/health/filesystem"))
         .send()
         .await
         .ok()?
@@ -181,9 +190,9 @@ pub fn describe_filesystem(v: &serde_json::Value) -> Option<String> {
 ///
 /// Voice *creation* stays in Voicebox — this only lists what exists, which is
 /// what the M7 character screen will pick from.
-pub async fn voices() -> Result<Vec<Voice>, String> {
+pub async fn voices(base: &str) -> Result<Vec<Voice>, String> {
     let body: serde_json::Value = client(PROBE_TIMEOUT)?
-        .get(format!("{BASE}/profiles"))
+        .get(format!("{base}/profiles"))
         .send()
         .await
         .map_err(|e| format!("voicebox unreachable: {e}"))?
@@ -234,7 +243,12 @@ pub fn parse_voices(body: &serde_json::Value) -> Vec<Voice> {
 /// playing it in the app is what makes MUTE, the per-message speaker button and
 /// M7's amplitude-driven mouth possible at all. `/speak` plays server-side,
 /// where none of that is reachable.
-pub async fn speak(text: &str, voice: &str, engine: Option<&str>) -> Result<Speech, String> {
+pub async fn speak(
+    base: &str,
+    text: &str,
+    voice: &str,
+    engine: Option<&str>,
+) -> Result<Speech, String> {
     use base64::Engine as _;
 
     if text.trim().is_empty() {
@@ -249,7 +263,7 @@ pub async fn speak(text: &str, voice: &str, engine: Option<&str>) -> Result<Spee
     }
 
     let response = c
-        .post(format!("{BASE}/generate"))
+        .post(format!("{base}/generate"))
         .json(&request)
         .send()
         .await
@@ -277,17 +291,17 @@ pub async fn speak(text: &str, voice: &str, engine: Option<&str>) -> Result<Spee
         .await
         .map_err(|e| format!("unreadable generate response: {e}"))?;
 
-    let id = generation_id(&started)
-        .ok_or("voicebox did not return a generation id".to_string())?;
+    let id =
+        generation_id(&started).ok_or("voicebox did not return a generation id".to_string())?;
 
     // Generation is asynchronous: `/generate` returns immediately with
     // `status: generating` and an empty `audio_path`. Fetching the audio before
     // it finishes gets a 404, which reads like a missing endpoint rather than
     // "not ready yet".
-    await_generation(&c, &id).await?;
+    await_generation(&c, base, &id).await?;
 
     let audio = c
-        .get(format!("{BASE}/audio/{id}"))
+        .get(format!("{base}/audio/{id}"))
         .send()
         .await
         .map_err(|e| format!("could not fetch the audio: {e}"))?
@@ -316,12 +330,12 @@ pub async fn speak(text: &str, voice: &str, engine: Option<&str>) -> Result<Spee
 const GENERATION_WAIT: Duration = Duration::from_secs(120);
 
 /// Wait until a generation completes, or explain why it did not.
-async fn await_generation(c: &reqwest::Client, id: &str) -> Result<(), String> {
+async fn await_generation(c: &reqwest::Client, base: &str, id: &str) -> Result<(), String> {
     let deadline = std::time::Instant::now() + GENERATION_WAIT;
 
     while std::time::Instant::now() < deadline {
         let body = c
-            .get(format!("{BASE}/generate/{id}/status"))
+            .get(format!("{base}/generate/{id}/status"))
             .send()
             .await
             .map_err(|e| format!("lost contact while generating: {e}"))?
@@ -393,9 +407,9 @@ pub struct Readiness {
 }
 
 /// What Voicebox says about its speech model.
-pub async fn readiness() -> Result<Readiness, String> {
+pub async fn readiness(base: &str) -> Result<Readiness, String> {
     let body: serde_json::Value = client(PROBE_TIMEOUT)?
-        .get(format!("{BASE}/capture/readiness"))
+        .get(format!("{base}/capture/readiness"))
         .send()
         .await
         .map_err(|e| format!("voicebox unreachable: {e}"))?
@@ -430,7 +444,7 @@ pub fn parse_readiness(v: &serde_json::Value) -> Readiness {
 /// verbatim. Reported as "heard nothing", that sends you to the microphone,
 /// which is the wrong place entirely. `/capture/readiness` is what tells the
 /// two apart, so it is asked before anything is concluded.
-pub async fn transcribe(audio: &[u8], mime: &str) -> Result<String, String> {
+pub async fn transcribe(base: &str, audio: &[u8], mime: &str) -> Result<String, String> {
     if audio.is_empty() {
         return Err("no audio recorded".into());
     }
@@ -444,7 +458,7 @@ pub async fn transcribe(audio: &[u8], mime: &str) -> Result<String, String> {
         .map_err(|e| format!("bad audio type: {e}"))?;
 
     let body: serde_json::Value = client(GENERATE_TIMEOUT)?
-        .post(format!("{BASE}/transcribe"))
+        .post(format!("{base}/transcribe"))
         .multipart(reqwest::multipart::Form::new().part("file", part))
         .send()
         .await
@@ -458,7 +472,7 @@ pub async fn transcribe(audio: &[u8], mime: &str) -> Result<String, String> {
     let text = transcript_of(&body);
     if text.is_empty() {
         // Silence and a cold model are indistinguishable in the response.
-        if let Ok(r) = readiness().await {
+        if let Ok(r) = readiness(base).await {
             if !r.stt {
                 let model = r.stt_model.unwrap_or_else(|| "the speech model".into());
                 return Err(format!(
@@ -501,8 +515,13 @@ mod tests {
 
     #[test]
     fn the_base_url_is_local_only() {
-        // Nothing here may reach off the machine, and nothing may bill.
-        assert!(BASE.starts_with("http://127.0.0.1"), "{BASE}");
+        // Nothing here may reach off the machine, and nothing may bill —
+        // whatever port a machine configures.
+        for port in [DEFAULT_PORT, 8080, 1] {
+            let url = base_url(port);
+            assert!(url.starts_with("http://127.0.0.1"), "{url}");
+            assert!(url.ends_with(&port.to_string()), "{url}");
+        }
     }
 
     #[test]
@@ -567,7 +586,10 @@ mod tests {
 
     #[test]
     fn the_generation_id_is_found_wherever_it_sits() {
-        assert_eq!(generation_id(&json!({"generation_id": "g1"})).as_deref(), Some("g1"));
+        assert_eq!(
+            generation_id(&json!({"generation_id": "g1"})).as_deref(),
+            Some("g1")
+        );
         assert_eq!(generation_id(&json!({"id": "g2"})).as_deref(), Some("g2"));
         assert_eq!(
             generation_id(&json!({"generation": {"id": "g3"}})).as_deref(),
@@ -613,7 +635,11 @@ mod tests {
     fn anything_unparseable_reads_as_pending_rather_than_success() {
         // Guessing "completed" would fetch audio that does not exist yet.
         for body in ["", "data: not json", ": keep-alive\n\n", "{}"] {
-            assert_ne!(generation_status(body).map(|s| s.0), Some("completed"), "{body}");
+            assert_ne!(
+                generation_status(body).map(|s| s.0),
+                Some("completed"),
+                "{body}"
+            );
         }
     }
 
@@ -724,12 +750,15 @@ mod tests {
 
     #[tokio::test]
     async fn speaking_nothing_is_refused_before_any_request() {
-        assert!(speak("", "v", None).await.is_err());
-        assert!(speak("   ", "v", None).await.is_err());
+        let base = base_url(DEFAULT_PORT);
+        assert!(speak(&base, "", "v", None).await.is_err());
+        assert!(speak(&base, "   ", "v", None).await.is_err());
     }
 
     #[tokio::test]
     async fn transcribing_nothing_is_refused_before_any_request() {
-        assert!(transcribe(&[], "audio/webm").await.is_err());
+        assert!(transcribe(&base_url(DEFAULT_PORT), &[], "audio/webm")
+            .await
+            .is_err());
     }
 }

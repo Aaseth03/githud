@@ -20,11 +20,12 @@ use githud_lib::voice::{self, Health};
 #[tokio::test]
 #[ignore = "needs Voicebox running; run explicitly with --ignored"]
 async fn spoken_audio_survives_a_round_trip_through_transcription() {
-    let voices = voice::voices().await.expect("voices");
+    let base = voice::base_url(voice::DEFAULT_PORT);
+    let voices = voice::voices(&base).await.expect("voices");
     let v = voices.first().expect("at least one voice");
 
     let spoken = "The guardrails are green.";
-    let speech = voice::speak(spoken, &v.id, v.engine.as_deref())
+    let speech = voice::speak(&base, spoken, &v.id, v.engine.as_deref())
         .await
         .expect("speech");
 
@@ -34,7 +35,7 @@ async fn spoken_audio_survives_a_round_trip_through_transcription() {
         .expect("decodable audio");
     println!("  sending {} bytes of {} back", wav.len(), speech.mime);
 
-    let heard = voice::transcribe(&wav, &speech.mime)
+    let heard = voice::transcribe(&base, &wav, &speech.mime)
         .await
         .expect("transcription");
 
@@ -49,21 +50,24 @@ async fn spoken_audio_survives_a_round_trip_through_transcription() {
 #[ignore = "needs Voicebox running; run explicitly with --ignored"]
 async fn voicebox_is_reachable_on_the_port_we_settled_on() {
     // The M0 discrepancy: its README says 17493, Professor said 17600.
-    match voice::health().await {
+    let base = voice::base_url(voice::DEFAULT_PORT);
+    match voice::health(&base).await {
         Health::Up { model_loaded, gpu } => {
             println!("  up · model_loaded={model_loaded} · gpu={gpu:?}");
         }
         // Answering counts as reachable; whether it can do the job is the
         // separate assertion below.
         Health::Impaired { reason } => println!("  reachable but impaired · {reason}"),
-        Health::Down { reason } => panic!("expected Voicebox up at {}: {reason}", voice::BASE),
+        Health::Down { reason } => panic!("expected Voicebox up at {base}: {reason}"),
     }
 }
 
 #[tokio::test]
 #[ignore = "needs Voicebox running; run explicitly with --ignored"]
 async fn the_voices_list_is_readable() {
-    let voices = voice::voices().await.expect("voices should list");
+    let voices = voice::voices(&voice::base_url(voice::DEFAULT_PORT))
+        .await
+        .expect("voices should list");
 
     for v in &voices {
         println!("  {} · {}", v.id, v.name);
@@ -77,7 +81,7 @@ async fn an_unwritable_voicebox_is_reported_as_impaired_not_merely_down() {
     // Observed for real on this machine: Voicebox answers /health perfectly
     // while `/app/data/generations` is `Permission denied`, so every generation
     // starts and then fails. "Down" would send you looking in the wrong place.
-    match voice::health().await {
+    match voice::health(&voice::base_url(voice::DEFAULT_PORT)).await {
         Health::Impaired { reason } => {
             println!("  impaired: {reason}");
             assert!(reason.contains("cannot write"), "{reason}");
@@ -90,24 +94,30 @@ async fn an_unwritable_voicebox_is_reported_as_impaired_not_merely_down() {
 #[tokio::test]
 #[ignore = "generates real speech; run explicitly with --ignored"]
 async fn speaking_returns_playable_audio() {
-    let voices = voice::voices().await.expect("voices");
+    let base = voice::base_url(voice::DEFAULT_PORT);
+    let voices = voice::voices(&base).await.expect("voices");
     let v = voices.first().expect("at least one voice");
     println!("  using {} ({}) on engine {:?}", v.name, v.id, v.engine);
 
-    let speech = match voice::speak("Guardrails are green.", &v.id, v.engine.as_deref()).await {
-        Ok(s) => s,
-        Err(e) => {
-            // Distinguish "my client is wrong" from "Voicebox cannot write".
-            assert!(
-                e.contains("could not produce the audio"),
-                "unexpected failure shape: {e}"
-            );
-            println!("  skipped: voicebox itself failed — {e}");
-            return;
-        }
-    };
+    let speech =
+        match voice::speak(&base, "Guardrails are green.", &v.id, v.engine.as_deref()).await {
+            Ok(s) => s,
+            Err(e) => {
+                // Distinguish "my client is wrong" from "Voicebox cannot write".
+                assert!(
+                    e.contains("could not produce the audio"),
+                    "unexpected failure shape: {e}"
+                );
+                println!("  skipped: voicebox itself failed — {e}");
+                return;
+            }
+        };
 
-    println!("  mime={} · {} base64 chars", speech.mime, speech.audio.len());
+    println!(
+        "  mime={} · {} base64 chars",
+        speech.mime,
+        speech.audio.len()
+    );
     assert!(!speech.audio.is_empty(), "no audio came back");
     assert!(
         speech.mime.starts_with("audio/"),

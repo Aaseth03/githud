@@ -26,7 +26,9 @@ import {
   describeMediaError,
   healthLabel,
   healthTone,
+  parsePort,
   type Voice,
+  type VoiceboxPortInfo,
   type VoiceHealth,
   type VoiceReadiness,
 } from "../voice";
@@ -533,6 +535,20 @@ function VoiceSection() {
   const [busy, setBusy] = useState(false);
   const player = useRef<HTMLAudioElement | null>(null);
 
+  const [portInfo, setPortInfo] = useState<VoiceboxPortInfo | null>(null);
+  const [portInput, setPortInput] = useState("");
+  const [portError, setPortError] = useState<string | null>(null);
+  const [portSaving, setPortSaving] = useState(false);
+  const [probing, setProbing] = useState(false);
+  const [probeResult, setProbeResult] = useState<VoiceHealth | null>(null);
+
+  const loadPort = useCallback(() => {
+    void invoke<VoiceboxPortInfo>("voicebox_port").then((info) => {
+      setPortInfo(info);
+      setPortInput(String(info.port));
+    });
+  }, []);
+
   const probe = useCallback(() => {
     void invoke<VoiceHealth>("voice_health")
       .then(setHealth)
@@ -555,7 +571,57 @@ function VoiceSection() {
       .catch(() => setReady(null));
   }, []);
 
+  useEffect(loadPort, [loadPort]);
   useEffect(probe, [probe]);
+
+  // Test the port that is currently typed, not necessarily the saved one —
+  // so a change can be checked before it is ever written to `machine.toml`.
+  const probePort = useCallback(() => {
+    const port = parsePort(portInput);
+    if (port === null) {
+      setPortError("enter a port between 1 and 65535");
+      return;
+    }
+    setPortError(null);
+    setProbing(true);
+    setProbeResult(null);
+    void invoke<VoiceHealth>("voice_probe", { port })
+      .then(setProbeResult)
+      .finally(() => setProbing(false));
+  }, [portInput]);
+
+  const savePort = useCallback(() => {
+    const port = parsePort(portInput);
+    if (port === null) {
+      setPortError("enter a port between 1 and 65535");
+      return;
+    }
+    setPortError(null);
+    setPortSaving(true);
+    void invoke("set_voicebox_port", { port })
+      .then(() => {
+        loadPort();
+        setProbeResult(null);
+        probe();
+      })
+      .catch((e: unknown) => setPortError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setPortSaving(false));
+  }, [portInput, loadPort, probe]);
+
+  const resetPort = useCallback(() => {
+    setPortSaving(true);
+    setPortError(null);
+    void invoke("reset_voicebox_port")
+      .then(() => {
+        loadPort();
+        setProbeResult(null);
+        probe();
+      })
+      .catch((e: unknown) => setPortError(e instanceof Error ? e.message : String(e)))
+      .finally(() => setPortSaving(false));
+  }, [loadPort, probe]);
+
+  const portDirty = portInfo !== null && parsePort(portInput) !== portInfo.port;
 
   const test = useCallback(() => {
     const v = voices[0];
@@ -614,7 +680,83 @@ function VoiceSection() {
 
   return (
     <Section title="Voice service" hint="Local only. Nothing here can bill.">
-      <Row label="endpoint" value="http://127.0.0.1:17600" />
+      <div className="flex gap-3 py-1 text-xs">
+        <span className="w-40 shrink-0 pt-1.5 text-ink-faint">endpoint</span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="shrink-0 font-mono text-[11px] text-ink-dim">
+              http://127.0.0.1:
+            </span>
+            <input
+              value={portInput}
+              onChange={(e) => {
+                setPortInput(e.target.value);
+                setPortError(null);
+              }}
+              inputMode="numeric"
+              placeholder={portInfo ? String(portInfo.port) : "…"}
+              className="w-20 rounded border border-line bg-black/20 px-2 py-1 font-mono
+                         text-[11px] text-ink-dim focus-visible:outline-2
+                         focus-visible:outline-offset-1 focus-visible:outline-signal"
+            />
+            <button
+              onClick={probePort}
+              disabled={probing}
+              title="Test the connection to this port without saving it"
+              className="shrink-0 rounded border border-line px-2 py-1 font-mono text-[10px]
+                         tracking-wider text-ink-dim transition-colors hover:border-signal-deep
+                         hover:text-signal focus-visible:outline-2 focus-visible:outline-offset-2
+                         focus-visible:outline-signal disabled:opacity-40"
+            >
+              {probing ? "PROBING…" : "PROBE"}
+            </button>
+            {portDirty && (
+              <button
+                onClick={savePort}
+                disabled={portSaving}
+                className="shrink-0 rounded border border-line px-2 py-1 font-mono text-[10px]
+                           tracking-wider text-ink-dim transition-colors hover:border-signal-deep
+                           hover:text-signal focus-visible:outline-2 focus-visible:outline-offset-2
+                           focus-visible:outline-signal disabled:opacity-40"
+              >
+                SAVE
+              </button>
+            )}
+            {portInfo?.is_custom && (
+              <button
+                onClick={resetPort}
+                disabled={portSaving}
+                className="shrink-0 rounded border border-line px-2 py-1 font-mono text-[10px]
+                           tracking-wider text-ink-dim transition-colors hover:border-line-bright
+                           hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-1
+                           focus-visible:outline-signal disabled:opacity-40"
+              >
+                RESET TO DEFAULT
+              </button>
+            )}
+          </div>
+          {portInfo && !portInfo.is_custom && (
+            <p className="mt-1 text-[11px] text-ink-faint">
+              default port that ships with the app — set a different one
+              above if this machine's Voicebox listens elsewhere
+            </p>
+          )}
+          {probeResult && (
+            <p
+              className={[
+                "mt-1.5 text-[11px]",
+                probeResult.status === "up" ? "text-go" : "text-warn",
+              ].join(" ")}
+            >
+              {healthLabel(probeResult)}
+            </p>
+          )}
+          {portInfo?.warning && (
+            <p className="mt-1.5 text-[11px] text-warn">{portInfo.warning}</p>
+          )}
+          {portError && <p className="mt-1.5 text-[11px] text-danger">{portError}</p>}
+        </div>
+      </div>
       <Row
         label="health"
         value={
