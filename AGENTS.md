@@ -73,17 +73,23 @@ Never read the whole repo.
 | Decision record | `YYYY-MM-DD-D<nn>-title.md` | `planning/decisions/` |
 | Implementation plan | `YYYY-MM-DD-title.plan.md` | `planning/plans/` |
 | Feature spec | `feature-name_spec.md` | `planning/specs/` |
-| Rust modules, Tauri commands | `snake_case` | `src/` |
-| React components | `PascalCase.tsx` | `src/` |
-| Other UI files, CSS | `kebab-case` | `src/` |
+| Rust modules, Tauri commands | `snake_case` | `src/src-tauri/` |
+| React components | `PascalCase.tsx` | `src/ui/` |
+| Other UI files, CSS | `kebab-case` | `src/ui/` |
 
 ## Repo-wide conventions
 
-- Every **workspace** has a `CONTEXT.md` — the seven directories the routing
-  table in `CONTEXT.md` sends you to. Not every directory: `src/ui/`,
-  `src/lessons/` and `src-tauri/src/*/` have none, because `src/` is one
-  workspace and one contract covers it. When you add a path anywhere, update the
-  owning workspace's `CONTEXT.md` in the same change.
+- Every **workspace** has a `CONTEXT.md` — the routing table in `CONTEXT.md`
+  sends you to one. Not every directory: a `lessons/` folder (`src/lessons/`,
+  `characters/lessons/`) has none, because it is shared reference material read
+  a file at a time by the workspace(s) above it, not a workspace itself. `src/`
+  used to be one contract covering both Rust and React; it overflowed context on
+  nearly every turn, so it is now two — `src/src-tauri/` and `src/ui/` — each
+  with its own `CONTEXT.md`, and the root routing table points straight at
+  whichever one applies. `characters/CONTEXT.md` had the same problem in
+  miniature: thirteen dense technical rules sitting directly in the routing
+  file, so they moved to `characters/lessons/` the same way. When you add a
+  path anywhere, update the owning workspace's `CONTEXT.md` in the same change.
 - Every `CONTEXT.md` contains an ASCII tree (`├ ─ └ │`) in a `text` code block
   mapping everything in its subtree, plus a Routing table saying what each entry
   contains and when to use it. A directory named with nothing listed under it is
@@ -93,6 +99,13 @@ Never read the whole repo.
   and on a git-visible path no tree mentions. Run it before committing a change
   that adds, moves, or deletes a file. A real but empty folder is kept with a
   `.gitkeep`.
+- **Updating a `CONTEXT.md` is an edit, not a rewrite.** Change the tree line
+  and routing row that changed, nothing else. Do not restate what `AGENTS.md`
+  or another workspace's `CONTEXT.md` already says — link to it. Do not narrate
+  history that belongs in `planning/decisions/`; a decision record earns its
+  prose, a routing file spends it. If a `CONTEXT.md` is creeping past the
+  100–150 line range, that is the same overflow signal that split `src/` —
+  split the workspace instead of trimming words around the edges.
 - Implementation plans open with an **Inputs / Process / Outputs** contract
   (`planning/plans/_TEMPLATE.plan.md`). The Outputs table lists every file the
   change touches, *including* which `CONTEXT.md` files it requires updating —

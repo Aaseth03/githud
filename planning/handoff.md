@@ -52,9 +52,11 @@ coin toss, not a process.
 | M7 — Character | done |
 | M8 — App direction | not-started |
 | M9 — Avatar | not-started |
-| M10 — Character creation pipeline | not-started |
+| M10 — Character design suite | not-started |
 | M11 — Speech shaping | not-started |
 | M12 — Parallel and portable | not-started |
+| M13 — Local, portable config | in-progress |
+| M14 — Publishing | not-started |
 
 <!-- END GENERATED: state -->
 

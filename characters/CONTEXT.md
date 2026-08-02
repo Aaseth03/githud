@@ -22,8 +22,12 @@ characters/
 ├─ profiles/
 │  └─ default.toml             the one thing shipped — procedural, what an
 │                               unconfigured project and the main tab resolve to
-└─ pipeline/
-   └─ character-decompose.py   cuts a reference into layered parts, deterministically
+├─ pipeline/
+│  └─ character-decompose.py   cuts a reference into layered parts, deterministically
+└─ lessons/                    the rules that bite, split by what they constrain
+   ├─ cutting.md               occlusion, Live2D authoring, vector eyes/mouth, matting
+   ├─ theming.md                what a profile may paint vs. what stays the app's own
+   └─ governance.md            what ships, what's provenanced, tooling-only Python, no AI in render
 ```
 
 **Everything else lives locally now (D24), never here.** A project's own
@@ -61,67 +65,13 @@ projects apart, so sharing one across two projects was never actually used;
 each project that wants its own character just has one, in its own local
 folder, and `default` is the single name-based exception left.
 
-## Rules that bite here
+## Lessons — read the one that constrains your change
 
-- **A part carries what is hidden behind it, and the amount matters in both
-  directions.** Too little and a rotating part tears open at its seam. Too much
-  and it *covers* what is behind it — 52 px of neck stock buried HUD's cyan
-  collar before it was cut to 16 px. The head needs little because the body
-  already carries stock upward: what a head lean exposes is body, which is
-  correct. See `parts_spec.md`.
-- **Author to Live2D's PSD rules even though nothing here renders Live2D** (D21).
-  Every part complete including its occluded regions, one part per layer, line
-  and fill merged. It costs nothing now and it is the only thing that would force
-  a redraw later. `live2d` is a deferred renderer, not an abandoned one.
-- **Eyes and mouth are not in the artwork.** They are drawn as vectors so a blink
-  and a spoken syllable are *continuous*. Stepped motion is exactly what made the
-  first procedural face read as a placeholder — do not solve liveliness with more
-  frames.
-- **The shadow is a region, not a colour.** Antialiasing between a white backdrop
-  and a dark outline passes through mid-grey, so a colour test alone catches a
-  one-pixel halo of the entire character and the shadow layer renders as a ghost
-  of it. 816 px on HUD's reference.
-- **A part cut with a binary mask keeps the backdrop in its edge.** The reference
-  is antialiased against white, so every rim pixel is part artwork and part paper —
-  keep it opaque and the character wears a bright outline on a dark stage. Alpha is
-  recovered from how far the pixel travelled from the backdrop toward the ink just
-  inside, and **the colour is taken from that ink** rather than un-blended, because
-  dividing a nearly-white pixel by a nearly-white estimate turns noise into
-  speckle. The backdrop is found by flooding from the border, never by a
-  threshold: a threshold cannot tell "light because it is background" from "light
-  because the artwork is light there".
-- **A contact shadow is darkness, not a colour.** The reference draws it light grey
-  because the reference sits on white paper. Shipped verbatim, the character stands
-  in a bright puddle. The part keeps the shape and throws the paper colour away.
-- **The paper shadow is backdrop for un-matting purposes too.** Under the feet the
-  artwork blends against that grey rather than against white, so the recovery skips
-  those pixels and leaves a bright rim exactly where the character meets the
-  ground.
-- **A character accents the instrument; it cannot repaint it.** A profile owns
-  `accent`, `glow` and `field`. Surfaces, lines and ink stay the cockpit tokens in
-  `../src/ui/styles/index.css` — a readability guarantee a TOML file can revoke is
-  not a guarantee, and the type that carries an accent structurally cannot express
-  a surface colour.
-- **An absent colour is a state; a malformed one is an error.** Absent means "not
-  themed on that axis" and the app's own colour is used, which is a thing you can
-  mean. `accent = "blue"` is a typo, and a typo rendering as unthemed is
-  indistinguishable from having meant it.
-- **`profiles/default.toml` is not optional, and it stays procedural.** It is what
-  an unconfigured project and the main tab resolve to, and there is no built-in
-  face in the binary — if it is missing the app says so rather than inventing a
-  character (D9). Procedural because it needs no art, so a fresh clone renders
-  something; and because **a project that has not chosen a character has not
-  chosen one.** Giving it a project's own persona would be putting words in its
-  mouth — and it would also mean shipping that persona with the app, which D24
-  rules out entirely: `hud`, GIT HUD's own look, lives in `githud`'s own local
-  folder like anyone else's, not here.
-- **A generated asset nobody can regenerate is one you cannot iterate on.** Every
-  character commits its model, seed, prompt and cut lines in `SOURCE.md`. The
-  decomposition refuses to overwrite a committed set without `--force`.
-- **Python lives here and only in tooling** (D22). Nothing in `pipeline/` may
-  become a runtime dependency: the app reads committed PNGs and never knows what
-  made them. The test is that uninstalling Python leaves GIT HUD building,
-  launching and rendering.
-- **No AI in the render path.** Motion is a script over committed art. This is
-  D20's constraint on speech applied to movement, and it is the reason a character
-  costs nothing to run.
+`lessons/` holds what this workspace has learned the expensive way — cutting a
+part, theming, and what's provenanced vs. tooling-only. Read one, not three.
+
+| Touching… | Read |
+|---|---|
+| `pipeline/character-decompose.py`, `parts_spec.md`, cutting or re-cutting a part set | [`lessons/cutting.md`](lessons/cutting.md) |
+| `accent`, `glow`, `field`, or anything a profile paints onto the app's surfaces | [`lessons/theming.md`](lessons/theming.md) |
+| `profiles/default.toml`, committing a new character, or the pipeline's Python boundary | [`lessons/governance.md`](lessons/governance.md) |
