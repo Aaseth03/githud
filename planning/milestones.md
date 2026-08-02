@@ -606,6 +606,14 @@ export→import reproduces a project's local folder exactly; **not yet run by
 hand across two actual machines**, which is what `done` requires here rather
 than the mechanism being merely tested in isolation.
 
+Confirmed by hand 2026-08-02, on this one machine: per-project accent and
+background customization both work, and export/import work end to end (fixed
+along the way — the export dialog's `dialog:allow-save` capability was
+missing, so `save()` was refused before a destination could even be picked).
+**Still outstanding:** the actual cross-machine leg — export on one machine,
+import on a second, and confirm every project's look and assignment survive
+the trip.
+
 ### M14 — Publishing
 **Status:** not-started
 **Validation:** a stranger clones the public repo, follows its own
