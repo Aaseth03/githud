@@ -351,10 +351,11 @@ transforms and into reacting to real events — not into a third-party runtime.
       M9 exist for** — it is a finding, not a failure of this milestone
 
 ### M8 — App direction
-**Status:** not-started
+**Status:** in-progress
 **Validation:** a screenshot a stranger would call *designed* rather than
 *default* — and the user's own words for it are "a place I want to be", judged by
-eye, in the app, on his machine.
+eye, in the app, on his machine. **Not yet judged against a finished repaint** —
+see below.
 
 The app is currently cyan-on-near-black, which is the single most generic
 technical register there is: spaceship bridge. The user's ask is **homey and
@@ -368,11 +369,30 @@ catalogues styles as *"editorial tech journal on warm"*, *"soft daylight
 notebook"*, *"serif analytics on warm paper"* — every one of those names **a
 material and a light**. GIT HUD has neither. That is the gap, not the palette.
 
-- [ ] A named direction, chosen by the user rather than assumed — one sentence
-      that a stranger could hold in mind while judging every screen
+**Direction resolved 2026-08-02: personalization, not one fixed palette.** The
+answer to "a place I want to be" turned out to be per-project, not
+app-global — a project's own accent colour and a background photo, set by hand
+in Settings (`theme.rs`, `ThemeSection.tsx`, D24-local). A project is a room; a
+room belongs to whoever's project it is. This is the named direction the first
+checkbox asked for, and it is now built and wired through every surface a
+theme touches. It deliberately leaves the **cockpit tokens** — surfaces, lines,
+ink — untouched (`characters/lessons/theming.md`): those stay the app's own,
+the same load-bearing floor a character's accent already cannot repaint (D21).
+Material, light, type pairing, texture and motion language are about *that*
+floor, and remain open — personalization answered the direction question, not
+the repaint.
+
+- [x] A named direction, chosen by the user rather than assumed — one sentence
+      that a stranger could hold in mind while judging every screen. **Answered
+      2026-08-02: personalization** — each project is its own room, coloured
+      and pictured by whoever's project it is, not one fixed palette imposed
+      on all of them
 - [ ] Material and light: where illumination comes from, what surfaces are made
-      of. Currently nothing answers either
-- [ ] A palette with warmth in it, and semantic rather than decorative colour
+      of. Still open — this is about the cockpit tokens, which the
+      personalization direction deliberately leaves alone
+- [ ] A palette with warmth in it, and semantic rather than decorative colour.
+      A project can warm its own accent now; the app's own tokens are still the
+      cyan cockpit
 - [ ] A real type pairing, chosen deliberately — one voice for prose, one for
       machine values, and a reason for both
 - [ ] Texture: grain, paper, or none, decided rather than defaulted to flat
@@ -382,9 +402,16 @@ material and a light**. GIT HUD has neither. That is the gap, not the palette.
       are load-bearing** — a character accents them and cannot repaint them
       (D21), so warming the app is a change to the tokens themselves and every
       accent has to still read against the new surfaces
-- [ ] Applied across every surface: sidebar, tab strip, chat, terminal chrome,
-      panel, cards, Settings. A half-repainted app looks worse than an unpainted
-      one
+- [x] Applied across every surface: sidebar, tab strip, chat, terminal chrome,
+      panel, cards, Settings. Per-project accent and background are wired
+      through all of them, not half-finished on any one
+
+Implementation green: 323 Rust tests (`cargo test theme` — 12/12), `tsc` clean,
+252 Vitest tests (`characterHeight`, `tabs`, `types`, `split`). **Not yet
+judged by the validation itself** — the user has not yet looked at a themed
+project and called it "a place I want to be"; the cockpit-token repaint
+(material, light, warm palette at the base, type pairing, texture, motion)
+is still ahead of that verdict.
 
 ### M9 — Avatar
 **Status:** not-started
