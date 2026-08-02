@@ -27,6 +27,7 @@ import type { Eyes, MouthShape, Part, Point, Profile } from "../types";
  */
 export function CharacterStage({
   profile,
+  project,
   live,
   speaking,
   state,
@@ -35,6 +36,13 @@ export function CharacterStage({
   size = "stage",
 }: {
   profile: Profile | null;
+  /**
+   * Whose local folder `profile`'s art (if it needs any) lives in — a
+   * project's `rel_path` when `profile` is that project's own character, or
+   * `null` for the shipped default (D24). Determines which Tauri command
+   * `useFrames`/`useParts` calls.
+   */
+  project: string | null;
   /** What is sounding, read imperatively. See `LiveSpeech`. */
   live: React.RefObject<LiveSpeech | null>;
   speaking: boolean;
@@ -54,8 +62,8 @@ export function CharacterStage({
   const frameEls = useRef<(HTMLImageElement | null)[]>([]);
   const springs = useRef<Motion>(motion());
 
-  const { frames, error: frameError } = useFrames(profile);
-  const { parts, error: partsError } = useParts(profile);
+  const { frames, error: frameError } = useFrames(profile, project);
+  const { parts, error: partsError } = useParts(profile, project);
   const [synthetic, setSynthetic] = useState<string | null>(null);
 
   const temperament = profile?.temperament;
@@ -139,7 +147,7 @@ export function CharacterStage({
 
   return (
     <div
-      className={`character-stage relative flex flex-col items-center justify-center overflow-hidden ${
+      className={`character-stage relative flex h-full flex-col items-center justify-center overflow-hidden ${
         inset ? "gap-1 p-3" : "gap-4 p-6"
       }`}
       style={accentOf(profile) as React.CSSProperties}
@@ -152,7 +160,18 @@ export function CharacterStage({
         className="character-figure relative"
         style={{
           ["--mouth" as string]: "0",
-          width: inset ? 96 : 240,
+          // Inset is sized from the frame's *height*, not its width — the
+          // frame (`ProjectView`) can never be taller than it is wide
+          // (`characterHeight.ts`), so deriving width from height instead of
+          // the other way around guarantees the whole figure always fits: the
+          // top and bottom always meet the frame exactly, and `maxWidth`
+          // is a floor under that guarantee rather than the thing doing the
+          // work, for the character art that ever isn't perfectly square.
+          // The stage variant keeps a fixed size; it is never inside a
+          // resizable box worth filling.
+          ...(inset
+            ? { height: "100%", width: "auto", maxWidth: "100%" }
+            : { width: 240 }),
           aspectRatio: canvas ? `${canvas.width} / ${canvas.height}` : "1 / 1",
         }}
       >
@@ -472,7 +491,7 @@ function Mouth({ shape }: { shape: MouthShape }) {
  * the procedural face — a character quietly rendering as something else is how
  * an afternoon goes into looking for a bug in a palette.
  */
-function useParts(profile: Profile | null) {
+function useParts(profile: Profile | null, project: string | null) {
   const [parts, setParts] = useState<Part[]>([]);
   const [error, setError] = useState<string | null>(null);
   const dir = profile?.sprite.kind === "layered" ? profile.sprite.dir : null;
@@ -484,7 +503,13 @@ function useParts(profile: Profile | null) {
       return;
     }
     let live = true;
-    void invoke<Part[]>("character_parts", { dir })
+    // A project's own character's art lives in its local folder (D24); the
+    // shipped default's lives centrally — two different Tauri commands, same
+    // shape back.
+    const load = project
+      ? invoke<Part[]>("project_character_parts", { project, dir })
+      : invoke<Part[]>("character_parts", { dir });
+    void load
       .then((p) => {
         if (!live) return;
         setParts(p);
@@ -498,13 +523,13 @@ function useParts(profile: Profile | null) {
     return () => {
       live = false;
     };
-  }, [dir]);
+  }, [dir, project]);
 
   return { parts, error };
 }
 
 /** Load a profile's PNG frame set, if it has one. */
-function useFrames(profile: Profile | null) {
+function useFrames(profile: Profile | null, project: string | null) {
   const [frames, setFrames] = useState<{ name: string; src: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
   const dir = profile?.sprite.kind === "frames" ? profile.sprite.dir : null;
@@ -516,7 +541,10 @@ function useFrames(profile: Profile | null) {
       return;
     }
     let live = true;
-    void invoke<{ name: string; src: string }[]>("character_frames", { dir })
+    const load = project
+      ? invoke<{ name: string; src: string }[]>("project_character_frames", { project, dir })
+      : invoke<{ name: string; src: string }[]>("character_frames", { dir });
+    void load
       .then((f) => {
         if (!live) return;
         setFrames(f);
@@ -530,7 +558,7 @@ function useFrames(profile: Profile | null) {
     return () => {
       live = false;
     };
-  }, [dir]);
+  }, [dir, project]);
 
   return { frames, error };
 }

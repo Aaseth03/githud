@@ -60,8 +60,9 @@ Verified by `ops/scripts/check-context.sh`, not by remembering.
 ### Lessons this earns
 
 Anything learned the expensive way goes to the one `src/lessons/` file that
-constrains it — **not** into `src/CONTEXT.md`, which is a contract and was once
-522 lines because this table did not exist. One bullet, naming what broke and what
+constrains it — **not** into `src/src-tauri/CONTEXT.md` or `src/ui/CONTEXT.md`,
+which are contracts, and `src/CONTEXT.md` was once 522 lines before being split
+in two because this table did not exist. One bullet, naming what broke and what
 the wrong conclusion was; a lesson nobody can trace to a symptom cannot be used.
 
 | Lessons file | Bullet |

@@ -190,7 +190,7 @@ export function Chat({ project, visible, voice, roomVoice, onListening }: Props)
   const label = activityLabel(state);
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-deep">
+    <div className="flex h-full min-h-0 flex-col">
       <header className="flex shrink-0 items-center gap-3 border-b border-line px-4 py-2">
         <span className="font-mono text-[10px] tracking-wider text-ink-faint">
           {/* The harness prints nothing until the first message, so claiming

@@ -10,12 +10,15 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::overrides::{AgentAccess, Overrides, ProjectKind};
+use crate::local::{self, AgentAccess, ProjectKind};
 
 /// How many directory levels below the root to search.
 ///
-/// The vault lives at `~/github/Obsidian/HOME_AI_VAULT` — depth 2 — which is the
-/// specific case that makes a naive depth-1 scan wrong.
+/// A depth of 1 would miss any repo living inside a container folder — the
+/// vault used to be the case in point, nested under `~/github/Obsidian/`
+/// until it moved to sit directly under the root. Kept at 3 as headroom for
+/// whatever else ends up nested rather than tuned down to exactly what is
+/// on disk today.
 pub const DEFAULT_MAX_DEPTH: usize = 3;
 
 /// Directories never worth descending into. Skipping these is the difference
@@ -61,9 +64,11 @@ pub struct Project {
     pub name: String,
     /// Absolute path on this machine.
     pub path: PathBuf,
-    /// Path relative to the scan root. This is the stable key used by
-    /// `config/projects.toml` overrides, because absolute paths are
-    /// machine-specific.
+    /// Path relative to the scan root. Machine-local identity — tabs and UI
+    /// list keys use it, and it is also the identity a project's local
+    /// folder is keyed by (`local::project_dir`, via `theme::key_for`), since
+    /// an absolute path is machine-specific and a bare name is not
+    /// guaranteed unique (D24).
     pub rel_path: String,
     /// Directory levels below the scan root.
     pub depth: usize,
@@ -75,15 +80,23 @@ pub struct Project {
     pub kind: ProjectKind,
     /// Agent write policy. Recorded here from M1, **enforced at M4**.
     pub agent: AgentAccess,
-    /// Why an override exists, so the reason travels with it.
+    /// Why this project is declared the way it is, from this project's own
+    /// local folder. Personal (D24) — never committed, never shipped.
     pub note: Option<String>,
-    /// The character assigned to this project (D9), by profile name.
+    /// Whether this project has its own local `character.toml`.
     ///
-    /// `None` means unassigned, which resolves to the house character — a
-    /// distinct state from "assigned to a profile that is missing", because one
-    /// is the normal case and the other is a typo worth surfacing. Resolution
-    /// happens in `ui/character.ts`; the scan only reports what was declared.
-    pub character: Option<String>,
+    /// **Presence is the assignment** (D24) — there is no longer a name to
+    /// look up in a shared registry. `false` resolves to the house character;
+    /// resolution happens in `ui/character.ts`, the scan only reports the fact.
+    pub has_local_character: bool,
+    /// A project's own accent (M8), independent of its character — the tab
+    /// rail and glass tint for the room, not the resident. `None` means the
+    /// app's own signal colour.
+    pub accent: Option<String>,
+    /// Whether this project has a background image in its own local folder.
+    /// The image itself is read on demand (`theme::read_background`); this is
+    /// just the fact of whether one exists.
+    pub has_local_background: bool,
 }
 
 impl Project {
@@ -113,9 +126,11 @@ pub struct Uninitiated {
 pub struct ScanResult {
     pub projects: Vec<Project>,
     pub uninitiated: Vec<Uninitiated>,
-    /// A malformed `config/projects.toml`, surfaced rather than swallowed.
-    /// The scan still returns every project; they simply carry their defaults.
-    pub overrides_error: Option<String>,
+    /// Malformed local `project.toml` files, surfaced rather than swallowed —
+    /// one per broken project, named. The scan still returns every project;
+    /// a broken one simply carries its defaults, the same posture
+    /// `character::load_all` already has for one bad profile.
+    pub local_errors: Vec<String>,
 }
 
 /// Walk `root` and return every git repository, ordered by relative path.
@@ -127,52 +142,59 @@ pub fn walk(root: &Path, max_depth: usize) -> Vec<Project> {
 }
 
 /// As [`walk`], but also reports root-level folders that hold no repository.
+/// No local directory is consulted — every project carries its bare defaults.
 pub fn scan(root: &Path, max_depth: usize) -> ScanResult {
-    scan_with(root, max_depth, &Overrides::default(), None)
+    scan_with(root, max_depth, None)
 }
 
-/// The full scan, with declared overrides applied (D18).
+/// The full scan, with each project's local declaration applied if it has one
+/// (D24).
 ///
-/// `overrides_error` carries a parse failure through instead of hiding it — a
-/// typo that silently reverted a project to `own` + read-write is exactly the
-/// failure this must not have.
-pub fn scan_with(
-    root: &Path,
-    max_depth: usize,
-    overrides: &Overrides,
-    overrides_error: Option<String>,
-) -> ScanResult {
-    let mut projects = Vec::new();
-    walk_into(root, root, 0, max_depth, &mut projects);
-    projects.sort_by(|a, b| a.rel_path.cmp(&b.rel_path));
+/// `local_root` is `None` in tests that only care about the walk itself;
+/// `Some` is the real path — deliberately not defaulted to an empty or
+/// relative path, which could accidentally resolve against the process's own
+/// working directory and merge in data that was never meant for this scan.
+pub fn scan_with(root: &Path, max_depth: usize, local_root: Option<&Path>) -> ScanResult {
+    let mut scanned = Vec::new();
+    walk_into(root, root, 0, max_depth, &mut scanned);
+    scanned.sort_by(|a, b| a.rel_path.cmp(&b.rel_path));
 
-    for project in &mut projects {
-        let (kind, agent) = overrides.resolve(&project.rel_path);
-        project.kind = kind;
-        project.agent = agent;
-        if let Some(entry) = overrides.get(&project.rel_path) {
-            project.note = entry.note.clone();
-            project.character = entry.character.clone();
-            if let Some(name) = &entry.name {
-                project.name = name.clone();
+    let mut projects = Vec::with_capacity(scanned.len());
+    let mut local_errors = Vec::new();
+
+    for mut project in scanned {
+        if let Some(local_root) = local_root {
+            match local::load_summary(local_root, &project.rel_path) {
+                Ok(Some(summary)) => {
+                    // Ambiguous which project a corrupt-but-hidden entry
+                    // meant is not a concern here — a folder belongs to
+                    // exactly one `rel_path`, unlike the old shared file.
+                    if summary.hidden {
+                        continue;
+                    }
+                    if let Some(name) = summary.name {
+                        project.name = name;
+                    }
+                    project.kind = summary.kind;
+                    project.agent = summary.agent;
+                    project.note = summary.note;
+                    project.accent = summary.accent;
+                    project.has_local_character = summary.has_character;
+                    project.has_local_background = summary.has_background;
+                }
+                Ok(None) => {}
+                Err(e) => local_errors.push(format!("{}: {e}", project.rel_path)),
             }
         }
+        projects.push(project);
     }
-    // An override naming a repo that is not on this machine is ignored, not an
-    // error: `config/` syncs across machines (D8), so that is the normal case.
-    // `map_or(true, ..)` rather than `is_none_or`, which is only stable since
-    // 1.82 and this crate declares MSRV 1.77.2.
-    projects.retain(|p| overrides.get(&p.rel_path).map_or(true, |o| !o.hidden));
 
     let mut uninitiated: Vec<Uninitiated> = child_dirs(root)
         .into_iter()
         .filter(|dir| {
             // Not a repo itself, and nothing below it is one either — so it is
             // not a container like `Obsidian/`, which leads to the vault.
-            !is_repo(dir)
-                && !projects
-                    .iter()
-                    .any(|p| p.path.starts_with(dir))
+            !is_repo(dir) && !projects.iter().any(|p| p.path.starts_with(dir))
         })
         .map(|path| Uninitiated {
             name: path
@@ -188,7 +210,7 @@ pub fn scan_with(
     ScanResult {
         projects,
         uninitiated,
-        overrides_error,
+        local_errors,
     }
 }
 
@@ -259,11 +281,13 @@ fn describe(root: &Path, path: &Path, depth: usize) -> Project {
         rel_path,
         depth,
         icm: detect_icm(path),
-        // Defaults; `scan_with` applies any declared override afterwards.
+        // Defaults; `scan_with` applies any local declaration afterwards.
         kind: ProjectKind::default(),
         agent: AgentAccess::default(),
         note: None,
-        character: None,
+        has_local_character: false,
+        accent: None,
+        has_local_background: false,
     }
 }
 
@@ -277,9 +301,7 @@ pub fn detect_icm(repo: &Path) -> IcmStatus {
     let layer0 = layer0_file.is_some();
 
     let layer1 = repo.join("CONTEXT.md").is_file()
-        || layer0_file
-            .as_deref()
-            .is_some_and(has_routing_section)
+        || layer0_file.as_deref().is_some_and(has_routing_section)
         || repo.join("README.md").is_file();
 
     IcmStatus { layer0, layer1 }
@@ -309,21 +331,28 @@ mod tests {
     use std::fs;
 
     /// Build a directory tree under a fresh temp dir. Paths ending in `/` are
-    /// plain directories; a path listed as a repo also gets a `.git`.
+    /// plain directories; a path listed as a repo also gets a `.git`. A
+    /// second, separate tree stands in for a project's local folder, so
+    /// tests can declare local data without it looking like part of the
+    /// scanned root.
     struct Fixture {
         root: PathBuf,
+        local: PathBuf,
     }
 
     impl Fixture {
         fn new(tag: &str) -> Self {
-            let root = std::env::temp_dir().join(format!(
+            let base = std::env::temp_dir().join(format!(
                 "githud-scan-test-{}-{}",
                 tag,
                 std::process::id()
             ));
-            let _ = fs::remove_dir_all(&root);
+            let root = base.join("root");
+            let local = base.join("local");
+            let _ = fs::remove_dir_all(&base);
             fs::create_dir_all(&root).unwrap();
-            Self { root }
+            fs::create_dir_all(&local).unwrap();
+            Self { root, local }
         }
 
         fn dir(&self, rel: &str) -> PathBuf {
@@ -343,11 +372,27 @@ mod tests {
             fs::create_dir_all(p.parent().unwrap()).unwrap();
             fs::write(p, contents).unwrap();
         }
+
+        /// Declare a project's local `project.toml`, keyed the same way
+        /// `local::project_dir` keys it (`theme::key_for(rel_path)`).
+        fn local_project(&self, key: &str, toml: &str) {
+            let dir = self.local.join(key);
+            fs::create_dir_all(&dir).unwrap();
+            fs::write(dir.join("project.toml"), toml).unwrap();
+        }
+
+        /// Declare a project's local `character.toml`, so `has_local_character`
+        /// reports true for it.
+        fn local_character(&self, key: &str) {
+            let dir = self.local.join(key);
+            fs::create_dir_all(&dir).unwrap();
+            fs::write(dir.join("character.toml"), "").unwrap();
+        }
     }
 
     impl Drop for Fixture {
         fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.root);
+            let _ = fs::remove_dir_all(self.root.parent().unwrap());
         }
     }
 
@@ -369,7 +414,7 @@ mod tests {
 
     #[test]
     fn finds_a_repo_nested_two_levels_down() {
-        // The vault case: ~/github/Obsidian/HOME_AI_VAULT.
+        // The vault used to be exactly this case: ~/github/Obsidian/HOME_AI_VAULT.
         let fx = Fixture::new("depth2");
         fx.dir("Obsidian");
         fx.repo("Obsidian/HOME_AI_VAULT");
@@ -399,7 +444,10 @@ mod tests {
         fx.dir("a/b/c");
         fx.repo("a/b/c/deep");
 
-        assert!(walk(&fx.root, 3).is_empty(), "depth 4 must not be found at max 3");
+        assert!(
+            walk(&fx.root, 3).is_empty(),
+            "depth 4 must not be found at max 3"
+        );
         assert_eq!(names(&walk(&fx.root, 4)), vec!["deep"]);
     }
 
@@ -567,15 +615,9 @@ mod tests {
         // never be made to lie. Only the *flag* is suppressed.
         let fx = Fixture::new("kind-external");
         fx.repo("voicebox");
-        let ov = Overrides::parse(
-            r#"
-            [projects.voicebox]
-            kind = "external"
-            "#,
-        )
-        .unwrap();
+        fx.local_project("voicebox", "kind = \"external\"\n");
 
-        let result = scan_with(&fx.root, DEFAULT_MAX_DEPTH, &ov, None);
+        let result = scan_with(&fx.root, DEFAULT_MAX_DEPTH, Some(&fx.local));
         let p = &result.projects[0];
 
         assert!(!p.icm.layer0, "detection still reports the truth");
@@ -590,7 +632,7 @@ mod tests {
         let fx = Fixture::new("kind-own");
         fx.repo("mine");
 
-        let result = scan_with(&fx.root, DEFAULT_MAX_DEPTH, &Overrides::default(), None);
+        let result = scan_with(&fx.root, DEFAULT_MAX_DEPTH, Some(&fx.local));
 
         assert!(result.projects[0].should_flag_icm());
         assert_eq!(result.projects[0].kind, ProjectKind::Own);
@@ -603,7 +645,7 @@ mod tests {
         fx.file("mine/AGENTS.md", "# Mine\n");
         fx.file("mine/CONTEXT.md", "# Routing\n");
 
-        let result = scan_with(&fx.root, DEFAULT_MAX_DEPTH, &Overrides::default(), None);
+        let result = scan_with(&fx.root, DEFAULT_MAX_DEPTH, Some(&fx.local));
 
         assert!(!result.projects[0].should_flag_icm());
     }
@@ -612,119 +654,131 @@ mod tests {
     fn a_deprecated_repo_is_not_flagged_but_stays_writable() {
         let fx = Fixture::new("kind-deprecated");
         fx.repo("old-thing");
-        let ov = Overrides::parse(
-            r#"
-            [projects.old-thing]
-            kind = "deprecated"
-            "#,
-        )
-        .unwrap();
+        fx.local_project("old-thing", "kind = \"deprecated\"\n");
 
-        let p = &scan_with(&fx.root, DEFAULT_MAX_DEPTH, &ov, None).projects[0];
+        let p = &scan_with(&fx.root, DEFAULT_MAX_DEPTH, Some(&fx.local)).projects[0];
 
         assert!(!p.should_flag_icm());
         assert_eq!(p.agent, AgentAccess::ReadWrite);
     }
 
     #[test]
-    fn an_override_carries_its_note_and_display_name() {
+    fn a_local_declaration_carries_its_note_and_display_name() {
         let fx = Fixture::new("kind-note");
         fx.repo("voicebox");
-        let ov = Overrides::parse(
-            r#"
-            [projects.voicebox]
-            kind = "external"
-            name = "Voicebox"
-            note = "MIT, third-party."
-            "#,
-        )
-        .unwrap();
+        fx.local_project(
+            "voicebox",
+            "kind = \"external\"\nname = \"Voicebox\"\nnote = \"MIT, third-party.\"\n",
+        );
 
-        let p = &scan_with(&fx.root, DEFAULT_MAX_DEPTH, &ov, None).projects[0];
+        let p = &scan_with(&fx.root, DEFAULT_MAX_DEPTH, Some(&fx.local)).projects[0];
 
         assert_eq!(p.name, "Voicebox");
         assert_eq!(p.note.as_deref(), Some("MIT, third-party."));
     }
 
     #[test]
-    fn a_character_assignment_travels_with_the_project() {
-        // The scan reports what was declared and takes no view on whether the
-        // profile exists — resolution is `ui/character.ts`'s job. Reporting a
-        // missing profile as unassigned here would collapse "no character" and
-        // "a character that is not on this machine" into one state, and only
-        // one of those is a typo.
+    fn a_local_character_folder_is_reported_as_present() {
+        // The scan reports the fact and takes no view on what the character
+        // looks like — resolution is `ui/character.ts`'s job.
         let fx = Fixture::new("kind-character");
         fx.repo("vault");
         fx.repo("plain");
-        let ov = Overrides::parse(
-            r#"
-            [projects.vault]
-            character = "mia"
-            "#,
-        )
-        .unwrap();
+        fx.local_character("vault");
 
-        let result = scan_with(&fx.root, DEFAULT_MAX_DEPTH, &ov, None);
-        let plain = result.projects.iter().find(|p| p.rel_path == "plain").unwrap();
-        let vault = result.projects.iter().find(|p| p.rel_path == "vault").unwrap();
+        let result = scan_with(&fx.root, DEFAULT_MAX_DEPTH, Some(&fx.local));
+        let plain = result
+            .projects
+            .iter()
+            .find(|p| p.rel_path == "plain")
+            .unwrap();
+        let vault = result
+            .projects
+            .iter()
+            .find(|p| p.rel_path == "vault")
+            .unwrap();
 
-        assert_eq!(vault.character.as_deref(), Some("mia"));
-        assert_eq!(plain.character, None, "unassigned is a state, not a default");
+        assert!(vault.has_local_character);
+        assert!(
+            !plain.has_local_character,
+            "unconfigured is a state, not a default"
+        );
     }
 
     #[test]
-    fn an_override_for_a_repo_not_on_this_machine_is_ignored() {
-        // config/ syncs across machines (D8), so this is the normal case, not
-        // an error.
+    fn no_local_root_means_every_project_keeps_its_bare_defaults() {
+        // `scan`/`walk` pass `None` — used by callers that only care about
+        // the directory walk itself.
+        let fx = Fixture::new("no-local-root");
+        fx.repo("mine");
+        fx.local_project("mine", "kind = \"external\"\n");
+
+        let result = scan(&fx.root, DEFAULT_MAX_DEPTH);
+
+        assert_eq!(
+            result.projects[0].kind,
+            ProjectKind::Own,
+            "local data was never consulted"
+        );
+    }
+
+    #[test]
+    fn a_local_folder_for_a_repo_not_on_this_machine_is_ignored() {
+        // The local store is per-machine by construction now (D24) — this is
+        // the residual case of a folder whose repo has since moved or gone,
+        // not an error.
         let fx = Fixture::new("kind-absent");
         fx.repo("here");
-        let ov = Overrides::parse(
-            r#"
-            [projects.somewhere-else]
-            kind = "external"
-            "#,
-        )
-        .unwrap();
+        fx.local_project("somewhere-else", "kind = \"external\"\n");
 
-        let result = scan_with(&fx.root, DEFAULT_MAX_DEPTH, &ov, None);
+        let result = scan_with(&fx.root, DEFAULT_MAX_DEPTH, Some(&fx.local));
 
         assert_eq!(names(&result.projects), vec!["here"]);
         assert_eq!(result.projects[0].kind, ProjectKind::Own);
     }
 
     #[test]
-    fn a_hidden_override_removes_the_project_from_the_list() {
+    fn a_hidden_declaration_removes_the_project_from_the_list() {
         let fx = Fixture::new("kind-hidden");
         fx.repo("shown");
         fx.repo("secret");
-        let ov = Overrides::parse(
-            r#"
-            [projects.secret]
-            hidden = true
-            "#,
-        )
-        .unwrap();
+        fx.local_project("secret", "hidden = true\n");
 
         assert_eq!(
-            names(&scan_with(&fx.root, DEFAULT_MAX_DEPTH, &ov, None).projects),
+            names(&scan_with(&fx.root, DEFAULT_MAX_DEPTH, Some(&fx.local)).projects),
             vec!["shown"]
         );
     }
 
     #[test]
-    fn an_overrides_parse_error_is_carried_through_not_swallowed() {
+    fn a_malformed_local_project_toml_is_carried_through_not_swallowed() {
         let fx = Fixture::new("kind-err");
         fx.repo("mine");
+        fx.local_project("mine", "kind = \"vendored\"\n");
 
-        let result = scan_with(
-            &fx.root,
-            DEFAULT_MAX_DEPTH,
-            &Overrides::default(),
-            Some("projects.toml:3 bad kind".into()),
+        let result = scan_with(&fx.root, DEFAULT_MAX_DEPTH, Some(&fx.local));
+
+        assert_eq!(result.local_errors.len(), 1);
+        assert!(
+            result.local_errors[0].contains("mine"),
+            "{:?}",
+            result.local_errors
         );
-
-        assert_eq!(result.overrides_error.as_deref(), Some("projects.toml:3 bad kind"));
-        assert_eq!(names(&result.projects), vec!["mine"], "projects still returned");
+        assert!(
+            result.local_errors[0].contains("vendored"),
+            "{:?}",
+            result.local_errors
+        );
+        assert_eq!(
+            names(&result.projects),
+            vec!["mine"],
+            "projects still returned"
+        );
+        assert_eq!(
+            result.projects[0].kind,
+            ProjectKind::Own,
+            "the bad entry keeps its defaults"
+        );
     }
 
     #[test]

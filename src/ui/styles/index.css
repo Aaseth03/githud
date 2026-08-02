@@ -65,6 +65,51 @@ body {
     );
 }
 
+/* Glass (M8). The instrument's surfaces read as panes over a scene rather
+   than opaque slabs — a floating aside, a floating tab bar, a floating card,
+   each translucent enough to keep the scene behind them legible as a place.
+
+   `--panel-tint` is the one hook a project's own theme touches. Left
+   unset, every panel reads in the app's neutral `--color-line-bright`; a
+   project that has chosen its own colour (M8) sets `--panel-tint` once, up
+   at the scene root, and it cascades into every glass panel under it —
+   sidebar, tab strip, card, terminal, chat — because that is what "a colour
+   for the panels" means. This is a project's own theme, not a character's:
+   D21 still holds, `--accent` stays scoped to the character alone. */
+.glass-panel {
+  /* Mixing the tint with itself when unset is a deliberate no-op — the fill
+     falls back to plain `--color-surface`, untinted, exactly as before. Each
+     `var(--panel-tint, …)` below resolves independently, so the fill's quiet
+     fallback and the border's brighter one do not have to agree. */
+  --panel-fill: color-mix(in oklab, var(--panel-tint, var(--color-surface)) 16%, var(--color-surface));
+  /* Darkened toward black before it goes translucent — a bright ring of the
+     chosen colour reads as a coloured frame; a dark, barely-there one reads
+     as an edge of glass catching light. */
+  --panel-edge: color-mix(in oklab, var(--panel-tint, var(--color-line-bright)) 45%, black);
+  background: color-mix(in oklab, var(--panel-fill) 55%, transparent);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  border: 1px solid color-mix(in oklab, var(--panel-edge) 30%, transparent);
+  border-radius: 16px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 20px 40px -26px rgba(0, 0, 0, 0.55);
+}
+
+/* Where legibility matters more than atmosphere — a terminal's text, a chat
+   transcript — a darker, less saturated pane of the same glass. A smaller
+   share of the tint than `.glass-panel`, so text over it stays high-contrast. */
+.glass-panel-strong {
+  --panel-fill: color-mix(in oklab, var(--panel-tint, var(--color-deep)) 10%, var(--color-deep));
+  --panel-edge: color-mix(in oklab, var(--panel-tint, var(--color-line-bright)) 45%, black);
+  background: color-mix(in oklab, var(--panel-fill) 68%, transparent);
+  backdrop-filter: blur(14px) saturate(130%);
+  -webkit-backdrop-filter: blur(14px) saturate(130%);
+  border: 1px solid color-mix(in oklab, var(--panel-edge) 22%, transparent);
+  border-radius: 14px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
 /* **A native `<option>` popup is drawn by GTK, not by this page.** Setting both
    halves explicitly fixed the closed control and the white-on-white text, and
    left the open list a system-light slab in a dark cockpit — CSS does not reach
@@ -171,6 +216,23 @@ option:hover {
   transform-box: fill-box;
   transform-origin: center;
   will-change: transform;
+}
+
+/* @uiw/react-color-sketch (M8's project-colour picker) themes itself through
+   inline CSS custom properties, set fresh on every one of its own elements —
+   an inline value always wins over one inherited from an ancestor, so there
+   is no lighter-touch way to reach it than overriding the same properties
+   with `!important` at the same specificity fight the library itself set up. */
+.w-color-sketch {
+  --sketch-background: var(--color-surface) !important;
+  --sketch-box-shadow: inset 0 0 0 1px var(--color-line) !important;
+  --sketch-swatch-box-shadow: inset 0 0 0 1px var(--color-line) !important;
+  --sketch-swatch-border-top: 1px solid var(--color-line) !important;
+}
+.w-color-editable-input {
+  --editable-input-label-color: var(--color-ink-faint) !important;
+  --editable-input-box-shadow: inset 0 0 0 1px var(--color-line) !important;
+  --editable-input-color: var(--color-ink) !important;
 }
 
 @media (prefers-reduced-motion: reduce) {

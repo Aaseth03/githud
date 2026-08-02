@@ -52,7 +52,8 @@ planning/
    ├─ 2026-07-29-D20-speech-is-a-script.md
    ├─ 2026-07-30-D21-character-is-layered-parts.md
    ├─ 2026-07-30-D22-python-in-tooling.md
-   └─ 2026-07-30-D23-characters-are-a-workspace.md
+   ├─ 2026-07-30-D23-characters-are-a-workspace.md
+   └─ 2026-08-01-D24-personal-config-goes-local.md
 ```
 
 `specs/` holds the detail a decision record deliberately does not carry.
@@ -71,7 +72,7 @@ later does not mean re-doing the comparison.
 | `plans/` | Implementation plans (`YYYY-MM-DD-title.plan.md`) | Planning a feature before coding — start from `plans/_TEMPLATE.plan.md` |
 | `specs/` | Feature specs (`feature-name_spec.md`) | Spec'ing a feature in detail, or recording an option deferred rather than dropped |
 
-## Decisions D1–D23
+## Decisions D1–D24
 
 D1–D15 were committed 2026-07-28 out of the design interview; D16–D18 followed
 the same day — D16 when a D7 assumption was tested and failed, D17 when M1 turned
@@ -118,6 +119,7 @@ its job on the day it is overturned.**
 | D21 | [The character is layered parts driven by a script](decisions/2026-07-30-D21-character-is-layered-parts.md), authored to Live2D's spec so the ceiling stays reachable |
 | D22 | [Python is allowed in tooling](decisions/2026-07-30-D22-python-in-tooling.md), and stays out of the app — amends D4 |
 | D23 | [Characters are a workspace](decisions/2026-07-30-D23-characters-are-a-workspace.md), not a config folder — amends D9's location clause |
+| D24 | [Personal config goes local](decisions/2026-08-01-D24-personal-config-goes-local.md) — a project's own kind, note, character, and theme are gitignored, never shipped |
 
 ## Architecture
 

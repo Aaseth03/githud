@@ -4,11 +4,11 @@ export interface IcmStatus {
   layer1: boolean;
 }
 
-/** Mirrors `overrides::ProjectKind` (D18). Declared, never derived. */
+/** Mirrors `local::ProjectKind` (D18). Declared, never derived. */
 export type ProjectKind = "own" | "external" | "deprecated";
 
 /**
- * Mirrors `overrides::AgentAccess`.
+ * Mirrors `local::AgentAccess`.
  * Recorded and displayed from M1; **enforced at M4.**
  */
 export type AgentAccess = "read-write" | "read-only";
@@ -17,22 +17,41 @@ export type AgentAccess = "read-write" | "read-only";
 export interface Project {
   name: string;
   path: string;
-  /** Path relative to the scan root — the stable key across machines. */
+  /**
+   * Path relative to the scan root — machine-local identity for tabs and UI
+   * list keys, and also the identity a project's local folder is keyed by
+   * (D24).
+   */
   rel_path: string;
   depth: number;
   /** What detection actually found — always the truth about disk. */
   icm: IcmStatus;
   kind: ProjectKind;
   agent: AgentAccess;
-  /** Why an override exists, so the reason travels with it. */
+  /**
+   * Why this project is declared the way it is, from its own local folder
+   * (D24) — personal, never committed.
+   */
   note: string | null;
   /**
-   * The character assigned to this project (D9), by profile name.
+   * Whether this project has its own local `character.toml`.
    *
-   * `null` is unassigned and resolves to the house character. A name that no
-   * profile answers to is a *different* state — see `resolveCharacter`.
+   * **Presence is the assignment** (D24) — there is no longer a shared
+   * registry to name a profile in. `false` resolves to the house character.
    */
-  character: string | null;
+  has_local_character: boolean;
+  /**
+   * A project's own accent (M8), independent of its character — the tab rail
+   * and glass tint for the room, not the resident. `null` means the app's
+   * own signal colour.
+   */
+  accent: string | null;
+  /**
+   * Whether this project has a background image in its own local folder
+   * (D24). The image itself is fetched on demand via
+   * `project_background_image`.
+   */
+  has_local_background: boolean;
 }
 
 /** Mirrors `character::Palette`. Absent means "not themed on that axis". */
@@ -97,7 +116,11 @@ export interface Temperament {
   spring: number;
 }
 
-/** Mirrors `character::Profile`. The name is the filename, never declared. */
+/**
+ * Mirrors `character::Profile`. Never declared inside the file: `name` is the
+ * shipped default's filename, or the owning project's `rel_path` for a
+ * project's own character (D24) — either way, supplied by the caller.
+ */
 export interface Profile {
   name: string;
   display: string;
@@ -161,8 +184,41 @@ export interface Uninitiated {
 export interface ScanResult {
   projects: Project[];
   uninitiated: Uninitiated[];
-  /** A malformed `config/projects.toml`, surfaced rather than swallowed. */
-  overrides_error: string | null;
+  /**
+   * Malformed local `project.toml` files, one per broken project, named and
+   * surfaced rather than swallowed (D24). The scan still returns every
+   * project; a broken one simply carries its defaults.
+   */
+  local_errors: string[];
+}
+
+/**
+ * Mirrors `ScanRootInfo` in `lib.rs` — the effective folder being scanned for
+ * projects, resolved fresh on every call.
+ */
+export interface ScanRootInfo {
+  path: string;
+  /** Whether this is a folder the machine chose, rather than the default. */
+  is_custom: boolean;
+  /**
+   * Set when a saved custom folder could not be used (moved, deleted, an
+   * unplugged drive) or `machine.toml` itself was malformed — the app fell
+   * back to the default rather than failing, but that fallback must not be
+   * silent.
+   */
+  warning: string | null;
+}
+
+/** Mirrors `bundle::ImportFailure` — one project a bundle named that could not be applied. */
+export interface ImportFailure {
+  key: string;
+  error: string;
+}
+
+/** Mirrors `bundle::ImportSummary` — what `import_config` actually did (D24). */
+export interface ImportSummary {
+  imported: string[];
+  failed: ImportFailure[];
 }
 
 /**

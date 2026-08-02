@@ -40,7 +40,7 @@ export function MainView({
   const exempt = projects.length - own.length;
 
   return (
-    <div className="starfield flex h-full flex-col items-center justify-center overflow-y-auto px-8 py-12">
+    <div className="flex h-full flex-col items-center justify-center overflow-y-auto px-8 py-12">
       <div className="w-full max-w-2xl">
         <h1 className="text-center text-5xl font-light tracking-[0.2em] text-ink">
           GIT<span className="text-signal"> HUD</span>
@@ -52,6 +52,9 @@ export function MainView({
         <div className="mt-8 flex justify-center">
           <CharacterStage
             profile={character.profile}
+            // The main tab belongs to no project — always the shipped
+            // default, whose art (if it ever has any) lives centrally.
+            project={null}
             live={voice.live}
             speaking={voice.speaking !== null}
             state={state}
@@ -59,7 +62,7 @@ export function MainView({
           />
         </div>
 
-        <div className="mt-10 grid grid-cols-4 gap-px overflow-hidden rounded-lg border border-line bg-line">
+        <div className="glass-panel mt-10 grid grid-cols-4 divide-x divide-line/60 overflow-hidden">
           <Stat label="Repos" value={String(projects.length)} />
           <Stat
             label="ICM ready"
@@ -128,7 +131,7 @@ function Stat({
   const color =
     tone === "go" ? "text-go" : tone === "warn" ? "text-warn" : "text-ink";
   return (
-    <div className="bg-surface px-5 py-4" title={title}>
+    <div className="px-5 py-4" title={title}>
       <div className={`font-mono text-3xl leading-none ${color}`}>{value}</div>
       <div className="mt-2 text-[10px] tracking-[0.16em] text-ink-faint uppercase">
         {label}

@@ -9,11 +9,15 @@ import { VoicePill } from "./components/VoicePill";
 import { useVoice } from "./useVoice";
 import { useProjects } from "./hooks/useProjects";
 import { useCharacters } from "./hooks/useCharacters";
-import { accentOf, characterFor, resolveCharacter } from "./character";
+import { useProjectBackground } from "./hooks/useProjectBackground";
+import { useProjectCharacters } from "./hooks/useProjectCharacters";
+import { accentOf, characterFor } from "./character";
 import {
+  activeTab,
   closeTab,
   initialTabState,
   isTabVisible,
+  liveProject,
   openProject,
   openProjectKeys,
   openSettings,
@@ -22,8 +26,17 @@ import {
 import { MAIN_TAB_KEY, SETTINGS_TAB_KEY, type Project } from "./types";
 
 export default function App() {
-  const { projects, uninitiated, root, loading, error, overridesError, rescan } =
-    useProjects();
+  const {
+    projects,
+    uninitiated,
+    root,
+    rootIsCustom,
+    rootWarning,
+    loading,
+    error,
+    localErrors,
+    rescan,
+  } = useProjects();
 
   // Tab rules live in ./tabs.ts, pure and unit-tested. This component only
   // wires them to events.
@@ -43,9 +56,19 @@ export default function App() {
    * Profiles are central (D9), so they are loaded once here and resolved per
    * tab — never fetched inside a tab, which would be the same answer N times.
    */
-  const { characters, error: charactersError, reload: reloadCharacters } =
-    useCharacters();
-  const house = resolveCharacter(characters, null);
+  const { characters, error: charactersError } = useCharacters();
+  const house = characterFor(characters, null);
+
+  /**
+   * A project's own character now lives in its own local folder (D24) — no
+   * more shared registry a project's assignment points into — so it is
+   * fetched per open project rather than resolved from what `useCharacters`
+   * already holds.
+   */
+  const openRelPaths = tabState.tabs.flatMap((t) =>
+    t.kind === "project" ? [t.project.rel_path] : [],
+  );
+  const projectCharacters = useProjectCharacters(openRelPaths, projects);
 
   const handleOpen = useCallback((project: Project) => {
     setTabState((s) => openProject(s, project));
@@ -77,34 +100,71 @@ export default function App() {
     setTabState((s) => selectTab(s, key));
   }, []);
 
+  // The scene every glass panel floats over (M8). Driven by whichever tab is
+  // actually on screen, refreshed against the current scan the same way the
+  // tab strip's accents are — otherwise a background chosen in Settings would
+  // not show until the tab was closed and reopened. A tab with no project, or
+  // a project with no picture of its own, falls back to the app's own
+  // starfield rather than showing nothing.
+  const openTab = activeTab(tabState);
+  const activeProject =
+    openTab.kind === "project" ? liveProject(projects, openTab.project) : null;
+  const scene = useProjectBackground(
+    activeProject?.has_local_background ? activeProject.rel_path : null,
+  );
+  const sceneStyle: React.CSSProperties = {
+    ...(scene
+      ? {
+          backgroundImage: `linear-gradient(180deg, rgba(5,6,11,0.72), rgba(5,6,11,0.88)), url(${scene})`,
+        }
+      : {}),
+    // The one hook a project's own theme touches (D21 still scopes `--accent`
+    // to the character alone) — cascades into every `.glass-panel` below.
+    ...(activeProject?.accent ? { "--panel-tint": activeProject.accent } : {}),
+  } as React.CSSProperties;
+
   return (
-    <div className="flex h-full bg-void">
+    <div
+      className={`flex h-full gap-3 p-3 ${scene ? "bg-cover bg-center" : "starfield"}`}
+      style={sceneStyle}
+    >
       <Sidebar
         projects={projects}
         uninitiated={uninitiated}
         root={root}
         loading={loading}
         error={error}
-        overridesError={overridesError}
+        localErrors={localErrors}
         openKeys={openProjectKeys(tabState)}
         activeKey={tabState.activeKey}
         onOpen={handleOpen}
         onRescan={() => void rescan()}
         onSettings={handleOpenSettings}
+        accents={Object.fromEntries(
+          projects.flatMap((p) => (p.accent ? [[p.rel_path, p.accent]] : [])),
+        )}
       />
 
-      <main className="flex min-w-0 flex-1 flex-col">
+      <main className="flex min-w-0 flex-1 flex-col gap-3">
         <TabStrip
           tabs={tabState.tabs}
           activeKey={tabState.activeKey}
           onSelect={handleSelect}
           onClose={handleClose}
           accents={Object.fromEntries(
-            tabState.tabs.flatMap((t) =>
-              t.kind === "project"
-                ? [[t.key, accentOf(characterFor(characters, t.project).profile)["--accent"]]]
-                : [],
-            ),
+            tabState.tabs.flatMap((t) => {
+              if (t.kind !== "project") return [];
+              // Refreshed against the current scan (tabs.ts) — otherwise a
+              // project's accent or character change would not show in the
+              // strip until its tab was closed and reopened.
+              const current = liveProject(projects, t.project);
+              // A project's own theme (M8) wins over its character's — the
+              // room's own choice over the resident's, when it has made one.
+              const own = projectCharacters[current.rel_path] ?? null;
+              const accent =
+                current.accent ?? accentOf(characterFor(characters, own).profile)["--accent"];
+              return [[t.key, accent]];
+            }),
           )}
           trailing={
             <VoicePill
@@ -154,16 +214,23 @@ export default function App() {
               <Settings
                 voice={voice}
                 projects={projects}
+                root={root}
+                rootIsCustom={rootIsCustom}
+                rootWarning={rootWarning}
                 characters={characters}
                 charactersError={charactersError}
                 onProjectsChanged={rescan}
-                onCharactersChanged={reloadCharacters}
               />
             </div>
           )}
 
-          {tabState.tabs.map((tab) =>
-            tab.kind === "project" ? (
+          {tabState.tabs.map((tab) => {
+            if (tab.kind !== "project") return null;
+            // Same refresh as the tab strip's accents above — a project open
+            // in a tab must see its own new character, accent or background
+            // without needing to be closed and reopened.
+            const current = liveProject(projects, tab.project);
+            return (
               <div
                 key={tab.key}
                 className={`absolute inset-0 ${
@@ -171,14 +238,14 @@ export default function App() {
                 }`}
               >
                 <ProjectView
-                  project={tab.project}
+                  project={current}
                   visible={isTabVisible(tabState, tab.key)}
                   voice={voice}
-                  character={characterFor(characters, tab.project)}
+                  character={characterFor(characters, projectCharacters[current.rel_path] ?? null)}
                 />
               </div>
-            ) : null,
-          )}
+            );
+          })}
         </div>
       </main>
     </div>

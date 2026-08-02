@@ -421,33 +421,67 @@ motion, and the reason a character costs nothing to run).
 - [ ] The `procedural` floor still works, unchanged. A fresh clone with no art
       renders something (D21)
 
-### M10 — Character creation pipeline
+### M10 — Character design suite
 **Status:** not-started
 **Validation:** one prompt produces a complete, valid character folder that the
-app renders without a code change — and the same seed produces it again.
+app renders without a code change, the same seed produces it again, and a
+character can also be built by hand in the procedural editor with no external
+tool at all.
 
 Split out of M7 deliberately. Automating a parts spec that nothing has rendered
 yet would be automating a guess, so M7 makes one character by hand first and
 this milestone automates what that proved.
 
-Local only, against the ComfyUI install already on this machine. **Nothing paid
-and nothing at runtime** — the app ships PNGs and a script, so no API bill and
-no model in the render path. D20's constraint on speech, applied to art.
+**Widened 2026-08-01, from a single ComfyUI pipeline to a design suite:** an
+integrated, in-app authoring tool with more than one way to make a character,
+in the same open-but-defined shape `agent::Adapter` already uses for
+harnesses — a fixed, explicit set of design types, each strictly specified
+end to end (inputs, outputs, how the app handles the result), not a free-form
+plugin surface. Two types are committed:
 
+- **Procedural editor** — the cheapest type. An in-app UI over
+  `Sprite::Procedural`'s existing fields (eyes, mouth, palette). No art
+  dependency, no external tool, always available.
+- **ComfyUI pipeline** — local only, against a ComfyUI install the app
+  probes for availability the same way an agent adapter's own `available()`
+  already checks a harness, offering the workflow only if found. May be
+  fiddly and the outcome less predictable than the procedural type; built
+  anyway, absence handled as a state rather than an error.
+
+Candidates, not committed: ASCII-sign faces, CSS-drawn faces, 3D — the open
+end of the registry, shape not yet decided.
+
+**No AI in the render path, for any design type** (D20's constraint, applied
+to authoring rather than motion) — a type may use a model to help *author* a
+character; nothing may run one to *render* one. Nothing paid and nothing at
+runtime for the ComfyUI type either — the app ships the script, not a bill.
+
+GIT HUD's own persona (`hud`) is **not** shipped in or before this milestone.
+Whether the app gets an official look at all is a decision made *with* this
+suite once it exists, before public launch — not assumed now, and not
+special-cased against the local-config split any longer (see the config
+milestone).
+
+- [ ] A design-type registry, closed and explicit like `Sprite`'s own kinds —
+      not an open plugin system
+- [ ] Procedural editor: in-app UI over `Sprite::Procedural`'s existing fields
+- [ ] ComfyUI availability probed on this machine before the workflow is ever
+      offered — absent is a state, not an error
 - [ ] `character-preview` — a prompt yields candidate portraits, front-facing
       and neutral. Nothing downstream runs until a reference actually feels
       right, because every part inherits from it
 - [ ] `character-parts` — the chosen reference drives the full layer set, with
       occluded regions filled per D21, background removed, fixed canvas and
       anchors so every part registers
-- [ ] `character-assemble` — writes `characters/profiles/<name>/` and a
-      `characters/profiles/<name>.toml` scaffold, then **validates against the
-      parts spec**, so a half-finished set fails loudly instead of rendering as a
+- [ ] `character-assemble` — writes a complete character folder into wherever
+      the local-config milestone puts one, then **validates against the parts
+      spec**, so a half-finished set fails loudly instead of rendering as a
       character with no mouth
 - [ ] Seeds committed with the character, so the same input reproduces it
 - [ ] Scripted, not prompted (D13) — it drives ComfyUI's HTTP API headlessly.
-      These live in `characters/pipeline/` beside `character-decompose.py`, not
-      in `ops/` — they are steps in a workspace, not scripts about the repo (D23)
+      Whether these scripts still live in a committed `characters/pipeline/`
+      or move local with the profiles they produce is **open**, pending the
+      local-config milestone's shape
 
 ### M11 — Speech shaping
 **Status:** not-started
@@ -509,6 +543,109 @@ task; a new project is born end to end.
       `../config/skills/icm-architect/`, never a harness-installed one** (D17) —
       an installed skill exists on one machine under one harness and vanishes
       silently everywhere else
+
+### M13 — Local, portable config
+**Status:** in-progress
+**Validation:** a fresh clone of the repo, against an empty local config
+directory, shows no project-specific customization anywhere — every
+character, accent, background and per-project note lives outside `config/`
+and outside git entirely. Exporting the local config directory on one machine
+and importing it on another reproduces every project's look and assignment
+exactly, background images included.
+
+Grew out of a real bug: the vault's character stopped resolving on a second
+machine because `config/projects.toml` keyed by path, and a background image
+never traveled at all, being machine-local by design (D8). Fixing the path
+was the right immediate call — but the conversation that followed surfaced
+the larger shape the project is heading toward: **GIT HUD is going public**,
+and a committed `config/projects.toml` means every user's personal project
+notes, accent choices and — worse — background photos end up in a public
+repo's permanent history the moment they configure anything.
+
+**Decision: config stops being committed at all — nothing regarding a user's
+own projects ships with the app.** Widened 2026-08-01 past the original
+character/accent/background/note scope: `kind`, `agent`, `hidden`, `adapter`
+and `model` are also facts about *this user's specific repos* (`voicebox is
+external, read-only` names and describes a personal project), not app
+behavior, so they move too. `config/projects.toml` doesn't lose fields — it
+stops existing in the repo at all. Everything a user configures lives in a
+gitignored local directory, one subfolder per project, holding that project's
+own character directly. No shared central registry beyond `default` — D9
+narrowed, not dropped: a character's whole purpose is telling projects apart,
+so sharing one across two projects was never actually used, and `default`
+remains the single committed exception because it is the fallback D9 already
+requires. Moving config between machines is **explicit**, not automatic:
+export bundles the local directory into one file, import unpacks it
+elsewhere. No implicit sync and no separate git repo for the user to manage.
+
+- [x] A decision record superseding the load-bearing halves of
+      D8 / D9 / D10 / D18 / D21 / D23 that assumed `config/` and
+      `characters/` are committed —
+      [D24](decisions/2026-08-01-D24-personal-config-goes-local.md)
+- [x] Local config directory layout: one subfolder per project (kind, agent,
+      note, adapter, model, hidden, character, voice, accent, background),
+      plus the single shared `default`
+- [x] `overrides/mod.rs` retired outright — its whole reason for existing was
+      a committed shared file, which no longer exists. `scan`, `character`,
+      `theme` read from the local directory instead of the repo-relative one
+- [x] Export — bundles the local config directory into one file
+- [x] Import — unpacks a bundle into the local config directory, validated
+      the same way a hand-edited file already is: loud on a malformed entry,
+      never silent
+- [x] `config/projects.toml` and `characters/profiles/` (minus `default.toml`)
+      retired from the repo; anything genuinely shipped product (the
+      `default` character; later, an official app persona if M10 ever
+      produces one) ships some other way
+- [x] Every test currently reading a committed `config/projects.toml` or
+      `characters/profiles/` fixture rewritten against the new local layout
+
+Implementation complete and green: 312 Rust tests (including the real,
+migrated `~/github` + local config on this machine, `real_root`), `tsc`
+clean, 252 Vitest tests, `oxlint` clean. `bundle::`'s round-trip tests prove
+export→import reproduces a project's local folder exactly; **not yet run by
+hand across two actual machines**, which is what `done` requires here rather
+than the mechanism being merely tested in isolation.
+
+Confirmed by hand 2026-08-02, on this one machine: per-project accent and
+background customization both work, and export/import work end to end (fixed
+along the way — the export dialog's `dialog:allow-save` capability was
+missing, so `save()` was refused before a destination could even be picked).
+**Still outstanding:** the actual cross-machine leg — export on one machine,
+import on a second, and confirm every project's look and assignment survive
+the trip.
+
+### M14 — Publishing
+**Status:** not-started
+**Validation:** a stranger clones the public repo, follows its own
+instructions, and gets a running app with no trace of this machine's, or any
+other contributor's, private planning or personal project data.
+
+Deliberately its own milestone, opened but not started while M13 lands: M13
+makes the app *able* to ship clean (no personal data baked into a build).
+This one is about the repo itself — the ICM layer (`AGENTS.md`, every
+`CONTEXT.md`, `planning/`, `config/contracts/`, `config/skills/`) is written
+for an agent working *on* GIT HUD with the author's full context, not for a
+stranger installing it, and is not meant to be public.
+
+Two directions, undecided, needing their own session to weigh: fork the
+necessary files into a separate public repo (the `opensource-forker` /
+`opensource-sanitizer` / `opensource-packager` pipeline already exists for
+close to exactly this) and keep this repo private as the working copy; or a
+separate install script that packages a clean build without carrying the
+private docs along. Not the same problem as M13's — M13 is data a *user*
+generates by running the app; this is planning/process content the
+*maintainer* wrote, which no scan or export mechanism touches.
+
+- [ ] Decide: fork-to-public-repo vs. install script, and why
+- [ ] Inventory of what a stranger actually needs (README, LICENSE, install
+      instructions, the app itself) vs. what stays private (`AGENTS.md`,
+      every `CONTEXT.md`, `planning/`, decision records, `config/contracts/`,
+      `config/skills/`)
+- [ ] A sanitization pass proving no secret, path, or personal reference
+      leaks into whatever ships — this repo's own `opensource-sanitizer`
+      agent is the natural tool for that pass
+- [ ] Confirmed the M13 local-config split actually holds under this: a fresh
+      install has zero of the maintainer's project data anywhere reachable
 
 ---
 

@@ -205,7 +205,7 @@ export function Terminal({ id, cwd, visible }: Props) {
   }, [visible]);
 
   return (
-    <div className="relative flex h-full min-h-0 flex-col bg-deep">
+    <div className="relative flex h-full min-h-0 flex-col">
       {error && (
         <p className="border-b border-danger/40 bg-danger/10 px-3 py-2 text-xs text-danger">
           {error}

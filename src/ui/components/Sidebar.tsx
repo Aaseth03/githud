@@ -7,12 +7,19 @@ interface Props {
   root: string;
   loading: boolean;
   error: string | null;
-  overridesError: string | null;
+  /** Malformed local `project.toml` files (D24), one per broken project. */
+  localErrors: string[];
   openKeys: Set<string>;
   activeKey: string;
   onOpen: (project: Project) => void;
   onRescan: () => void;
   onSettings: () => void;
+  /**
+   * A project's own accent (M8), keyed by `rel_path`. Absent means the
+   * project has not chosen one, so the rail keeps the app's own signal
+   * colour — the same fallback `TabStrip` uses for the same reason.
+   */
+  accents?: Record<string, string>;
 }
 
 export function Sidebar({
@@ -21,15 +28,16 @@ export function Sidebar({
   root,
   loading,
   error,
-  overridesError,
+  localErrors,
   openKeys,
   activeKey,
   onOpen,
   onRescan,
   onSettings,
+  accents,
 }: Props) {
   return (
-    <aside className="flex w-72 shrink-0 flex-col border-r border-line bg-deep">
+    <aside className="glass-panel flex w-72 shrink-0 flex-col overflow-hidden">
       <header className="flex items-baseline justify-between gap-2 px-4 pt-4 pb-3">
         <div className="min-w-0">
           <h2 className="text-[11px] font-semibold tracking-[0.18em] text-ink-faint uppercase">
@@ -62,24 +70,26 @@ export function Sidebar({
         </p>
       )}
 
-      {overridesError && (
-        // The scan worked; the overrides did not. Every project silently fell
-        // back to `own` and read-write, which is exactly what must not pass
-        // unnoticed (D18).
-        <div
-          title={overridesError}
-          className="mx-3 mb-3 rounded border border-warn/40 bg-warn/10 px-3 py-2"
-        >
+      {localErrors.length > 0 && (
+        // The scan worked; one project's own local declaration did not
+        // parse. That project silently fell back to `own` and read-write,
+        // which is exactly what must not pass unnoticed (D18).
+        <div className="mx-3 mb-3 rounded border border-warn/40 bg-warn/10 px-3 py-2">
           <p className="text-xs font-semibold text-warn">
-            config/projects.toml could not be read
+            {localErrors.length === 1 ? "a project's local config" : "some projects' local config"}{" "}
+            could not be read
           </p>
           <p className="mt-1 text-[11px] leading-relaxed text-warn/85">
-            Overrides are being ignored — every project is treated as your own
-            and agent-writable.
+            The project{localErrors.length === 1 ? " below is" : "s below are"} treated as your
+            own and agent-writable until this is fixed.
           </p>
-          <p className="mt-1.5 truncate font-mono text-[10px] text-warn/70">
-            {overridesError}
-          </p>
+          <ul className="mt-1.5 space-y-0.5">
+            {localErrors.map((e) => (
+              <li key={e} className="truncate font-mono text-[10px] text-warn/70" title={e}>
+                {e}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 
@@ -94,6 +104,7 @@ export function Sidebar({
           {projects.map((p) => {
             const isOpen = openKeys.has(p.rel_path);
             const isActive = activeKey === p.rel_path;
+            const rail = accents?.[p.rel_path];
             return (
               <li key={p.rel_path}>
                 <button
@@ -109,17 +120,26 @@ export function Sidebar({
                   ].join(" ")}
                 >
                   {/* Open projects carry a rail. Active is brighter — two
-                      states, one mark, no legend needed. */}
+                      states, one mark, no legend needed. A project's own
+                      accent (M8) replaces the app's signal colour when it has
+                      chosen one, the same fallback `TabStrip` uses. */}
                   <span
                     aria-hidden
                     className={[
                       "absolute left-0 top-1.5 bottom-1.5 w-0.5 rounded-full transition-colors",
-                      isActive
-                        ? "bg-signal"
-                        : isOpen
-                          ? "bg-signal-deep"
-                          : "bg-transparent",
+                      rail
+                        ? ""
+                        : isActive
+                          ? "bg-signal"
+                          : isOpen
+                            ? "bg-signal-deep"
+                            : "bg-transparent",
                     ].join(" ")}
+                    style={
+                      rail
+                        ? { background: rail, opacity: isActive ? 1 : isOpen ? 0.55 : 0 }
+                        : undefined
+                    }
                   />
                   <span className="min-w-0 flex-1">
                     <span

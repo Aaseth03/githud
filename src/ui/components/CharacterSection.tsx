@@ -1,20 +1,26 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { resolveCharacter, voiceFor } from "../character";
+import { characterFor, voiceFor } from "../character";
 import { Select } from "./Select";
-import { HOUSE_CHARACTER, type Characters, type Profile, type Project } from "../types";
+import type { Characters, Palette, Profile, Project } from "../types";
 import type { VoiceControls } from "../useVoice";
 
+const PALETTE_FIELDS: Array<{ field: keyof Palette; label: string; fallback: string }> = [
+  { field: "accent", label: "accent", fallback: "#6ee7ff" },
+  { field: "glow", label: "glow", fallback: "#1e6f85" },
+  { field: "field", label: "field", fallback: "#0a0d17" },
+];
+
 /**
- * Assign a character to a project, and give it a voice.
+ * Give a project its own character, and edit the basics.
  *
- * **Voice creation stays in Voicebox.** This picks from `voice_voices`, which is
- * Voicebox's own profiles endpoint — rebuilding voice design here would be
- * duplicating a tool that already exists and does it better.
- *
- * The assignment is written into `config/projects.toml`, because it is a fact
- * about a *project* (D23). The character it names is resolved from
- * `characters/profiles/` (D9).
+ * D24: a character is local and per-project now, never a shared, named
+ * registry — a project either has its own `character.toml` or it does not,
+ * and toggling that is the whole assignment. Editing here is deliberately
+ * minimal (display name, the three palette colours, voice): sprite and
+ * temperament stay hand-authored TOML and art for now, the same workflow
+ * `hud`/`mia` always used — a real in-app editor for those is M10's job, not
+ * this one's.
  */
 export function CharacterSection({
   voice,
@@ -22,69 +28,37 @@ export function CharacterSection({
   characters,
   loadError,
   onProjectsChanged,
-  onCharactersChanged,
 }: {
   voice: VoiceControls;
   /**
    * Passed in, **never fetched here.**
    *
-   * Calling `useProjects()` and `useCharacters()` in this component gave it its
-   * own copy of both, so saving reloaded *Settings* and the running tabs kept the
-   * old answer until the app restarted — a change that had been written to disk
-   * and looked like it had not applied. Same shape as the `useVoice` hoist: one
-   * owner, and everyone else takes a prop.
+   * Calling `useProjects()` in this component gave it its own copy, so saving
+   * reloaded *Settings* and the running tabs kept the old answer until the app
+   * restarted — a change that had been written to disk and looked like it had
+   * not applied. Same shape as the `useVoice` hoist: one owner, everyone else
+   * takes a prop.
    */
   projects: Project[];
+  /** The shipped house registry — today, just `default`. Read-only here. */
   characters: Characters;
   loadError: string | null;
   onProjectsChanged: () => Promise<void> | void;
-  onCharactersChanged: () => Promise<void> | void;
 }) {
-  const [saved, setSaved] = useState<string | null>(null);
-  const [saving, setSaving] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [spoke, setSpoke] = useState<string | null>(null);
-
-  const assign = useCallback(
-    async (relPath: string, name: string | null) => {
-      setSaving(relPath);
-      setError(null);
-      setSaved(null);
-      try {
-        await invoke("character_assign", { project: relPath, character: name });
-        // Re-read rather than patching local state: `projects.toml` is the source
-        // of truth and a UI that believes its own optimistic write will disagree
-        // with the file the moment a write partly fails.
-        //
-        // This is the app's owner reloading, so every open tab re-resolves — the
-        // change applies where you can see it, not only here.
-        await onProjectsChanged();
-        setSaved(relPath);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
-      } finally {
-        setSaving(null);
-      }
-    },
-    [onProjectsChanged],
-  );
-
   return (
-    <section className="rounded border border-line bg-deep px-4 py-3.5">
+    <section className="glass-panel px-4 py-3.5">
       <h2 className="text-[11px] font-semibold tracking-[0.16em] text-ink-dim uppercase">
         Characters
       </h2>
       <p className="mt-1 text-[11px] text-ink-faint">
-        Changes save and apply immediately — there is nothing to confirm. Who
-        lives in each project: profiles come from{" "}
-        <code className="text-ink-dim">characters/profiles/</code>; the assignment
-        is written to <code className="text-ink-dim">config/projects.toml</code>.
-        Voices come from Voicebox — create them there, pick them here.
+        Changes save and apply immediately — there is nothing to confirm. Each
+        project either has its own character or falls back to the default; a
+        project's own character lives in its local, personal config, never
+        shipped with the app. Voices come from Voicebox — create them there,
+        pick them here.
       </p>
 
-      {(loadError ?? error) && (
-        <p className="mt-3 font-mono text-[11px] text-danger">{loadError ?? error}</p>
-      )}
+      {loadError && <p className="mt-3 font-mono text-[11px] text-danger">{loadError}</p>}
 
       {characters.errors.length > 0 && (
         <ul className="mt-3 space-y-1">
@@ -97,182 +71,207 @@ export function CharacterSection({
       )}
 
       <div className="mt-4 space-y-1">
-        {projects.map((p) => {
-          const resolved = resolveCharacter(characters, p.character);
-          const room = voiceFor(resolved.profile, voice.voices, voice.voice);
-          return (
-            <div
-              key={p.rel_path}
-              className="flex flex-wrap items-center gap-3 border-b border-line/60 py-2 last:border-0"
-            >
-              <span className="w-40 shrink-0 truncate text-xs text-ink-dim" title={p.rel_path}>
-                {p.name}
-              </span>
-
-              <Select
-                label={`character for ${p.name}`}
-                value={p.character ?? ""}
-                disabled={saving === p.rel_path}
-                onChange={(v) => void assign(p.rel_path, v || null)}
-                className="w-52 text-xs text-ink"
-                choices={[
-                  // An empty value is not a character called "default" — it is
-                  // the absence of an assignment, which is what resolves to the
-                  // default. Conflating them would write a redundant line.
-                  { value: "", label: `— unassigned (${HOUSE_CHARACTER}) —` },
-                  ...characters.profiles
-                    .filter((c) => c.name !== HOUSE_CHARACTER)
-                    .map((c) => ({ value: c.name, label: c.display })),
-                ]}
-              />
-
-              <span
-                aria-hidden
-                className="size-2.5 shrink-0 rounded-full"
-                style={{ background: resolved.profile?.palette.accent ?? "var(--color-line-bright)" }}
-                title={resolved.profile?.palette.accent ?? "unthemed"}
-              />
-
-              <span className="font-mono text-[10px] text-ink-faint">
-                {resolved.profile?.sprite.kind ?? "no profile"}
-              </span>
-
-              {resolved.problem && (
-                <span className="font-mono text-[10px] text-warn">{resolved.problem}</span>
-              )}
-
-              {saving === p.rel_path && (
-                <span className="font-mono text-[10px] text-ink-faint">saving…</span>
-              )}
-              {saved === p.rel_path && saving === null && (
-                <span className="font-mono text-[10px] text-go">applied</span>
-              )}
-
-              <button
-                onClick={() => {
-                  const said = voice.speak(
-                    `settings:${p.rel_path}`,
-                    `This is ${resolved.profile?.display ?? "nobody"}, in ${p.name}.`,
-                    room,
-                  );
-                  setSpoke(said);
-                }}
-                className="ml-auto rounded border border-line px-2 py-1 text-[10px] text-ink-dim
-                           transition-colors hover:border-line-bright hover:text-ink
-                           focus-visible:outline-2 focus-visible:outline-offset-1
-                           focus-visible:outline-signal"
-              >
-                ▶ hear
-              </button>
-            </div>
-          );
-        })}
+        {projects.map((p) => (
+          <CharacterRow
+            key={p.rel_path}
+            project={p}
+            characters={characters}
+            voice={voice}
+            onProjectsChanged={onProjectsChanged}
+          />
+        ))}
       </div>
-
-      {spoke && <p className="mt-3 font-mono text-[11px] text-warn">{spoke}</p>}
-
-      <VoicePerCharacter
-        characters={characters.profiles}
-        voice={voice}
-        onSaved={onCharactersChanged}
-      />
     </section>
   );
 }
 
-/** Await a reload callback whether or not it returns a promise. */
-async function onCharactersReload(reload: () => Promise<void> | void) {
-  await reload();
-}
-
-/**
- * Which voice each character speaks with.
- *
- * Written into the character's own profile rather than into the project, because
- * a voice belongs to a *character* — assign the same character to two projects
- * and it should sound the same in both.
- */
-function VoicePerCharacter({
+function CharacterRow({
+  project,
   characters,
   voice,
-  onSaved,
+  onProjectsChanged,
 }: {
-  characters: Profile[];
+  project: Project;
+  characters: Characters;
   voice: VoiceControls;
-  onSaved: () => Promise<void> | void;
+  onProjectsChanged: () => Promise<void> | void;
 }) {
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [spoke, setSpoke] = useState<string | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    if (!project.has_local_character) {
+      setProfile(null);
+      return;
+    }
+    void invoke<Profile | null>("project_character", { project: project.rel_path })
+      .then((p) => live && setProfile(p))
+      .catch((e: unknown) => live && setError(e instanceof Error ? e.message : String(e)));
+    return () => {
+      live = false;
+    };
+  }, [project.has_local_character, project.rel_path]);
+
+  const runEdit = useCallback(
+    async (mutate: () => Promise<unknown>) => {
+      setBusy(true);
+      setError(null);
+      try {
+        await mutate();
+        // Re-read rather than patching local state: the file is the source of
+        // truth, and `onProjectsChanged` keeps `has_local_character` in sync
+        // everywhere else this project is shown — the tab strip, the stage.
+        await onProjectsChanged();
+        const updated = await invoke<Profile | null>("project_character", {
+          project: project.rel_path,
+        });
+        setProfile(updated);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [project.rel_path, onProjectsChanged],
+  );
+
+  const toggle = () =>
+    void runEdit(() =>
+      invoke(project.has_local_character ? "character_local_disable" : "character_local_enable", {
+        project: project.rel_path,
+      }),
+    );
+
+  const setDisplay = (display: string) =>
+    void runEdit(() =>
+      invoke("character_local_set_display", { project: project.rel_path, display: display || null }),
+    );
+
+  const setPaletteField = (field: string, value: string | null) =>
+    void runEdit(() =>
+      invoke("character_local_set_palette", { project: project.rel_path, field, value }),
+    );
+
+  const setVoice = (v: string | null) =>
+    void runEdit(() => invoke("character_local_set_voice", { project: project.rel_path, voice: v }));
+
+  const resolved = characterFor(characters, profile);
+  const room = voiceFor(resolved.profile, voice.voices, voice.voice);
 
   return (
-    <div className="mt-5 border-t border-line pt-4">
-      <h3 className="text-[10px] font-semibold tracking-[0.16em] text-ink-faint uppercase">
-        Voices
-      </h3>
-      <p className="mt-1 text-[11px] text-ink-faint">
-        A character may be a look without being a voice — unset falls through to
-        the fallback below, and so does a voice this machine's Voicebox does not
-        have.
-      </p>
-
-      <div className="mt-3 flex items-center gap-3 rounded border border-line/70 bg-surface/40 px-2 py-1.5">
-        <span className="w-40 shrink-0 text-xs text-ink-dim">Fallback voice</span>
-        <Select
-          label="fallback voice"
-          value={voice.voice ?? ""}
-          onChange={(v) => voice.setVoice(v || null)}
-          className="w-52 text-xs text-ink"
-          choices={[
-            { value: "", label: "— none —" },
-            ...voice.voices.map((v) => ({ value: v.id, label: v.name })),
-          ]}
-        />
-        <span className="font-mono text-[10px] text-ink-faint">
-          used by any character with no voice of its own
+    <div className="border-b border-line/60 py-2 last:border-0">
+      <div className="flex flex-wrap items-center gap-3">
+        <span className="w-40 shrink-0 truncate text-xs text-ink-dim" title={project.rel_path}>
+          {project.name}
         </span>
+
+        <label className="flex items-center gap-1.5 text-[11px] text-ink-dim">
+          <input
+            type="checkbox"
+            checked={project.has_local_character}
+            disabled={busy}
+            onChange={toggle}
+            className="accent-signal"
+          />
+          own character
+        </label>
+
+        <span
+          aria-hidden
+          className="size-2.5 shrink-0 rounded-full"
+          style={{ background: resolved.profile?.palette.accent ?? "var(--color-line-bright)" }}
+          title={resolved.profile?.palette.accent ?? "unthemed"}
+        />
+
+        <span className="font-mono text-[10px] text-ink-faint">
+          {resolved.profile?.sprite.kind ?? "no profile"}
+        </span>
+
+        {resolved.problem && (
+          <span className="font-mono text-[10px] text-warn">{resolved.problem}</span>
+        )}
+
+        {busy && <span className="font-mono text-[10px] text-ink-faint">saving…</span>}
+
+        <button
+          onClick={() => {
+            const said = voice.speak(
+              `settings:${project.rel_path}`,
+              `This is ${resolved.profile?.display ?? "nobody"}, in ${project.name}.`,
+              room,
+            );
+            setSpoke(said);
+          }}
+          className="ml-auto rounded border border-line px-2 py-1 text-[10px] text-ink-dim
+                     transition-colors hover:border-line-bright hover:text-ink
+                     focus-visible:outline-2 focus-visible:outline-offset-1
+                     focus-visible:outline-signal"
+        >
+          ▶ hear
+        </button>
       </div>
 
-      {error && <p className="mt-2 font-mono text-[11px] text-danger">{error}</p>}
+      {spoke && <p className="mt-1.5 font-mono text-[11px] text-warn">{spoke}</p>}
 
-      <div className="mt-3 space-y-1">
-        {characters.map((c) => (
-          <div key={c.name} className="flex items-center gap-3 py-1">
-            <span className="w-40 shrink-0 truncate text-xs text-ink-dim">{c.display}</span>
-            <Select
-              label={`voice for ${c.display}`}
-              value={c.voice ?? ""}
-              onChange={(picked) => {
-                setError(null);
-                setSaved(null);
-                void invoke("character_voice", {
-                  name: c.name,
-                  voice: picked || null,
-                })
-                  .then(async () => {
-                    await onCharactersReload(onSaved);
-                    setSaved(c.name);
-                  })
-                  .catch((err: unknown) =>
-                    setError(err instanceof Error ? err.message : String(err)),
-                  );
+      {project.has_local_character && profile && (
+        <div className="mt-2 flex flex-wrap items-center gap-4 pl-[10.5rem]">
+          <label className="flex items-center gap-1.5 text-[11px] text-ink-dim">
+            display
+            <input
+              type="text"
+              defaultValue={profile.display}
+              disabled={busy}
+              onBlur={(e) => {
+                if (e.target.value !== profile.display) setDisplay(e.target.value);
               }}
-              className="w-52 text-xs text-ink"
-              choices={[
-                { value: "", label: "— the app's voice —" },
-                ...voice.voices.map((v) => ({ value: v.id, label: v.name })),
-              ]}
+              className="w-32 rounded border border-line bg-surface/60 px-1.5 py-0.5 text-xs text-ink"
             />
-            {c.voice && !voice.voices.some((v) => v.id === c.voice) && (
-              <span className="font-mono text-[10px] text-warn">
-                not on this machine — using the fallback
-              </span>
-            )}
-            {saved === c.name && (
-              <span className="font-mono text-[10px] text-go">applied</span>
-            )}
-          </div>
-        ))}
-      </div>
+          </label>
+
+          {PALETTE_FIELDS.map(({ field, label, fallback }) => {
+            const value = profile.palette[field];
+            return (
+              <label key={field} className="flex items-center gap-1.5 text-[11px] text-ink-dim">
+                {label}
+                <input
+                  type="color"
+                  value={value ?? fallback}
+                  disabled={busy}
+                  onChange={(e) => setPaletteField(field, e.target.value)}
+                  className="size-5 cursor-pointer rounded border border-line bg-transparent p-0"
+                />
+                {value && (
+                  <button
+                    onClick={() => setPaletteField(field, null)}
+                    disabled={busy}
+                    title={`unset ${label} — falls back to the app's own colour`}
+                    className="font-mono text-[10px] text-ink-faint hover:text-ink"
+                  >
+                    ×
+                  </button>
+                )}
+              </label>
+            );
+          })}
+
+          <Select
+            label={`voice for ${project.name}`}
+            value={profile.voice ?? ""}
+            disabled={busy}
+            onChange={(v) => setVoice(v || null)}
+            className="w-44 text-xs text-ink"
+            choices={[
+              { value: "", label: "— the app's voice —" },
+              ...voice.voices.map((v) => ({ value: v.id, label: v.name })),
+            ]}
+          />
+        </div>
+      )}
+
+      {error && <p className="mt-1.5 font-mono text-[11px] text-danger">{error}</p>}
     </div>
   );
 }
@@ -317,7 +316,7 @@ export function GraphicsSection() {
   }, []);
 
   return (
-    <section className="rounded border border-line bg-deep px-4 py-3.5">
+    <section className="glass-panel px-4 py-3.5">
       <h2 className="text-[11px] font-semibold tracking-[0.16em] text-ink-dim uppercase">
         Graphics
       </h2>

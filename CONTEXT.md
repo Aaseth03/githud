@@ -30,7 +30,8 @@ githud/
 | Know the event schema, adapter trait, data layout, or guardrail list | `planning/` | `architecture/` |
 | Spec a feature | `planning/` | `CONTEXT.md` → `specs/` |
 | Plan an implementation before coding | `planning/` | `plans/_TEMPLATE.plan.md` |
-| Write, change, or debug application code | `src/` | `CONTEXT.md` |
+| Write, change, or debug the React UI | `src/ui/` | `CONTEXT.md` |
+| Write, change, or debug the Rust core | `src/src-tauri/` | `CONTEXT.md` |
 | Build, run, or package the app | `docs/` | `guides/build-and-run.md` |
 | Write documentation for a human | `docs/` | `CONTEXT.md` |
 | Create a repo, run a maintenance script, touch the shim | `ops/` | `CONTEXT.md` |

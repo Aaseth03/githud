@@ -39,7 +39,7 @@ export function FileViewer({ cwd, path }: { cwd: string; path: string | null }) 
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-deep">
+    <div className="flex h-full min-h-0 flex-col">
       <header className="flex shrink-0 items-baseline gap-3 border-b border-line px-4 py-2">
         <span className="truncate font-mono text-[11px] text-ink-dim" title={path}>
           {path}
