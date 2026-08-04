@@ -1,4 +1,6 @@
-import type { Eyes, Headwear, MouthShape } from "../types";
+import { useId } from "react";
+import type { Eyes, HeadShape, Headwear, MouthShape } from "../types";
+import { EYE_PARTS, HEAD_PARTS, HEADWEAR_PARTS, MOUTH_PARTS } from "../proceduralAssets";
 
 /**
  * The procedural face's own shapes, drawn once here so `CharacterStage`'s
@@ -14,38 +16,53 @@ import type { Eyes, Headwear, MouthShape } from "../types";
  *
  * Components only, deliberately — the option arrays every field iterates
  * over live in `../proceduralOptions.ts` instead, so fast refresh still
- * works on this file.
+ * works on this file. The shapes themselves are hand-authored SVG files
+ * under `../assets/procedural/`, loaded by `../proceduralAssets.ts` — see
+ * that folder's README for the authoring contract.
  */
 
-export function Eye({ shape, side }: { shape: Eyes; side: "left" | "right" }) {
-  const x = side === "left" ? 37 : 63;
-  const fill = "var(--accent)";
+/** A part with no file for `shape` (only `Headwear`'s `"none"`) draws nothing. */
+function Part({ parts, shape }: { parts: Record<string, string>; shape: string }) {
+  const markup = parts[shape];
+  if (!markup) return null;
+  return <g style={{ color: "var(--accent)" }} dangerouslySetInnerHTML={{ __html: markup }} />;
+}
 
-  switch (shape) {
-    case "wide":
-      return <circle cx={x} cy="44" r="6.5" fill={fill} />;
-    case "narrow":
-      return <rect x={x - 7} y="42" width="14" height="3.4" rx="1.7" fill={fill} />;
-    case "visor":
-      // One band across both, so it reads as an instrument rather than a face.
-      return side === "left" ? (
-        <rect x="27" y="40" width="46" height="8" rx="4" fill={fill} fillOpacity="0.85" />
-      ) : null;
-    case "round":
-      return <circle cx={x} cy="44" r="4.6" fill={fill} />;
-  }
+/**
+ * The head outline. Unlike the other parts it is drawn with a themed radial
+ * glow behind it, not a flat fill — so unlike `Part`, it also owns a
+ * `<radialGradient>` def and substitutes its own id in for the `HEAD_GRADIENT`
+ * placeholder each `head/*.svg` file's `fill="url(#HEAD_GRADIENT)"` uses.
+ * `useId()` keeps that id collision-free across however many head shapes are
+ * on screen at once (the live stage plus every option button in the picker).
+ */
+export function HeadGlyph({ shape }: { shape: HeadShape }) {
+  const gradientId = useId();
+  const markup = HEAD_PARTS[shape];
+  if (!markup) return null;
+  return (
+    <>
+      <defs>
+        <radialGradient id={gradientId} cx="50%" cy="38%" r="62%">
+          <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.30" />
+          <stop offset="70%" stopColor="var(--accent-glow)" stopOpacity="0.16" />
+          <stop offset="100%" stopColor="var(--accent-glow)" stopOpacity="0.03" />
+        </radialGradient>
+      </defs>
+      <g
+        style={{ color: "var(--accent)" }}
+        dangerouslySetInnerHTML={{ __html: markup.replaceAll("HEAD_GRADIENT", gradientId) }}
+      />
+    </>
+  );
+}
+
+export function EyesGlyph({ shape }: { shape: Eyes }) {
+  return <Part parts={EYE_PARTS} shape={shape} />;
 }
 
 export function MouthGlyph({ shape }: { shape: MouthShape }) {
-  const fill = "var(--accent)";
-  switch (shape) {
-    case "wide":
-      return <ellipse cx="50" cy="66" rx="17" ry="9" fill={fill} fillOpacity="0.9" />;
-    case "line":
-      return <rect x="34" y="62" width="32" height="8" rx="4" fill={fill} fillOpacity="0.9" />;
-    case "round":
-      return <ellipse cx="50" cy="66" rx="11" ry="9" fill={fill} fillOpacity="0.9" />;
-  }
+  return <Part parts={MOUTH_PARTS} shape={shape} />;
 }
 
 /**
@@ -53,38 +70,7 @@ export function MouthGlyph({ shape }: { shape: MouthShape }) {
  * shape is drawn in the `y < 20` band regardless of which one is chosen.
  */
 export function HeadwearGlyph({ shape }: { shape: Headwear }) {
-  const fill = "var(--accent)";
-  switch (shape) {
-    case "none":
-      return null;
-    case "antenna":
-      return (
-        <>
-          <rect x="49" y="4" width="2" height="12" fill={fill} fillOpacity="0.85" />
-          <circle cx="50" cy="4" r="3.2" fill={fill} />
-        </>
-      );
-    case "horns":
-      return (
-        <>
-          <polygon points="34,18 39,4 44,18" fill={fill} fillOpacity="0.9" />
-          <polygon points="56,18 61,4 66,18" fill={fill} fillOpacity="0.9" />
-        </>
-      );
-    case "halo":
-      return (
-        <ellipse
-          cx="50"
-          cy="6"
-          rx="16"
-          ry="4"
-          fill="none"
-          stroke={fill}
-          strokeWidth="2"
-          strokeOpacity="0.85"
-        />
-      );
-  }
+  return <Part parts={HEADWEAR_PARTS} shape={shape} />;
 }
 
 /**
@@ -95,11 +81,13 @@ export function HeadwearGlyph({ shape }: { shape: Headwear }) {
  * here would establish its own viewport and defeat exactly that cropping.
  */
 export function FaceShapes({
+  headShape = "round",
   eyes,
   mouth,
   headwear,
   head = true,
 }: {
+  headShape?: HeadShape;
   eyes: Eyes;
   mouth: MouthShape;
   headwear: Headwear;
@@ -109,22 +97,9 @@ export function FaceShapes({
 }) {
   return (
     <>
-      {head && (
-        <>
-          <defs>
-            <radialGradient id="char-head-glyph" cx="50%" cy="38%" r="62%">
-              <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.30" />
-              <stop offset="70%" stopColor="var(--accent-glow)" stopOpacity="0.16" />
-              <stop offset="100%" stopColor="var(--accent-glow)" stopOpacity="0.03" />
-            </radialGradient>
-          </defs>
-          <circle cx="50" cy="50" r="38" fill="url(#char-head-glyph)" />
-          <circle cx="50" cy="50" r="38" fill="none" stroke="var(--accent)" strokeOpacity="0.55" strokeWidth="1.2" />
-        </>
-      )}
+      {head && <HeadGlyph shape={headShape} />}
       <HeadwearGlyph shape={headwear} />
-      <Eye shape={eyes} side="left" />
-      <Eye shape={eyes} side="right" />
+      <EyesGlyph shape={eyes} />
       <MouthGlyph shape={mouth} />
     </>
   );
@@ -132,17 +107,19 @@ export function FaceShapes({
 
 /** The full procedural face, standalone — `FaceShapes` in its own `<svg>`. */
 export function ProceduralGlyph({
+  headShape = "round",
   eyes,
   mouth,
   headwear,
 }: {
+  headShape?: HeadShape;
   eyes: Eyes;
   mouth: MouthShape;
   headwear: Headwear;
 }) {
   return (
     <svg viewBox="0 0 100 100" className="h-full w-full" aria-hidden>
-      <FaceShapes eyes={eyes} mouth={mouth} headwear={headwear} />
+      <FaceShapes headShape={headShape} eyes={eyes} mouth={mouth} headwear={headwear} />
     </svg>
   );
 }

@@ -61,6 +61,7 @@ describe("the wire shape", () => {
     expect(layered.pivot.head).not.toBeNull();
 
     if (procedural.kind !== "procedural") throw new Error("wrong variant");
+    expect(procedural.head_shape).toBe("square");
     expect(procedural.eyes).toBe("wide");
     expect(procedural.mouth).toBe("round");
     expect(procedural.headwear).toBe("none");

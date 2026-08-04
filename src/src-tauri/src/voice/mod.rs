@@ -334,24 +334,29 @@ async fn await_generation(c: &reqwest::Client, base: &str, id: &str) -> Result<(
     let deadline = std::time::Instant::now() + GENERATION_WAIT;
 
     while std::time::Instant::now() < deadline {
-        let body = c
+        let response = c
             .get(format!("{base}/generate/{id}/status"))
             .send()
             .await
-            .map_err(|e| format!("lost contact while generating: {e}"))?
-            .text()
-            .await
-            .map_err(|e| format!("unreadable status: {e}"))?;
+            .map_err(|e| format!("lost contact while generating: {e}"))?;
 
-        match generation_status(&body) {
-            Some(("completed", _)) => return Ok(()),
-            Some(("failed", err)) => {
-                return Err(format!(
-                    "voicebox could not produce the audio: {}",
-                    err.unwrap_or_else(|| "no reason given".into())
-                ))
+        // The endpoint is Server-Sent Events, not a snapshot response — proven
+        // to occasionally drop the connection mid-frame ("error decoding
+        // response body"). A body that failed to read is the stream
+        // hiccuping, not the generation failing, so it is treated the same as
+        // a "pending" frame rather than aborting outright; only running out
+        // of the deadline below is fatal.
+        if let Ok(body) = response.text().await {
+            match generation_status(&body) {
+                Some(("completed", _)) => return Ok(()),
+                Some(("failed", err)) => {
+                    return Err(format!(
+                        "voicebox could not produce the audio: {}",
+                        err.unwrap_or_else(|| "no reason given".into())
+                    ))
+                }
+                _ => {}
             }
-            _ => {}
         }
 
         tokio::time::sleep(Duration::from_millis(400)).await;

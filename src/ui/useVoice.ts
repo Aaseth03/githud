@@ -100,6 +100,18 @@ export function useVoice() {
   const live = useRef<LiveSpeech | null>(null);
   const [playbackError, setPlaybackError] = useState<string | null>(null);
 
+  // Silence whatever is sounding if this hook's owner goes away — a hot
+  // reload during development swaps in a fresh `useVoice()` with its own
+  // refs, and nothing else would ever pause the orphaned element from the
+  // instance being replaced. Left alive, it plays on top of the next reply
+  // the new instance speaks.
+  useEffect(() => {
+    return () => {
+      audioRef.current?.pause();
+      if (urlRef.current) URL.revokeObjectURL(urlRef.current);
+    };
+  }, []);
+
   // Poll, because Voicebox can go away mid-session and the app is required to
   // keep working when it does.
   useEffect(() => {
@@ -174,6 +186,13 @@ export function useVoice() {
         { text, voiceId, engine },
       );
 
+      // `stop()` only reaches a chunk through `finish.current`, which this
+      // chunk has not set yet while the request above is in flight — so a
+      // stop during synthesis leaves nothing to interrupt. Without this
+      // check the chunk plays anyway once Voicebox answers, landing on top
+      // of whatever the queue has since started in its place.
+      if (cancelled.current) return;
+
       const bytes = fromBase64(speech.audio);
 
       // Read the samples before playing rather than tapping the graph during
@@ -190,6 +209,16 @@ export function useVoice() {
       const blob = new Blob([bytes], { type: speech.mime });
       const url = URL.createObjectURL(blob);
       urlRef.current = url;
+
+      // The previous chunk's element believed it was done — `done()` already
+      // ran, or this webview would not have reached here — but WebKitGTK has
+      // been proven to fire `ended` on a blob-sourced element while it keeps
+      // actually producing sound underneath (see the module doc: this webview
+      // does not get the benefit of the doubt on media APIs). Left alone, that
+      // is a second chunk's audio landing on top of the first's tail — an echo
+      // lagging behind. Pausing whatever is still referenced here costs
+      // nothing when the previous element really has stopped.
+      audioRef.current?.pause();
 
       const audio = new Audio(url);
       audioRef.current = audio;

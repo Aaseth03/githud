@@ -60,10 +60,19 @@ export interface Palette {
   field: string | null;
 }
 
-/** Mirrors `character::Eyes`, `character::Mouth`, and `character::Headwear`. */
-export type Eyes = "round" | "wide" | "narrow" | "visor";
-export type MouthShape = "round" | "wide" | "line";
-export type Headwear = "none" | "antenna" | "horns" | "halo";
+/**
+ * A procedural part's key — the filename (without `.svg`) of one
+ * `assets/procedural/<category>/<key>.svg` file, discovered at build time by
+ * `proceduralAssets.ts`. **Open-ended, deliberately**: mirrors the plain
+ * `String` `character::Sprite::Procedural` now carries on the Rust side, so
+ * dropping a new SVG into that folder is the entire integration — no union
+ * to extend on either side of the Tauri boundary. `Headwear`'s one non-file
+ * value is `"none"`, meaning "draw nothing".
+ */
+export type HeadShape = string;
+export type Eyes = string;
+export type MouthShape = string;
+export type Headwear = string;
 
 /**
  * Mirrors `character::Sprite`.
@@ -74,7 +83,13 @@ export type Headwear = "none" | "antenna" | "horns" | "halo";
  * see, because both were internally consistent and disagreed only on the wire.
  */
 export type Sprite =
-  | { kind: "procedural"; eyes: Eyes; mouth: MouthShape; headwear: Headwear }
+  | {
+      kind: "procedural";
+      head_shape: HeadShape;
+      eyes: Eyes;
+      mouth: MouthShape;
+      headwear: Headwear;
+    }
   | { kind: "frames"; dir: string }
   | { kind: "layered"; dir: string; face: Face | null; pivot: Pivots };
 

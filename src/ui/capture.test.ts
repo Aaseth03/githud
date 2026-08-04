@@ -6,6 +6,7 @@ import {
   peakOf,
   TARGET_RATE,
   toBase64,
+  trimSilence,
 } from "./capture";
 
 /** A second of a sine, so the samples are real rather than a ramp. */
@@ -83,6 +84,69 @@ describe("downsampling", () => {
 
   it("handles an empty take without dividing by nothing", () => {
     expect(downsample(new Float32Array(0), 48_000).length).toBe(0);
+  });
+
+  it("rejects energy above the new Nyquist rather than aliasing it in", () => {
+    // A 20 kHz tone has no business surviving a trip to 16 kHz (Nyquist
+    // 8 kHz) — block averaging let most of it fold straight back down into
+    // the passband as noise. A real low-pass leaves only a fraction of it.
+    const out = downsample(tone(0.5, 48_000, 20_000), 48_000);
+    expect(peakOf(out)).toBeLessThan(0.1);
+  });
+});
+
+describe("silence trimming", () => {
+  const rate = TARGET_RATE;
+
+  it("cuts a quiet tail down to a margin around the real signal", () => {
+    // Releasing push-to-talk always leaves room noise after speech actually
+    // stops — a 2s tail of true silence stands in for it here.
+    const speech = tone(0.3, rate, 440, 0.5);
+    const tail = new Float32Array(Math.round(rate * 2));
+    const take = concat([speech, tail]);
+
+    const trimmed = trimSilence(take, rate);
+
+    expect(trimmed.length).toBeLessThan(take.length / 2);
+    expect(trimmed.length).toBeGreaterThan(speech.length);
+  });
+
+  it("keeps a whisper whose peak sits far below full scale", () => {
+    // The threshold is relative to this take's own peak, not an absolute
+    // level, so a quiet take does not get trimmed to nothing along with it.
+    const whisper = tone(0.3, rate, 440, 0.03);
+    const tail = new Float32Array(rate);
+    const take = concat([whisper, tail]);
+
+    const trimmed = trimSilence(take, rate);
+
+    expect(trimmed.length).toBeGreaterThan(whisper.length * 0.9);
+    expect(trimmed.length).toBeLessThan(take.length);
+  });
+
+  it("leaves a take that never went quiet alone", () => {
+    const speech = tone(0.2, rate, 440, 0.5);
+    expect(trimSilence(speech, rate).length).toBe(speech.length);
+  });
+
+  it("leaves pure silence and an empty take alone rather than guessing", () => {
+    expect(trimSilence(new Float32Array(1000), rate).length).toBe(1000);
+    expect(trimSilence(new Float32Array(0), rate).length).toBe(0);
+  });
+
+  it("does not eat a quiet opening just because something later was louder", () => {
+    // The regression this replaces: a threshold relative to the take's single
+    // loudest moment cut the take's own opening whenever a stressed word said
+    // later was much louder than how it started.
+    const opening = tone(0.2, rate, 440, 0.02);
+    const emphasis = tone(0.2, rate, 440, 0.5);
+    const tail = new Float32Array(rate);
+    const take = concat([opening, emphasis, tail]);
+
+    const trimmed = trimSilence(take, rate);
+
+    // The opening survives whole, not just the margin around what follows it.
+    expect(trimmed.length).toBeGreaterThan(opening.length + emphasis.length);
   });
 });
 

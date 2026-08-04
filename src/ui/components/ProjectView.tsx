@@ -232,6 +232,7 @@ export function ProjectView({
                 state={characterState}
                 problem={character.problem}
                 visible={visible}
+                paused={listening}
                 size="inset"
               />
             </div>

@@ -894,17 +894,18 @@ fn character_library_set_palette(id: String, field: String, value: Option<String
     })
 }
 
-/// The procedural editor's own setter — the eyes/mouth/headwear fields M10
-/// commits to exposing in-app (`Sprite::Procedural`'s existing fields).
+/// The procedural editor's own setter — the head-shape/eyes/mouth/headwear
+/// fields exposed in-app (`Sprite::Procedural`'s existing fields).
 #[tauri::command]
 fn character_library_set_sprite_procedural(
     id: String,
-    eyes: character::Eyes,
-    mouth: character::Mouth,
-    headwear: character::Headwear,
+    head_shape: String,
+    eyes: String,
+    mouth: String,
+    headwear: String,
 ) -> Result<(), String> {
     update_character_library(&id, |text| {
-        character::set_sprite_procedural(text, eyes, mouth, headwear)
+        character::set_sprite_procedural(text, &head_shape, &eyes, &mouth, &headwear)
     })
 }
 

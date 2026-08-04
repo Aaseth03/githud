@@ -2,11 +2,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { CharacterStage } from "./CharacterStage";
 import { FaceShapes } from "./proceduralParts";
-import { EYES, HEADWEAR, MOUTHS } from "../proceduralOptions";
+import { EYES, HEAD_SHAPES, HEADWEAR, MOUTHS } from "../proceduralOptions";
 import { useCharacterState } from "../hooks/useCharacterState";
 import { usePreviewVoice } from "../hooks/usePreviewVoice";
 import { canSpeak, healthLabel } from "../voice";
-import type { Eyes, Headwear, MouthShape, Palette, Profile, Project } from "../types";
+import type { Eyes, HeadShape, Headwear, MouthShape, Palette, Profile, Project } from "../types";
 import type { LiveSpeech, VoiceControls } from "../useVoice";
 
 const PALETTE_FIELDS: Array<{ field: keyof Palette; label: string; fallback: string }> = [
@@ -49,6 +49,7 @@ export function ProceduralSuite({
 
   const [display, setDisplay] = useState(character.display);
   const [notes, setNotes] = useState(character.notes ?? "");
+  const [headShape, setHeadShape] = useState<HeadShape>(initialSprite?.head_shape ?? "round");
   const [eyes, setEyes] = useState<Eyes>(initialSprite?.eyes ?? "round");
   const [mouth, setMouth] = useState<MouthShape>(initialSprite?.mouth ?? "round");
   const [headwear, setHeadwear] = useState<Headwear>(initialSprite?.headwear ?? "none");
@@ -95,7 +96,7 @@ export function ProceduralSuite({
     voice: voiceId,
     notes: notes || null,
     palette,
-    sprite: { kind: "procedural", eyes, mouth, headwear },
+    sprite: { kind: "procedural", head_shape: headShape, eyes, mouth, headwear },
   };
 
   const speakingThisPreview = previewVoiceCtl.speakingVoiceId !== null;
@@ -137,11 +138,18 @@ export function ProceduralSuite({
       }
       if (
         !initialSprite ||
+        headShape !== initialSprite.head_shape ||
         eyes !== initialSprite.eyes ||
         mouth !== initialSprite.mouth ||
         headwear !== initialSprite.headwear
       ) {
-        await invoke("character_library_set_sprite_procedural", { id, eyes, mouth, headwear });
+        await invoke("character_library_set_sprite_procedural", {
+          id,
+          headShape,
+          eyes,
+          mouth,
+          headwear,
+        });
       }
       for (const { field } of PALETTE_FIELDS) {
         if (palette[field] !== character.palette[field]) {
@@ -181,6 +189,7 @@ export function ProceduralSuite({
     display,
     notes,
     voiceId,
+    headShape,
     eyes,
     mouth,
     headwear,
@@ -227,6 +236,28 @@ export function ProceduralSuite({
             className="w-full resize-none rounded border border-line bg-surface/60 px-2 py-1 text-xs text-ink"
           />
         </label>
+
+        <Field label="head">
+          <ButtonGrid>
+            {HEAD_SHAPES.map((h) => (
+              <GlyphButton
+                key={h}
+                active={h === headShape}
+                onClick={() => setHeadShape(h)}
+                label={h}
+                glyph={
+                  <FaceShapes
+                    headShape={h}
+                    eyes="round"
+                    mouth="line"
+                    headwear="none"
+                  />
+                }
+                cropViewBox="6 4 88 92"
+              />
+            ))}
+          </ButtonGrid>
+        </Field>
 
         <Field label="eyes">
           <ButtonGrid>

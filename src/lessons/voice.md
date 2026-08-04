@@ -84,3 +84,9 @@ Add to this file when a lesson is earned; the index is `../CONTEXT.md`.
   audio immediately gets a 404 that reads like a missing endpoint, and parsing
   those frames as JSON yields nothing — indistinguishable from "still working",
   so the wrong reader waits forever.
+- **The status stream drops its connection mid-frame.** Observed as `unreadable
+  status: error decoding response body` on an otherwise ordinary reply. One
+  poll's body failing to read is the SSE connection hiccuping, not the
+  generation failing — `await_generation` now treats a failed read the same as
+  a "pending" frame and keeps polling, so only actually running out the
+  120-second deadline is reported as an error.

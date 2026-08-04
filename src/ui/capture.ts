@@ -29,11 +29,59 @@ export interface Recording {
 }
 
 /**
- * Average-decimate to `rate`.
+ * A windowed-sinc low-pass kernel, Hann-windowed, unity gain at DC.
  *
- * Averaging rather than picking every nth sample: dropping samples aliases,
- * and a transcript is hard enough to get without inventing high frequencies.
- * Returns the input untouched when it is already at or below the target.
+ * The filter `downsample` used to run was block averaging, which is a low-pass
+ * in name only — a box filter's stopband attenuation is so poor (~13 dB at its
+ * first sidelobe) that most of the energy above the new Nyquist rate folds
+ * straight back down into the passband as noise instead of being removed. That
+ * noise lands exactly where sibilants and consonants live, which is what a
+ * transcriber leans on most — so a capture could sound fine and still
+ * transcribe badly. This kernel's attenuation is closer to 44 dB for the same
+ * cost: one pass over the samples.
+ */
+function lowpassKernel(cutoffHz: number, sampleRate: number, taps = 63): Float32Array {
+  const half = (taps - 1) / 2;
+  const fc = cutoffHz / sampleRate;
+  const kernel = new Float32Array(taps);
+  let sum = 0;
+
+  for (let i = 0; i < taps; i++) {
+    const n = i - half;
+    const sinc = n === 0 ? 2 * fc : Math.sin(2 * Math.PI * fc * n) / (Math.PI * n);
+    const hann = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (taps - 1));
+    kernel[i] = sinc * hann;
+    sum += kernel[i]!;
+  }
+  // Unity gain at DC, or the filtered signal comes out quieter than it went in.
+  for (let i = 0; i < taps; i++) kernel[i]! /= sum;
+
+  return kernel;
+}
+
+/** Convolve `samples` with `kernel`, centred so the output isn't time-shifted. */
+function convolve(samples: Float32Array, kernel: Float32Array): Float32Array {
+  const half = (kernel.length - 1) / 2;
+  const out = new Float32Array(samples.length);
+
+  for (let i = 0; i < samples.length; i++) {
+    let acc = 0;
+    for (let k = 0; k < kernel.length; k++) {
+      const idx = i + k - half;
+      if (idx >= 0 && idx < samples.length) acc += kernel[k]! * samples[idx]!;
+    }
+    out[i] = acc;
+  }
+
+  return out;
+}
+
+/**
+ * Low-pass filter, then decimate to `rate`.
+ *
+ * Filtering first and picking samples after is what makes this anti-aliasing
+ * rather than aliasing — see `lowpassKernel`. Returns the input untouched when
+ * it is already at or below the target.
  */
 export function downsample(
   samples: Float32Array,
@@ -42,15 +90,12 @@ export function downsample(
 ): Float32Array {
   if (from <= to || samples.length === 0) return samples;
 
+  const filtered = convolve(samples, lowpassKernel(to / 2, from));
   const ratio = from / to;
   const out = new Float32Array(Math.floor(samples.length / ratio));
 
   for (let i = 0; i < out.length; i++) {
-    const start = Math.floor(i * ratio);
-    const end = Math.min(Math.floor((i + 1) * ratio), samples.length);
-    let sum = 0;
-    for (let j = start; j < end; j++) sum += samples[j]!;
-    out[i] = end > start ? sum / (end - start) : 0;
+    out[i] = filtered[Math.min(Math.round(i * ratio), filtered.length - 1)]!;
   }
 
   return out;
@@ -64,6 +109,78 @@ export function peakOf(samples: Float32Array): number {
     if (v > peak) peak = v;
   }
   return peak;
+}
+
+/** Short enough to find where speech starts and stops without chasing every sample. */
+const FRAME_SECONDS = 0.02;
+
+/** How many times louder than the noise floor counts as speech. */
+const NOISE_MARGIN = 4;
+
+/** A floor under the threshold itself, for a take with no quiet stretch to measure. */
+const MIN_THRESHOLD_RATIO = 0.01;
+
+/** Kept on each side of the trim, so speech's own quiet onset and decay survive. */
+const TRIM_MARGIN_SECONDS = 0.2;
+
+/** RMS energy per `frameSize`-sample frame, the last one short if it doesn't divide evenly. */
+function rmsFrames(samples: Float32Array, frameSize: number): Float32Array {
+  const count = Math.ceil(samples.length / frameSize);
+  const out = new Float32Array(count);
+
+  for (let f = 0; f < count; f++) {
+    const start = f * frameSize;
+    const end = Math.min(start + frameSize, samples.length);
+    let sum = 0;
+    for (let i = start; i < end; i++) sum += samples[i]! * samples[i]!;
+    out[f] = Math.sqrt(sum / (end - start));
+  }
+
+  return out;
+}
+
+/**
+ * Trim the near-silent lead-in and trail-off around the actual speech.
+ *
+ * Releasing push-to-talk always leaves a beat of room noise after speech
+ * actually stops, and Whisper does not report a quiet tail as silence — it
+ * hallucinates a word and repeats it, heard as "Kurt Kurt Kurt" at the end of
+ * a take.
+ *
+ * **The threshold tracks the take's own noise floor, not a fraction of its
+ * loudest moment.** A fraction-of-peak threshold shipped first and cut the
+ * take's own opening whenever something said later was louder — natural
+ * speech swings well over 20 dB within a single utterance, so "3% of the
+ * peak" was routinely louder than how the take actually started, and a quiet
+ * opening word read as lead-in silence and vanished with it. Comparing each
+ * ~20ms frame's energy to the quietest tenth of the take instead asks
+ * "louder than the background," not "loud" — a quiet opening still clears
+ * that easily even next to a much louder word later on.
+ */
+export function trimSilence(samples: Float32Array, sampleRate: number): Float32Array {
+  if (samples.length === 0) return samples;
+
+  const peak = peakOf(samples);
+  if (peak === 0) return samples;
+
+  const frameSize = Math.max(1, Math.round(sampleRate * FRAME_SECONDS));
+  const frames = rmsFrames(samples, frameSize);
+
+  const sorted = Float32Array.from(frames).sort();
+  const noiseFloor = sorted[Math.floor(sorted.length * 0.1)] ?? 0;
+  const threshold = Math.max(noiseFloor * NOISE_MARGIN, peak * MIN_THRESHOLD_RATIO);
+
+  const startFrame = frames.findIndex((v) => v >= threshold);
+  // Nothing in this take reads as quieter than the rest of it — nothing to trim.
+  if (startFrame === -1) return samples;
+  let endFrame = frames.length - 1;
+  while (endFrame > startFrame && frames[endFrame]! < threshold) endFrame--;
+
+  const margin = Math.round(sampleRate * TRIM_MARGIN_SECONDS);
+  const start = Math.max(0, startFrame * frameSize - margin);
+  const end = Math.min(samples.length, (endFrame + 1) * frameSize + margin);
+
+  return samples.slice(start, end);
 }
 
 const HEADER_BYTES = 44;
@@ -134,6 +251,17 @@ export async function startCapture(
   constraints: MediaStreamConstraints,
   describe: (track: MediaStreamTrack | undefined) => string,
 ): Promise<CaptureSession> {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    // Bare `navigator.mediaDevices.getUserMedia(...)` throws a raw, unhelpful
+    // TypeError here rather than rejecting — WebKit omits the whole API
+    // rather than exposing a `getUserMedia` that refuses. In `tauri dev` this
+    // fires even with `Info.plist`'s `NSMicrophoneUsageDescription` in place,
+    // because dev mode runs the bare binary, not a bundled `.app` — only a
+    // built app (`tauri build`) gets the Info.plist merged in and can prompt.
+    throw new Error(
+      "this webview has no getUserMedia — expected in `tauri dev` on macOS; a built app should prompt for the microphone",
+    );
+  }
   const stream = await navigator.mediaDevices.getUserMedia(constraints);
   const device = describe(stream.getAudioTracks()[0]);
 
@@ -179,13 +307,18 @@ export async function startCapture(
       void ctx.close();
 
       const raw = concat(chunks);
-      const samples = downsample(raw, rate);
+      const outRate = Math.min(rate, TARGET_RATE);
+      // Trimmed after downsampling, not before: fewer samples to scan, and the
+      // threshold is relative to the take's own peak either way. `peak` and
+      // `seconds` below stay untrimmed — they describe what the microphone
+      // actually heard, which is what "recorded pure silence" has to answer.
+      const samples = trimSilence(downsample(raw, rate), outRate);
       return {
-        wav: encodeWav(samples, Math.min(rate, TARGET_RATE)),
+        wav: encodeWav(samples, outRate),
         bytes: HEADER_BYTES + samples.length * 2,
         peak: peakOf(raw),
         seconds: rate > 0 ? raw.length / rate : 0,
-        sampleRate: Math.min(rate, TARGET_RATE),
+        sampleRate: outRate,
       };
     },
   };

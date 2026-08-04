@@ -6,13 +6,25 @@ import {
   advance,
   motion,
   poseOf,
+  spring,
+  step,
   targetFor,
   type CharacterState,
   type Motion,
+  type Spring,
 } from "../motion";
 import type { LiveSpeech } from "../useVoice";
-import { HOUSE_CHARACTER, type Eyes, type Headwear, type MouthShape, type Part, type Point, type Profile } from "../types";
-import { Eye, HeadwearGlyph, MouthGlyph } from "./proceduralParts";
+import {
+  HOUSE_CHARACTER,
+  type Eyes,
+  type HeadShape,
+  type Headwear,
+  type MouthShape,
+  type Part,
+  type Point,
+  type Profile,
+} from "../types";
+import { EyesGlyph, HeadGlyph, HeadwearGlyph, MouthGlyph } from "./proceduralParts";
 
 /**
  * The character, moving with what is being said and with what is happening.
@@ -34,6 +46,7 @@ export function CharacterStage({
   state,
   problem,
   visible = true,
+  paused = false,
   size = "stage",
 }: {
   profile: Profile | null;
@@ -53,6 +66,17 @@ export function CharacterStage({
   problem: string | null;
   /** A character in a hidden tab must not burn frames. */
   visible?: boolean;
+  /**
+   * Freeze the animation loop where it stands.
+   *
+   * Push-to-talk records through a `ScriptProcessorNode`, whose callback runs
+   * on the main thread rather than a dedicated audio thread — this loop's own
+   * per-frame spring physics and DOM writes are exactly the kind of main-thread
+   * work that delays that callback and glitches the recording. Pausing here
+   * for the hold is cheaper than fixing that contention any other way, and the
+   * character simply holds its listening pose until it lets go.
+   */
+  paused?: boolean;
   size?: "stage" | "inset";
 }) {
   const figure = useRef<HTMLDivElement>(null);
@@ -62,6 +86,11 @@ export function CharacterStage({
   const mouthShape = useRef<SVGGElement>(null);
   const frameEls = useRef<(HTMLImageElement | null)[]>([]);
   const springs = useRef<Motion>(motion());
+  // Rendered mouth openness. Snapped to the raw envelope while something is
+  // actually sounding (see below), then eased the rest of the way — this is
+  // the one spring that is not part of `Motion`/`advance`, since it only ever
+  // runs after speech stops.
+  const mouthSpring = useRef<Spring>(spring(1));
 
   const { frames, error: frameError } = useFrames(profile);
   const { parts, error: partsError } = useParts(profile);
@@ -70,7 +99,7 @@ export function CharacterStage({
   const temperament = profile?.temperament;
 
   useEffect(() => {
-    if (!visible || !temperament) return;
+    if (!visible || !temperament || paused) return;
 
     let raf = 0;
     let last = performance.now();
@@ -115,8 +144,19 @@ export function CharacterStage({
         eyesGroup.current.style.transform = `scaleY(${Math.max(pose.eyes, 0.02).toFixed(3)})`;
       }
       if (mouthShape.current) {
-        mouthShape.current.style.transform =
-          `scaleY(${(0.12 + pose.mouth * 1.5).toFixed(3)})`;
+        // Outside an actual spoken syllable the mouth rests fully open — the
+        // glyph as drawn — rather than pinched by an amplitude of zero. While
+        // sound is really coming through, openness tracks the envelope
+        // exactly (a spring here would read as lip-sync lag); the instant it
+        // stops, the glyph is wherever mid-syllable left it, and popping
+        // straight to the rest pose from there reads as a glitch — so a
+        // spring carries it the rest of the way instead of snapping.
+        if (speaking && sounding) {
+          mouthSpring.current = { value: 0.12 + pose.mouth * 1.15, velocity: 0 };
+        } else {
+          mouthSpring.current = step(mouthSpring.current, 1, dt, 0.5);
+        }
+        mouthShape.current.style.transform = `scaleY(${mouthSpring.current.value.toFixed(3)})`;
       }
 
       if (frameEls.current.length > 0) {
@@ -138,7 +178,7 @@ export function CharacterStage({
 
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [visible, temperament, state, speaking, live, frames.length]);
+  }, [visible, temperament, state, speaking, live, frames.length, paused]);
 
   const inset = size === "inset";
   const layered = parts.length > 0 ? parts : null;
@@ -425,6 +465,7 @@ function ProceduralFace({
   mouthRef: React.RefObject<SVGGElement | null>;
 }) {
   const sprite = profile?.sprite;
+  const headShape: HeadShape = sprite?.kind === "procedural" ? sprite.head_shape : "round";
   const eyes: Eyes = sprite?.kind === "procedural" ? sprite.eyes : "round";
   const mouth: MouthShape = sprite?.kind === "procedural" ? sprite.mouth : "round";
   const headwear: Headwear = sprite?.kind === "procedural" ? sprite.headwear : "none";
@@ -432,30 +473,12 @@ function ProceduralFace({
   return (
     <div ref={headRef} className="absolute inset-0" style={{ transformOrigin: "50% 70%" }}>
       <svg viewBox="0 0 100 100" className="character-svg relative w-full" aria-hidden>
-        <defs>
-          <radialGradient id="char-head" cx="50%" cy="38%" r="62%">
-            <stop offset="0%" stopColor="var(--accent)" stopOpacity="0.30" />
-            <stop offset="70%" stopColor="var(--accent-glow)" stopOpacity="0.16" />
-            <stop offset="100%" stopColor="var(--accent-glow)" stopOpacity="0.03" />
-          </radialGradient>
-        </defs>
-
-        <circle cx="50" cy="50" r="38" fill="url(#char-head)" />
-        <circle
-          cx="50"
-          cy="50"
-          r="38"
-          fill="none"
-          stroke="var(--accent)"
-          strokeOpacity="0.55"
-          strokeWidth="1.2"
-        />
+        <HeadGlyph shape={headShape} />
 
         <HeadwearGlyph shape={headwear} />
 
         <g ref={eyesRef} className="character-eyes">
-          <Eye shape={eyes} side="left" />
-          <Eye shape={eyes} side="right" />
+          <EyesGlyph shape={eyes} />
         </g>
 
         <g ref={mouthRef} className="character-mouth">

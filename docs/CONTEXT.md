@@ -9,7 +9,8 @@ architecture contracts are `../planning/architecture/`. Neither belongs here.
 docs/
 ├─ CONTEXT.md
 └─ guides/
-   └─ build-and-run.md
+   ├─ build-and-run.md
+   └─ procedural-assets-inkscape.md
 ```
 
 ## Routing

@@ -93,12 +93,26 @@ pub enum Sprite {
     /// Drawn in code from the palette. The default, and the reason no character
     /// is ever missing while art does not exist yet.
     Procedural {
-        #[serde(default)]
-        eyes: Eyes,
-        #[serde(default)]
-        mouth: Mouth,
-        #[serde(default)]
-        headwear: Headwear,
+        /// The key of one `assets/procedural/head/<key>.svg` file on the UI
+        /// side. **Open-ended, deliberately** — any string round-trips, so a
+        /// newly dropped-in SVG asset is pickable without either side of the
+        /// Tauri boundary needing a matching enum variant. An unknown key
+        /// simply draws nothing (`proceduralParts.tsx`'s `Part` falls back to
+        /// `null`), the same way a bad `voice` id falls back rather than
+        /// erroring.
+        #[serde(default = "default_round")]
+        head_shape: String,
+        /// The key of one `assets/procedural/eyes/<key>.svg` file.
+        #[serde(default = "default_round")]
+        eyes: String,
+        /// The key of one `assets/procedural/mouth/<key>.svg` file.
+        #[serde(default = "default_round")]
+        mouth: String,
+        /// The key of one `assets/procedural/headwear/<key>.svg` file, or
+        /// `"none"` — the one key that is never a file, meaning "draw
+        /// nothing".
+        #[serde(default = "default_headwear")]
+        headwear: String,
     },
     /// A directory of PNG frames under `characters/profiles/`, swapped by
     /// amplitude. Overrides the procedural renderer entirely.
@@ -203,77 +217,20 @@ impl Default for Temperament {
 impl Default for Sprite {
     fn default() -> Self {
         Sprite::Procedural {
-            eyes: Eyes::default(),
-            mouth: Mouth::default(),
-            headwear: Headwear::default(),
+            head_shape: default_round(),
+            eyes: default_round(),
+            mouth: default_round(),
+            headwear: default_headwear(),
         }
     }
 }
 
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum Eyes {
-    #[default]
-    Round,
-    Wide,
-    Narrow,
-    Visor,
+fn default_round() -> String {
+    "round".to_string()
 }
 
-impl Eyes {
-    /// The TOML value this variant is written as — kept in step with
-    /// `#[serde(rename_all = "kebab-case")]` above by the wire-fixture test,
-    /// the same discipline the sprite tag itself already leans on.
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Eyes::Round => "round",
-            Eyes::Wide => "wide",
-            Eyes::Narrow => "narrow",
-            Eyes::Visor => "visor",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum Mouth {
-    #[default]
-    Round,
-    Wide,
-    Line,
-}
-
-impl Mouth {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Mouth::Round => "round",
-            Mouth::Wide => "wide",
-            Mouth::Line => "line",
-        }
-    }
-}
-
-/// A procedural character's headwear, if any — the third and last axis the
-/// procedural editor exposes alongside `Eyes` and `Mouth`.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum Headwear {
-    #[default]
-    None,
-    Antenna,
-    Horns,
-    Halo,
-}
-
-impl Headwear {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Headwear::None => "none",
-            Headwear::Antenna => "antenna",
-            Headwear::Horns => "horns",
-            Headwear::Halo => "halo",
-        }
-    }
+fn default_headwear() -> String {
+    "none".to_string()
 }
 
 /// The declared half of a profile — exactly what the TOML file may say.
@@ -766,8 +723,8 @@ pub fn set_notes(text: &str, notes: Option<&str>) -> Result<String, String> {
     Ok(doc.to_string())
 }
 
-/// Set a character's sprite to procedural with the given eyes and mouth,
-/// preserving the rest of the file.
+/// Set a character's sprite to procedural with the given head shape, eyes,
+/// mouth, and headwear, preserving the rest of the file.
 ///
 /// **Always writes `kind = "procedural"`.** This is the procedural editor's
 /// own setter — the only one exposed anywhere in this plan's UI — so forcing
@@ -779,9 +736,10 @@ pub fn set_notes(text: &str, notes: Option<&str>) -> Result<String, String> {
 /// Pure, so the rule is testable without a filesystem.
 pub fn set_sprite_procedural(
     text: &str,
-    eyes: Eyes,
-    mouth: Mouth,
-    headwear: Headwear,
+    head_shape: &str,
+    eyes: &str,
+    mouth: &str,
+    headwear: &str,
 ) -> Result<String, String> {
     let mut doc = text
         .parse::<toml_edit::DocumentMut>()
@@ -799,9 +757,10 @@ pub fn set_sprite_procedural(
     // kind's fields.
     sprite.clear();
     sprite["kind"] = toml_edit::value("procedural");
-    sprite["eyes"] = toml_edit::value(eyes.as_str());
-    sprite["mouth"] = toml_edit::value(mouth.as_str());
-    sprite["headwear"] = toml_edit::value(headwear.as_str());
+    sprite["head_shape"] = toml_edit::value(head_shape);
+    sprite["eyes"] = toml_edit::value(eyes);
+    sprite["mouth"] = toml_edit::value(mouth);
+    sprite["headwear"] = toml_edit::value(headwear);
 
     Ok(doc.to_string())
 }
@@ -858,9 +817,10 @@ mod tests {
         assert_eq!(
             p.sprite,
             Sprite::Procedural {
-                eyes: Eyes::Round,
-                mouth: Mouth::Round,
-                headwear: Headwear::None,
+                head_shape: "round".to_string(),
+                eyes: "round".to_string(),
+                mouth: "round".to_string(),
+                headwear: "none".to_string(),
             },
             "procedural is the default, so no character is ever missing"
         );
@@ -903,9 +863,10 @@ mod tests {
         assert_eq!(
             p.sprite,
             Sprite::Procedural {
-                eyes: Eyes::Visor,
-                mouth: Mouth::Line,
-                headwear: Headwear::None,
+                head_shape: "round".to_string(),
+                eyes: "visor".to_string(),
+                mouth: "line".to_string(),
+                headwear: "none".to_string(),
             }
         );
     }
@@ -1002,12 +963,14 @@ mod tests {
         // `undefined` from every health check for a month. Assert the JSON, not
         // the derive.
         let json = serde_json::to_value(Sprite::Procedural {
-            eyes: Eyes::Wide,
-            mouth: Mouth::Line,
-            headwear: Headwear::Horns,
+            head_shape: "square".to_string(),
+            eyes: "wide".to_string(),
+            mouth: "line".to_string(),
+            headwear: "horns".to_string(),
         })
         .unwrap();
         assert_eq!(json["kind"], "procedural");
+        assert_eq!(json["head_shape"], "square");
         assert_eq!(json["eyes"], "wide");
         assert_eq!(json["mouth"], "line");
         assert_eq!(json["headwear"], "horns");
@@ -1248,17 +1211,17 @@ mod tests {
     #[test]
     fn setting_the_procedural_sprite_keeps_the_profile_s_commentary() {
         let before = "# HUD — GIT HUD's own persona.\n\ndisplay = \"HUD\"\n";
-        let after =
-            set_sprite_procedural(before, Eyes::Visor, Mouth::Line, Headwear::Antenna).unwrap();
+        let after = set_sprite_procedural(before, "oval", "visor", "line", "antenna").unwrap();
 
         assert!(after.contains("# HUD — GIT HUD's own persona."));
         let p = Profile::parse("hud", &after).unwrap();
         assert_eq!(
             p.sprite,
             Sprite::Procedural {
-                eyes: Eyes::Visor,
-                mouth: Mouth::Line,
-                headwear: Headwear::Antenna,
+                head_shape: "oval".to_string(),
+                eyes: "visor".to_string(),
+                mouth: "line".to_string(),
+                headwear: "antenna".to_string(),
             }
         );
     }
@@ -1269,16 +1232,16 @@ mod tests {
         // must not leave `dir`/`face`/`pivot` behind claiming a kind the
         // sprite no longer is.
         let before = "[sprite]\nkind = \"layered\"\ndir = \"hud\"\n\n[sprite.pivot]\nhead = [0.5, 0.6]\n";
-        let after =
-            set_sprite_procedural(before, Eyes::Wide, Mouth::Round, Headwear::None).unwrap();
+        let after = set_sprite_procedural(before, "round", "wide", "round", "none").unwrap();
 
         let p = Profile::parse("x", &after).unwrap();
         assert_eq!(
             p.sprite,
             Sprite::Procedural {
-                eyes: Eyes::Wide,
-                mouth: Mouth::Round,
-                headwear: Headwear::None,
+                head_shape: "round".to_string(),
+                eyes: "wide".to_string(),
+                mouth: "round".to_string(),
+                headwear: "none".to_string(),
             }
         );
     }

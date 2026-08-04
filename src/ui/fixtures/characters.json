@@ -13,6 +13,7 @@
       },
       "sprite": {
         "kind": "procedural",
+        "head_shape": "round",
         "eyes": "visor",
         "mouth": "line",
         "headwear": "none"
@@ -96,6 +97,7 @@
       },
       "sprite": {
         "kind": "procedural",
+        "head_shape": "square",
         "eyes": "wide",
         "mouth": "round",
         "headwear": "none"
