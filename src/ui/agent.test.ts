@@ -48,6 +48,23 @@ describe("chat transcript", () => {
     expect(s.entries[0]).toMatchObject({ kind: "assistant", text: "Done." });
   });
 
+  it("shows a notice event durably, unlike a status detail", () => {
+    // A `notice` (e.g. reporting `/clear`) must survive the rest of its own
+    // turn — a `status` used for the same purpose would be overwritten by
+    // the `turn_ended` that follows moments later in a real session.
+    let s = apply(initialChatState, {
+      type: "notice",
+      text: "Conversation cleared.",
+    });
+    expect(s.entries[0]).toMatchObject({
+      kind: "notice",
+      text: "Conversation cleared.",
+    });
+
+    s = apply(s, { type: "turn_ended", stop_reason: "end_turn" });
+    expect(s.entries[0]).toMatchObject({ kind: "notice" });
+  });
+
   it("shows a tool call as running until its result arrives", () => {
     let s = apply(initialChatState, {
       type: "tool_call",

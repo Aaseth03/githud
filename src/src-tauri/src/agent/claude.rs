@@ -78,6 +78,20 @@ pub fn map_line(project: &str, line: &str) -> Vec<AgentEvent> {
         Some("assistant") => map_assistant(&v),
         Some("user") => map_user(&v),
         Some("result") => map_result(&v),
+        // `/clear` and similar: the CLI starts a fresh conversation on the
+        // same process and immediately follows with a new `system`/`init`
+        // line carrying the new session id — that line already becomes
+        // `SessionStarted` via the case above, which is what keeps `--resume`
+        // pointed at the right conversation after a later STOP. This line by
+        // itself only needs to be *seen*, so the command's effect shows up
+        // in the chat rather than silently vanishing. `Notice`, not
+        // `Status`: the `result` line that ends this same turn overwrites
+        // `Status.detail` a few lines later, so a status-shaped report of
+        // this would flicker and disappear before anyone saw it — verified
+        // against a real `/clear` turn, not assumed.
+        Some("conversation_reset") => vec![AgentEvent::Notice {
+            text: "Conversation cleared.".to_string(),
+        }],
         _ => Vec::new(),
     }
     .into_iter()
@@ -126,10 +140,17 @@ fn map_assistant(v: &Value) -> Vec<AgentEvent> {
         match block.get("type").and_then(Value::as_str) {
             Some("text") => {
                 if let Some(text) = block.get("text").and_then(Value::as_str) {
-                    out.push(AgentEvent::AssistantText {
-                        text: text.to_string(),
-                        is_final: true,
-                    });
+                    // The CLI's own placeholder for a turn with nothing to
+                    // say — observed after `/clear` — is text, not silence.
+                    // Rendered verbatim it reads as the assistant saying
+                    // "(no content)", which is a CLI-internal sentinel, not
+                    // something anyone typed or meant to convey.
+                    if !text.is_empty() && text != "(no content)" {
+                        out.push(AgentEvent::AssistantText {
+                            text: text.to_string(),
+                            is_final: true,
+                        });
+                    }
                 }
             }
             Some("thinking") => out.push(AgentEvent::Status {
@@ -209,8 +230,9 @@ fn map_result(v: &Value) -> Vec<AgentEvent> {
     }
 
     if v.get("is_error").and_then(Value::as_bool).unwrap_or(false) {
+        let raw = str_at(v, "result").unwrap_or_else(|| "the turn failed".into());
         out.push(AgentEvent::Error {
-            message: str_at(v, "result").unwrap_or_else(|| "the turn failed".into()),
+            message: explain_if_auth_failure(&raw),
             fatal: false,
         });
     }
@@ -223,6 +245,32 @@ fn map_result(v: &Value) -> Vec<AgentEvent> {
         stop_reason: str_at(v, "stop_reason"),
     });
     out
+}
+
+/// `/login` needs a real terminal and a browser for its OAuth flow — the
+/// `--print`/`stream-json` channel this app talks over can never provide
+/// either one, sandboxed or not. That is a property of running headless, not
+/// a bug this app can fix, so a failure that looks like it the CLI's own
+/// wording points at `/login`, or says outright that it isn't available
+/// here — is rewritten to say what actually works: log in once in the
+/// Terminal pane (the app's other, unsandboxed, interactive channel), which
+/// shares the same credential store this chat's sessions read from.
+fn explain_if_auth_failure(raw: &str) -> String {
+    let lower = raw.to_lowercase();
+    let is_auth_issue = lower.contains("not logged in")
+        || lower.contains("/login")
+        || lower.contains("isn't available in this environment");
+
+    if !is_auth_issue {
+        return raw.to_string();
+    }
+
+    format!(
+        "{raw} — this chat can't run `/login` itself: it needs a real \
+         terminal and a browser for the sign-in flow, which this window \
+         doesn't have. Open the Terminal pane, run `claude`, and follow \
+         `/login` there once — this chat reads the same login afterward."
+    )
 }
 
 /// The human-readable target of a tool call.
@@ -373,6 +421,16 @@ mod tests {
                 is_final: true
             }]
         );
+    }
+
+    #[test]
+    fn the_no_content_placeholder_is_not_shown_as_a_message() {
+        // Observed verbatim after a real `/clear` turn — a CLI-internal
+        // sentinel for "nothing to say," not something to render as if the
+        // assistant said it.
+        let line = r#"{"type":"assistant","message":{"content":[{"type":"text","text":"(no content)"}]}}"#;
+
+        assert!(map_line("p", line).is_empty());
     }
 
     #[test]
@@ -553,6 +611,68 @@ mod tests {
         assert!(events
             .iter()
             .any(|e| matches!(e, AgentEvent::Status { state: Activity::Idle, .. })));
+    }
+
+    #[test]
+    fn not_logged_in_is_pointed_at_the_terminal_pane() {
+        // Reported verbatim: the CLI's own "Not logged in" message, in a
+        // chat that cannot run `/login` itself (D27's Keychain-access fix
+        // makes this rare, but the CLI can still expire a token).
+        let line = r#"{"type":"result","subtype":"error","is_error":true,"result":"Not logged in · Please run /login"}"#;
+
+        let events = map_line("p", line);
+
+        assert!(matches!(
+            &events[0],
+            AgentEvent::Error { message, fatal }
+                if message.contains("Not logged in")
+                    && message.contains("Terminal pane")
+                    && !fatal
+        ));
+    }
+
+    #[test]
+    fn login_not_available_in_this_environment_is_explained() {
+        // Reported verbatim: what the CLI says when `/login` itself is
+        // attempted over the non-interactive `--print` channel.
+        let line = r#"{"type":"result","subtype":"error","is_error":true,"result":"/login isn't available in this environment."}"#;
+
+        let events = map_line("p", line);
+
+        assert!(matches!(
+            &events[0],
+            AgentEvent::Error { message, .. } if message.contains("Terminal pane")
+        ));
+    }
+
+    #[test]
+    fn an_unrelated_error_is_left_alone() {
+        let line = r#"{"type":"result","subtype":"error","is_error":true,"result":"rate limited"}"#;
+
+        let events = map_line("p", line);
+
+        assert!(matches!(
+            &events[0],
+            AgentEvent::Error { message, .. } if message == "rate limited"
+        ));
+    }
+
+    #[test]
+    fn a_conversation_reset_is_seen_rather_than_dropped() {
+        // `/clear` and similar: the line itself carries no session id (the
+        // CLI's follow-up `system`/`init` line does, and already becomes
+        // `SessionStarted` via the existing case) — this one only needs to
+        // be visible, so the command's effect shows up in the chat. A
+        // `Notice`, not a `Status`: the `result` line ending this same turn
+        // would otherwise overwrite `Status.detail` before anyone saw it.
+        let line = r#"{"type":"conversation_reset","new_conversation_id":"abc","session_id":"old"}"#;
+
+        assert_eq!(
+            map_line("p", line),
+            vec![AgentEvent::Notice {
+                text: "Conversation cleared.".into(),
+            }]
+        );
     }
 
     #[test]

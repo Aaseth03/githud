@@ -104,18 +104,32 @@ Xcode Command Line Tools, if not already present:
 xcode-select --install
 ```
 
-Nothing else — Tauri v2 on macOS links against system WebKit, so there is no
-Linux-style devel-package list to install.
+That's it for the build itself — Tauri v2 on macOS links against system
+WebKit, so there is no Linux-style devel-package list to install.
+
+**The agent's sandbox floor needs nothing installed either.** GIT HUD refuses
+to start the agent without its sandbox floor (D16, D19) — on Linux that floor
+is `bwrap` (see below), but `bwrap` cannot run on macOS at all (it wraps Linux
+kernel namespaces with no macOS port; confirmed via `brew install bubblewrap`
+failing outright — no bottle, unsupported tier). macOS instead gets its floor
+from Apple's built-in Seatbelt (`sandbox-exec`), which ships with every macOS
+install — there is nothing to `brew install` for this. See
+[D27](../../planning/decisions/2026-08-04-D27-macos-sandbox-floor.md) for what
+that floor covers and where it is deliberately narrower than the Linux one.
 
 ### Linux (Fedora / Nobara)
 
 ```bash
 sudo dnf install webkit2gtk4.1-devel openssl-devel curl wget file \
-                 librsvg2-devel gtk3-devel
+                 librsvg2-devel gtk3-devel bubblewrap
 ```
 
-`webkit2gtk4.1-devel` is the one that actually matters; without it the Rust
-build fails at link time.
+`webkit2gtk4.1-devel` is the one that actually matters for the build itself;
+without it the Rust build fails at link time. `bubblewrap` is a separate,
+runtime requirement — the agent's sandbox floor (D16, D19) — not a build
+dependency, but GIT HUD will not start an agent session without it, so it
+belongs in the same install step. Other distros: `sudo apt install
+bubblewrap` (Debian/Ubuntu) or `sudo pacman -S bubblewrap` (Arch).
 
 **`libappindicator-gtk3-devel` is not required.** It appears in Tauri's generic
 Linux instructions but is only needed for a system tray, which GIT HUD does not

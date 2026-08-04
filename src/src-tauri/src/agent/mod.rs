@@ -94,6 +94,90 @@ fn which(binary: &str) -> Option<std::path::PathBuf> {
         .find(|candidate| candidate.is_file())
 }
 
+/// Build the sandbox invocation: which binary to run, and its full argv up
+/// to and including the wrapped `program`/`program_args`. Platform-specific
+/// (D27) — Linux wraps with `bwrap`, macOS with Seatbelt — so this is the one
+/// place `agent::start` needs to branch, rather than hard-coding a binary.
+#[cfg(target_os = "linux")]
+fn sandbox_command(
+    cwd: &Path,
+    home: &Path,
+    _data_home: &Path,
+    access: Access,
+    program: String,
+    program_args: Vec<String>,
+) -> Result<(String, Vec<String>), String> {
+    let mut argv = guard::sandbox(cwd, home, access);
+    argv.push(program);
+    argv.extend(program_args);
+    Ok(("bwrap".to_string(), argv))
+}
+
+/// The macOS equivalent. `sandbox-exec` execs into its target in place rather
+/// than staying alive as a supervisor the way `bwrap` does, so there is no
+/// outer argv to carry the reap mark (D27) — instead the final command is
+/// run through `/bin/bash -c 'exec -a "$0" "$1" "${@:2}"'`, which spoofs
+/// argv[0] of the real, exec'd process to `guard::MARK`. `ucomm` (the kernel
+/// accounting name `ps` reports) stays truthful to the real binary; only
+/// `args`/`command` carry the mark, which is exactly what `reap::sweep`
+/// scans for on macOS. Every piece is passed as a separate `Command` arg —
+/// nothing here is shell-parsed, so there is no injection surface despite
+/// the bash-script-shaped tail.
+#[cfg(target_os = "macos")]
+fn sandbox_command(
+    cwd: &Path,
+    home: &Path,
+    data_home: &Path,
+    access: Access,
+    program: String,
+    program_args: Vec<String>,
+) -> Result<(String, Vec<String>), String> {
+    let profile_text = guard::macos::profile(home, access);
+    let profile_path = guard::macos::install(data_home, &profile_text)
+        .map_err(|e| format!("could not write the sandbox profile: {e}"))?;
+    let defines = guard::macos::define_args(cwd, home, access)
+        .map_err(|e| format!("could not resolve sandbox paths: {e}"))?;
+
+    let mut argv = vec![
+        "-f".to_string(),
+        profile_path.to_string_lossy().into_owned(),
+    ];
+    for kv in defines {
+        argv.push("-D".to_string());
+        argv.push(kv);
+    }
+    argv.push("--".to_string());
+    argv.push("/bin/bash".to_string());
+    argv.push("-c".to_string());
+    argv.push(r#"exec -a "$0" "$1" "${@:2}""#.to_string());
+    argv.push(guard::MARK.to_string());
+    argv.push(program);
+    argv.extend(program_args);
+
+    Ok(("sandbox-exec".to_string(), argv))
+}
+
+/// What to tell the user when `guard::available()` is false — named after
+/// whichever binary is actually this platform's floor (D27), never
+/// hard-coded to one, since a Linux message on macOS would send someone to
+/// `brew install bubblewrap`, which fails outright and helps nobody.
+#[cfg(target_os = "linux")]
+fn floor_missing_message() -> String {
+    "`bwrap` is not installed, so the agent sandbox cannot be created. \
+     GIT HUD will not run an agent without its floor — install \
+     bubblewrap, or use the Terminal pane."
+        .to_string()
+}
+
+#[cfg(target_os = "macos")]
+fn floor_missing_message() -> String {
+    "`sandbox-exec` is not available, so the agent sandbox cannot be created. \
+     GIT HUD will not run an agent without its floor. This ships with every \
+     macOS install, so its absence here is unexpected — use the Terminal \
+     pane in the meantime."
+        .to_string()
+}
+
 struct Session {
     child: Child,
     stdin: std::process::ChildStdin,
@@ -171,12 +255,9 @@ impl Agents {
         }
 
         // A floor that silently is not there is worse than no floor, because
-        // you would act as though it were (D19).
+        // you would act as though it were (D19, D27).
         if !guard::available() {
-            return Err("`bwrap` is not installed, so the agent sandbox cannot be created. \
-                        GIT HUD will not run an agent without its floor — install \
-                        bubblewrap, or use the Terminal pane."
-                .to_string());
+            return Err(floor_missing_message());
         }
 
         let home = dirs::home_dir().ok_or("could not resolve the home directory")?;
@@ -187,13 +268,21 @@ impl Agents {
         shim::install(&data_home).map_err(|e| format!("could not install the shim: {e}"))?;
         let agent_path = shim::agent_path(&data_home, &std::env::var("PATH").unwrap_or_default());
 
-        // bwrap wraps the harness; the harness never sees outside its scope.
+        // The sandbox wraps the harness; the harness never sees outside its
+        // scope. Which binary and argv that means is platform-specific (D27)
+        // — bwrap on Linux, Seatbelt on macOS — so it is built by
+        // `sandbox_command` rather than hard-coded here.
         let resume = self.resumable_session(id);
-        let mut argv = guard::sandbox(cwd, &home, access);
-        argv.push(adapter.binary().to_string());
-        argv.extend(adapter.args(model, resume.as_deref()));
+        let (sandbox_bin, argv) = sandbox_command(
+            cwd,
+            &home,
+            &data_home,
+            access,
+            adapter.binary().to_string(),
+            adapter.args(model, resume.as_deref()),
+        )?;
 
-        let mut child = Command::new("bwrap")
+        let mut child = Command::new(sandbox_bin)
             .args(&argv)
             .current_dir(cwd)
             // The shim goes into the *agent's* environment only. The terminal

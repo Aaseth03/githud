@@ -57,6 +57,14 @@ pub enum AgentEvent {
         message: String,
         fatal: bool,
     },
+    /// Something the harness did that is worth saying out loud rather than
+    /// leaving silent — a command's effect, not a status blip. Unlike
+    /// `Status.detail`, this must survive to the next event: a `/clear`
+    /// reported this way and then immediately overwritten by the next
+    /// `Status` in the same turn would never be seen at all.
+    Notice {
+        text: String,
+    },
     /// The **session** ended — not a turn.
     ///
     /// A harness that reports the end of a turn must not produce this, or the

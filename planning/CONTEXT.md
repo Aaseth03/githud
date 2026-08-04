@@ -126,6 +126,7 @@ its job on the day it is overturned.**
 | D24 | [Personal config goes local](decisions/2026-08-01-D24-personal-config-goes-local.md) — a project's own kind, note, character, and theme are gitignored, never shipped |
 | D25 | [Character types are sub-workspaces](decisions/2026-08-02-D25-character-types-are-sub-workspaces.md) — `procedural/`, `layered/`, `frames/` each hold their own spec, pipeline and lessons — amends D23's tree clause |
 | D26 | [Character library with project pointers](decisions/2026-08-02-D26-character-library-with-project-pointers.md) — a character lives in its own local library, keyed by id; a project holds a pointer, not an embedded copy — amends D24's storage-shape clause |
+| D27 | [The macOS floor is Seatbelt](decisions/2026-08-04-D27-macos-sandbox-floor.md), narrower than Linux's `bwrap` on purpose — `bwrap` cannot exist on macOS at all |
 
 ## Architecture
 

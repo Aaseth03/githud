@@ -3,7 +3,8 @@
 //! M4 ships on green only: **every denied operation attempted and blocked,
 //! every allowed operation attempted and passing.** Asserting the argv is not
 //! enough — a floor you have not stood on is a floor you are guessing about.
-//! These run real `bwrap` and the real generated shim.
+//! These run real `bwrap` (Linux) or real `sandbox-exec` (macOS, D27) and the
+//! real generated shim.
 //!
 //! ```text
 //! cargo test --test guardrails
@@ -12,7 +13,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use githud_lib::guard::{self, shim, Access};
+use githud_lib::guard::shim;
 
 const BLOCKED: i32 = 97;
 
@@ -23,146 +24,116 @@ fn scratch(tag: &str) -> PathBuf {
     p
 }
 
-/// Run a shell command inside the sandbox, returning (exit code, stderr).
-fn in_sandbox(project: &Path, home: &Path, access: Access, script: &str) -> (i32, String) {
-    let mut args = guard::sandbox(project, home, access);
-    args.extend(["/bin/bash".into(), "-c".into(), script.into()]);
+// ── The floor: bwrap (Linux) ─────────────────────────────────────────────────
 
-    let out = Command::new("bwrap")
-        .args(&args)
-        .current_dir(project)
-        .output()
-        .expect("bwrap should run");
+#[cfg(target_os = "linux")]
+mod linux_floor {
+    use super::scratch;
+    use std::path::Path;
+    use std::process::Command;
 
-    (
-        out.status.code().unwrap_or(-1),
-        String::from_utf8_lossy(&out.stderr).into_owned(),
-    )
-}
+    use githud_lib::guard::{self, Access};
 
-// ── The floor: bwrap ─────────────────────────────────────────────────────────
+    /// Run a shell command inside the sandbox, returning (exit code, stderr).
+    fn in_sandbox(project: &Path, home: &Path, access: Access, script: &str) -> (i32, String) {
+        let mut args = guard::sandbox(project, home, access);
+        args.extend(["/bin/bash".into(), "-c".into(), script.into()]);
 
-#[test]
-fn writing_inside_the_project_is_allowed() {
-    if !guard::available() {
-        panic!("bwrap is required — the agent must not start without the floor");
-    }
-    let project = scratch("write-in");
-    let home = dirs::home_dir().unwrap();
+        let out = Command::new("bwrap")
+            .args(&args)
+            .current_dir(project)
+            .output()
+            .expect("bwrap should run");
 
-    let (code, err) = in_sandbox(
-        &project,
-        &home,
-        Access::ReadWrite,
-        "echo hello > allowed.txt && cat allowed.txt",
-    );
-
-    assert_eq!(code, 0, "an allowed write failed: {err}");
-    assert!(project.join("allowed.txt").is_file());
-}
-
-#[test]
-fn writing_outside_the_project_is_impossible() {
-    let project = scratch("write-out");
-    let home = dirs::home_dir().unwrap();
-    let outside = scratch("outside");
-
-    let (code, _) = in_sandbox(
-        &project,
-        &home,
-        Access::ReadWrite,
-        &format!("echo pwned > {}/escaped.txt", outside.display()),
-    );
-
-    assert_ne!(code, 0, "the sandbox let a write escape the project");
-    assert!(
-        !outside.join("escaped.txt").exists(),
-        "a file was created outside the project — the floor does not hold"
-    );
-}
-
-#[test]
-fn a_read_only_project_cannot_be_written() {
-    // D18 becomes enforcement here rather than a label.
-    let project = scratch("ro");
-    let home = dirs::home_dir().unwrap();
-
-    let (code, _) = in_sandbox(&project, &home, Access::ReadOnly, "echo x > nope.txt");
-
-    assert_ne!(code, 0, "a read-only project accepted a write");
-    assert!(!project.join("nope.txt").exists());
-}
-
-#[test]
-fn ssh_keys_are_masked_when_they_exist() {
-    // Readable is enough to steal, so masking matters more than write denial.
-    // On a machine with no ~/.ssh there is nothing to assert, and saying the
-    // test passed would be claiming a guarantee that was never exercised.
-    let real_home = dirs::home_dir().unwrap();
-    if !real_home.join(".ssh").exists() {
-        eprintln!("skipped: no ~/.ssh on this machine, nothing to mask");
-        return;
+        (
+            out.status.code().unwrap_or(-1),
+            String::from_utf8_lossy(&out.stderr).into_owned(),
+        )
     }
 
-    let project = scratch("ssh");
-    let (code, _) = in_sandbox(
-        &project,
-        &real_home,
-        Access::ReadWrite,
-        "ls -A ~/.ssh | grep -q .",
-    );
-
-    assert_ne!(code, 0, "~/.ssh had readable contents inside the sandbox");
+    include!("guardrails_support/floor_cases.rs");
 }
 
-#[test]
-fn a_planted_ssh_directory_is_masked() {
-    // The guarantee itself, exercised against a home that definitely has keys —
-    // so it is proven rather than skipped on this particular machine.
-    let home = scratch("ssh-home");
-    std::fs::create_dir_all(home.join(".ssh")).unwrap();
-    std::fs::write(home.join(".ssh/id_ed25519"), "PRIVATE KEY").unwrap();
-    let project = scratch("ssh-proj");
+// ── The floor: Seatbelt (macOS, D27) ─────────────────────────────────────────
 
-    let (code, _) = in_sandbox(
-        &project,
-        &home,
-        Access::ReadWrite,
-        &format!("cat {}/.ssh/id_ed25519", home.display()),
-    );
+#[cfg(target_os = "macos")]
+mod macos_floor {
+    use super::scratch;
+    use std::path::Path;
+    use std::process::Command;
 
-    assert_ne!(code, 0, "a private key was readable inside the sandbox");
-}
+    use githud_lib::guard::{self, macos, Access};
 
-#[test]
-fn the_home_directory_cannot_be_written() {
-    let project = scratch("home-write");
-    let home = dirs::home_dir().unwrap();
+    /// Run a shell command inside the sandbox, returning (exit code, stderr).
+    /// Unlike the agent's own invocation (`agent::sandbox_command`), this
+    /// skips the `exec -a` mark spoof — these tests exercise the filesystem
+    /// floor, not the reap mechanism, so plain `bash -c` is enough.
+    fn in_sandbox(project: &Path, home: &Path, access: Access, script: &str) -> (i32, String) {
+        // Nested under `project`, which every caller already makes unique via
+        // `scratch()` — keeps each test's profile file isolated from every
+        // other test running in parallel, without a new uniqueness scheme.
+        let data_home = project.join(".githud-sandbox-data");
+        let profile_text = macos::profile(home, access);
+        let profile_path =
+            macos::install(&data_home, &profile_text).expect("profile should install");
+        let defines = macos::define_args(project, home, access).expect("paths should resolve");
 
-    let (code, _) = in_sandbox(
-        &project,
-        &home,
-        Access::ReadWrite,
-        "echo x > ~/githud-should-not-exist.txt",
-    );
+        let mut args = vec![
+            "-f".to_string(),
+            profile_path.to_string_lossy().into_owned(),
+        ];
+        for kv in defines {
+            args.push("-D".to_string());
+            args.push(kv);
+        }
+        args.push("--".to_string());
+        args.push("/bin/bash".to_string());
+        args.push("-c".to_string());
+        args.push(script.to_string());
 
-    assert_ne!(code, 0, "the sandbox allowed a write to $HOME");
-    assert!(!home.join("githud-should-not-exist.txt").exists());
-}
+        let out = Command::new("sandbox-exec")
+            .args(&args)
+            .current_dir(project)
+            .output()
+            .expect("sandbox-exec should run");
 
-#[test]
-fn gitconfig_is_readable_but_not_writable() {
-    let project = scratch("gitcfg");
-    let home = dirs::home_dir().unwrap();
-    if !home.join(".gitconfig").is_file() {
-        return; // Nothing to assert on this machine.
+        (
+            out.status.code().unwrap_or(-1),
+            String::from_utf8_lossy(&out.stderr).into_owned(),
+        )
     }
 
-    let (read, _) = in_sandbox(&project, &home, Access::ReadWrite, "cat ~/.gitconfig >/dev/null");
-    assert_eq!(read, 0, "git needs to read an identity to commit");
+    include!("guardrails_support/floor_cases.rs");
 
-    let (write, _) = in_sandbox(&project, &home, Access::ReadWrite, "echo x >> ~/.gitconfig");
-    assert_ne!(write, 0, "the agent must not be able to rewrite git identity");
+    /// Regression test for a real bug: the first profile denied writes to
+    /// the Darwin per-user cache dir (`getconf DARWIN_USER_CACHE_DIR`), which
+    /// broke `security`(1)'s Keychain lock file and made Claude Code's OAuth
+    /// token — stored in the Keychain — permanently unreadable, reporting
+    /// "not logged in" no matter how valid the token was. Caught by actually
+    /// invoking `claude` under the real profile, not by asserting argv.
+    #[test]
+    fn the_system_cache_dir_is_writable_so_keychain_access_works() {
+        let out = std::process::Command::new("getconf")
+            .arg("DARWIN_USER_CACHE_DIR")
+            .output()
+            .expect("getconf should run");
+        let cache_dir = String::from_utf8_lossy(&out.stdout).trim().to_string();
+
+        let project = scratch("cache-dir");
+        let home = dirs::home_dir().unwrap();
+
+        let (code, err) = in_sandbox(
+            &project,
+            &home,
+            Access::ReadWrite,
+            &format!(
+                "echo probe > '{cache_dir}/githud-cache-dir-probe.txt' && \
+                 rm -f '{cache_dir}/githud-cache-dir-probe.txt'"
+            ),
+        );
+
+        assert_eq!(code, 0, "the system cache dir must be writable: {err}");
+    }
 }
 
 // ── The guard: the PATH shim ─────────────────────────────────────────────────

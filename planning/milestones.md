@@ -167,6 +167,18 @@ blocked, every allowed op attempted and passing. Ship on green only.
 - [x] Confirmed by hand 2026-07-29 — an edit inside the project succeeded, an
       attempt to reach outside it was blocked, and starting a chat on a branch
       with uncommitted changes switched and said so
+- [x] **macOS gets its own floor** — 2026-08-04:
+      [D27](decisions/2026-08-04-D27-macos-sandbox-floor.md). `bwrap` cannot
+      run on macOS at all (it wraps Linux kernel namespaces), so the agent
+      would not start there under M4's original, Linux-only design. Seatbelt
+      (`sandbox-exec`, bundled with macOS) is the replacement floor —
+      narrower than the Linux one on purpose, and the gap is stated in D27
+      rather than papered over. Two real bugs (a blanket `/dev` deny, and the
+      whole `$TMPDIR` granted instead of one scratch subdirectory) and a
+      third found the same day in real use (Keychain access blocked, which
+      broke Claude Code's login) were each caught by running the real
+      sandbox, not by asserting profile text — `cargo test --test
+      guardrails` now covers both platforms
 
 ### M5 — Panels and project cards
 **Status:** done

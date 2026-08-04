@@ -28,21 +28,35 @@ inspects `argv` and exits non-zero on a denied op. This works for every harness
 because they all shell out. It is bypassable by absolute path, so it is a guard,
 not a floor — treat it as one.
 
-**Layer 2 — bwrap filesystem scoping. This is the floor. Built at M4.** Scope in
-[D19](../decisions/2026-07-28-D19-sandbox-scope.md); implementation in
-`src/src-tauri/src/guard/`; proved by `cargo test --test guardrails` and by a
-live test that asks the real agent to write outside its project and confirms it
-cannot.
+**Layer 2 — filesystem scoping. This is the floor. Built at M4, macOS added at
+D27.** Scope in [D19](../decisions/2026-07-28-D19-sandbox-scope.md) (Linux) and
+[D27](../decisions/2026-08-04-D27-macos-sandbox-floor.md) (macOS);
+implementation in `src/src-tauri/src/guard/`; proved by `cargo test --test
+guardrails` on both platforms and by a live test that asks the real agent to
+write outside its project and confirms it cannot.
 
-Promoted out of "deferred" by D16 when Layer 3 turned out not to exist. The
-agent runs inside bubblewrap with an explicit scope. Unlike the shim it does not
-care which binary is invoked or by what path: **a process cannot write outside
-its bind mounts.** Everything is read-only by default and writability is granted
-by exception — the project directory, and the harness's own state. `~/.ssh` is
-masked with an empty tmpfs rather than left unbound, because `--ro-bind /` would
-otherwise expose it and readable is enough to steal. `~/.gitconfig` is readable
-so `git commit` has an identity, and not writable so the agent cannot rewrite
-one.
+Promoted out of "deferred" by D16 when Layer 3 turned out not to exist. On
+Linux, the agent runs inside bubblewrap with an explicit scope: everything is
+read-only by default and writability is granted by exception — the project
+directory, and the harness's own state. `~/.ssh` is masked with an empty tmpfs
+rather than left unbound, because `--ro-bind /` would otherwise expose it and
+readable is enough to steal. `~/.gitconfig` is readable so `git commit` has an
+identity, and not writable so the agent cannot rewrite one.
+
+**`bwrap` cannot exist on macOS at all** — it wraps Linux kernel user/mount
+namespaces, confirmed to have no macOS port (D27). Since Layer 2 is the floor
+and "no floor" already means "must not start" (D16, D19), macOS gets its own
+mechanism rather than going without: Apple's built-in Seatbelt (`sandbox-exec`,
+no install needed). It inverts the Linux model — `(allow default)` narrowed by
+explicit denies, rather than deny-everything narrowed by explicit allows —
+because Seatbelt's `(deny default)` mode needs a large, empirically-derived
+allowlist to run any real binary at all (confirmed against OpenAI Codex's own
+shipping profiles for the identical problem, at ~250 lines). The practical
+result is genuinely narrower than Linux's: **on macOS the agent can read
+arbitrary files elsewhere on disk**, where Linux's `--ro-bind / /` makes that
+false. It still cannot write outside its granted paths, and still cannot read
+`~/.ssh`. D27 states every part of this gap plainly — read it before assuming
+parity with the Linux floor.
 
 **Layer 3 — remote branch protection. Currently unavailable.** See the finding
 below. It only ever protected shared history; it was never going to stop local
@@ -50,18 +64,20 @@ destruction.
 
 ## Default-deny
 
-**Green as of M4.** `cargo test --test guardrails` attempts every denied
-operation and every allowed one against real `bwrap` and the real generated
-shim — asserting the argv is not enough, because a floor you have not stood on
-is a floor you are guessing about.
+**Green as of M4 (Linux), D27 (macOS).** `cargo test --test guardrails`
+attempts every denied operation and every allowed one against the real floor —
+`bwrap` on Linux, `sandbox-exec` on macOS — and the real generated shim —
+asserting the argv or profile text is not enough, because a floor you have not
+stood on is a floor you are guessing about.
 
-What it proves: a write inside the project succeeds; a write outside is
-impossible; `$HOME` is unwritable; a planted SSH key is unreadable; a
-`read-only` project rejects writes; `~/.gitconfig` reads but does not write; and
-every denied `git`/`gh`/`rm`/`sudo` invocation exits 97 while the allowed ones
-pass through.
+What it proves, on both platforms: a write inside the project succeeds; a
+write outside is impossible; `$HOME` is unwritable; a planted SSH key is
+unreadable; a `read-only` project rejects writes; `~/.gitconfig` reads but does
+not write; and every denied `git`/`gh`/`rm`/`sudo` invocation exits 97 while the
+allowed ones pass through.
 
-**If `bwrap` is missing the agent does not start.** A floor that silently is not
+**If the platform's floor is missing, the agent does not start.** `bwrap` on
+Linux, `sandbox-exec` on macOS (D27) — either way, a floor that silently is not
 there is worse than no floor, because you would act as though it were.
 
 ## Open risk — resolved 2026-07-28, badly

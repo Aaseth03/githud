@@ -21,6 +21,7 @@ export type AgentEvent =
   | { type: "tool_result"; id: string; ok: boolean; detail: string | null }
   | { type: "status"; state: Activity; detail: string | null }
   | { type: "error"; message: string; fatal: boolean }
+  | { type: "notice"; text: string }
   | { type: "session_ended"; reason: string }
   | { type: "turn_ended"; stop_reason: string | null };
 
@@ -173,6 +174,9 @@ export function applyEvent(state: ChatState, event: AgentEvent): ChatState {
         activity: event.fatal ? "idle" : state.activity,
         detail: event.fatal ? null : state.detail,
       };
+
+    case "notice":
+      return appendNotice(state, event.text);
 
     case "turn_ended":
       // A turn ending is not the session ending. The session stays open and

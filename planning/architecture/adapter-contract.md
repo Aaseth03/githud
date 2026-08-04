@@ -93,7 +93,8 @@ One JSON object per line on stdout. Observed types, and where each maps in
 | `user` → `content[].tool_result` | `tool_use_id`, `is_error`, `content` | `tool.result` |
 | `system` / `thinking_tokens` | running token estimate | progress only |
 | `rate_limit_event` | quota status | informational |
-| `result` | `subtype`, `stop_reason`, `session_id`, `total_cost_usd` | `session.ended` |
+| `result` | `subtype`, `stop_reason`, `session_id`, `total_cost_usd`, `is_error` | `turn.ended` (+ `error` if `is_error`) |
+| `conversation_reset` | `new_conversation_id` | `status { detail: "conversation cleared" }` |
 
 **`tool_use.input.file_path` is what makes the status indicator honest** — it
 gives the real path, so the indicator can say `reading src/main.rs` rather than
@@ -101,6 +102,27 @@ inventing a word. That was the specific M3 requirement.
 
 A `result` line ends a *turn*, not the session. The process keeps running and
 accepts the next message.
+
+**`/clear` (and presumably other conversation-resetting commands) emit
+`conversation_reset` immediately followed by a fresh `system`/`init` line
+carrying a new `session_id`, on the same process.** The `init` line already
+becomes `session.started` via the case above — which is also what keeps
+`--resume` pointed at the right conversation after a later STOP, since
+`remember_session` fires on every `session.started`, not only the first. The
+`conversation_reset` line itself carries no session id and exists only so the
+command's effect is *seen* rather than silently dropped (`event-schema.md`'s
+"unknown types are logged and dropped" would otherwise apply here too).
+
+**A `result` whose text names `/login`, or says it "isn't available in this
+environment," is rewritten before becoming an `error` event** — verified
+against real CLI output. `/login`'s OAuth flow needs a real terminal and a
+browser, neither of which the `--print`/`stream-json` channel can ever
+provide; that failure is a property of running headless, not something a
+sandbox fix can address (unlike the *separate*, real bug fixed in D27, where
+the sandbox blocked reading a token that was already valid). The rewrite
+points at the Terminal pane — the app's other, interactive channel — as the
+one place `/login` can actually run, since it shares the same credential
+store this chat's sessions read from.
 
 ### Permission mode — `bypassPermissions` since M4
 

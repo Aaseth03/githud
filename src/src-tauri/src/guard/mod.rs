@@ -2,8 +2,12 @@
 //!
 //! Two layers, and they are not equivalent:
 //!
-//! - **bwrap is the floor** (D16, D19). It does not care which binary is called
-//!   or by what path; a process cannot write outside its bind mounts.
+//! - **The sandbox is the floor** (D16, D19, D27). On Linux it is `bwrap`; on
+//!   macOS, which cannot run `bwrap` at all (it wraps Linux kernel user
+//!   namespaces — see D27), it is Seatbelt (`sandbox-exec`). The two give
+//!   different-shaped guarantees — D27 states the macOS gap plainly rather
+//!   than pretending parity — but both mean a process cannot write outside
+//!   its granted paths regardless of which binary is called or by what path.
 //! - **The PATH shim is a guard.** It catches accidents and gives a legible
 //!   error. It is bypassable by absolute path, and saying otherwise would be
 //!   the exact dishonesty this design exists to avoid.
@@ -12,16 +16,32 @@
 //! and is never touched (D7).
 
 pub mod branch;
+#[cfg(target_os = "macos")]
+pub mod macos;
 pub mod shim;
 
-use std::path::{Path, PathBuf};
+#[cfg(target_os = "linux")]
+use std::path::Path;
+use std::path::PathBuf;
 
 /// Is the sandbox available on this machine?
 ///
 /// If not, the agent must not start. A floor that silently is not there is
 /// worse than no floor, because you would act as though it were.
+#[cfg(target_os = "linux")]
 pub fn available() -> bool {
     which("bwrap").is_some()
+}
+
+/// Is the sandbox available on this machine?
+///
+/// `sandbox-exec` ships with every macOS install, so this should always be
+/// true in practice — checked anyway so a stripped-down environment fails
+/// with the same legible message as a genuinely missing floor, rather than
+/// crashing deeper inside `agent::start`.
+#[cfg(target_os = "macos")]
+pub fn available() -> bool {
+    which("sandbox-exec").is_some()
 }
 
 fn which(binary: &str) -> Option<PathBuf> {
@@ -42,15 +62,25 @@ pub enum Access {
 
 /// The environment variable that marks a sandbox as this app's.
 ///
-/// It appears in the sandbox's own `/proc/<pid>/cmdline`, because it is passed
-/// as a `bwrap` argument — which is exactly what makes an orphan identifiable
-/// from outside without keeping a pid file that a crash would leave stale.
+/// On Linux it appears in the sandbox's own `/proc/<pid>/cmdline`, because it
+/// is passed as a `bwrap` argument. On macOS, where there is no persistent
+/// supervisor process to carry it (D27), the mark instead rides in the
+/// argv[0] of the exec'd agent process itself — see `reap.rs`. Either way,
+/// it is what makes an orphan identifiable from outside without keeping a
+/// pid file that a crash would leave stale.
 pub const MARK: &str = "GITHUD_AGENT";
+
+/// Directories under `$HOME` that must stay writable inside the sandbox — the
+/// harness's own state. Deny these and the agent cannot run at all. Shared
+/// across platforms: the paths are the same, only how each sandbox mechanism
+/// grants write access to them differs.
+pub const HARNESS_STATE_DIRS: &[&str] = &[".claude", ".cache", ".config/gh"];
 
 /// Build the `bwrap` argv that wraps a command.
 ///
 /// Pure, so the scope in D19 can be asserted rather than trusted. The returned
 /// vector is everything up to and including `--`; the command follows.
+#[cfg(target_os = "linux")]
 pub fn sandbox(project: &Path, home: &Path, access: Access) -> Vec<String> {
     fn s(p: &Path) -> String {
         p.to_string_lossy().into_owned()
@@ -69,7 +99,7 @@ pub fn sandbox(project: &Path, home: &Path, access: Access) -> Vec<String> {
     push(&mut a, &["--tmpfs", "/tmp"]);
 
     // The harness's own state must be writable or it cannot run at all.
-    for dir in [".claude", ".cache", ".config/gh"] {
+    for dir in HARNESS_STATE_DIRS {
         let p = home.join(dir);
         a.extend(["--bind-try".into(), s(&p), s(&p)]);
     }
@@ -113,7 +143,7 @@ pub fn sandbox(project: &Path, home: &Path, access: Access) -> Vec<String> {
     a
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "linux"))]
 mod tests {
     use super::*;
 

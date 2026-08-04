@@ -55,18 +55,21 @@ src-tauri/
 │  ├─ parse/
 │  │  └─ mod.rs         the milestone contract, implemented
 │  ├─ guard/
-│  │  ├─ mod.rs         bwrap scope — the floor (D19)
+│  │  ├─ mod.rs         the sandbox scope — bwrap on Linux, the floor (D19)
+│  │  ├─ macos.rs       the same floor via Seatbelt on macOS, narrower on purpose (D27)
 │  │  ├─ shim.rs        PATH wrappers — a guard, not the floor
 │  │  └─ branch.rs      branch isolation naming and policy (D6)
 │  ├─ pty/
 │  │  └─ mod.rs         Channel 1 — real PTYs, one per project
 │  └─ scan/
 │     └─ mod.rs         repo discovery, ICM detection, unit tests
-└─ tests/               all `#[ignore]`d — each needs something real
+└─ tests/               all `#[ignore]`d except guardrails.rs — each needs something real
    ├─ real_root.rs      scans the real ~/github (M1's validation)
    ├─ real_migration.rs  D26 migration against a copy of this machine's real local config
    ├─ agent_live.rs     the agent channel against the real `claude` binary
-   ├─ guardrails.rs     the default-deny suite
+   ├─ guardrails.rs     the default-deny suite — real bwrap or real sandbox-exec (D27)
+   ├─ guardrails_support/
+   │  └─ floor_cases.rs  shared floor assertions, `include!`d by both platforms' test modules
    ├─ sweep_proof.rs    the orphan sweep against a real process
    └─ voice_live.rs     the real Voicebox on this machine
 ```
@@ -87,7 +90,7 @@ do. Never hand-edit it; it is rebuilt.
 | `src/theme.rs` | A project's accent and background image, inside its own local folder | Anything about a project's own theme, not its character's |
 | `src/pty/` | Terminal sessions: spawn, write, resize, kill | Changing terminal behaviour |
 | `src/agent/` | Agent sessions and the normalized event mapping | Adding an adapter, or changing what the UI sees |
-| `src/guard/` | The sandbox scope, the shim, branch policy | Changing what the agent is allowed to touch |
+| `src/guard/` | The sandbox scope (bwrap on Linux, Seatbelt on macOS, D27), the shim, branch policy | Changing what the agent is allowed to touch |
 | `src/parse/` | The milestone contract | Never without changing `../../config/contracts/milestones.md` first |
 | `src/git/` | Status, diff, stack, tree | Anything the card or panels read |
 | `src/card.rs` | Assembling and caching the card | Changing what a project shows cold |

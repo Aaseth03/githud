@@ -20,11 +20,20 @@ diff              { path, patch }
 question          { text }
 status            { state: thinking|working|idle, detail }
 error             { message, fatal }
+notice            { text }                 // a command's effect, said once, durably
 session.ended     { reason, pr_url? }
 ```
 
 ## Rules
 
+- **`notice` is for something that happened, not a fleeting state — it must
+  survive the rest of its own turn.** `status.detail` is routinely
+  overwritten moments later by the same turn's own end (`turn_ended` sets it
+  to `null`), so reporting a command's effect (e.g. `/clear`) through
+  `status` would flicker and disappear before it could be read. Verified
+  against a real `/clear` turn: `conversation_reset` arrives, then a fresh
+  `session.started`, then the turn's closing `result` — a `status`-shaped
+  report placed first would already be gone by the time the turn ends.
 - **`status.detail` comes from real tool events.** The indicator under the
   character says `running cargo test`, not a joke word. Principle 5: nothing is
   hidden. An indicator that invents its own text is worse than no indicator.
