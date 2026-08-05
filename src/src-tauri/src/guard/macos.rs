@@ -116,6 +116,29 @@ pub fn profile(home: &Path, access: Access) -> String {
     // (D27).
     p.push_str("(allow file-write* (subpath (param \"SCRATCH_DIR\")))\n");
 
+    // Claude Code's own internal Bash-tool sandbox — a second, inner
+    // sandbox layered under this one — needs its own scratch directory,
+    // outside every path granted above. Narrowed to this project's own
+    // subdirectory, not the shared tree every project uses; see
+    // `claude_scratch_dir`.
+    p.push_str("(allow file-write* (subpath (param \"CLAUDE_SCRATCH_DIR\")))\n");
+
+    // Claude Code's persistent Bash-tool shell also tracks its own working
+    // directory in a small file directly under `/tmp` — `claude-<hex>-cwd`.
+    // Unlike the scratch directory above, the `<hex>` is random per shell,
+    // not derived from anything known before launch (verified: two
+    // consecutive sessions in the same project produced different values),
+    // so there is no exact path to compute and grant. Matched by pattern
+    // instead of by value — proven narrow, not assumed: a differently-named
+    // path sharing the same `claude-...` prefix was tried against this exact
+    // rule and denied. That keeps it well short of the shared
+    // `claude-<uid>` tree, which holds every project's actual scratchpad
+    // *contents*; this only ever matches one small directory-tracking file
+    // per session.
+    p.push_str(
+        "(allow file-write* (regex #\"^/private/tmp/claude-[0-9a-f]+-cwd$\"))\n",
+    );
+
     // Masked by denying reads specifically, not by making the rest of the
     // filesystem unreadable the way `--ro-bind /` does — that asymmetry is
     // the headline difference from the Linux floor, stated in D27.
@@ -136,6 +159,36 @@ pub fn profile(home: &Path, access: Access) -> String {
 /// `$TMPDIR` — not the whole temp tree. See `profile`'s `SCRATCH_DIR` comment
 /// for why the broader form was tried first and rejected.
 const SCRATCH_DIR_NAME: &str = "githud-agent-scratch";
+
+/// Where Claude Code's own internal Bash-tool sandbox puts its per-project
+/// scratch directory: `/private/tmp/claude-<uid>/<project path, '/' -> '-'>`.
+/// It writes there *before* this profile's own sandbox even engages, so
+/// without an exception for it, the agent cannot write anywhere — including
+/// its own working notes to itself.
+///
+/// Undocumented and reverse-engineered from observed behavior, not a
+/// supported contract: `CLAUDE_CODE_TMPDIR` looks like it should redirect
+/// this and does not — the request to make it do so
+/// (github.com/anthropics/claude-code/issues/17936) was closed unresolved,
+/// and this machine's own `$TMPDIR` does not match where the directory
+/// actually lands, confirming the variable is not consulted for this path.
+/// If Claude Code's internal scheme ever changes, this stops matching and
+/// its scratch-dir write fails the same way it does today — the exception
+/// can only become too narrow again, never silently too wide.
+///
+/// Scoped to this one project's own subdirectory, not the shared
+/// `claude-<uid>` tree every project on the machine writes into — granting
+/// the whole tree would let this project's agent reach scratch files left
+/// behind by every other project ever run through this tool, which is
+/// exactly the isolation the sandbox exists to hold.
+fn claude_scratch_dir(project: &Path) -> io::Result<PathBuf> {
+    let uid = unsafe { libc::getuid() };
+    let real = std::fs::canonicalize(project)?;
+    let sanitized = real.to_string_lossy().replace('/', "-");
+    Ok(PathBuf::from("/private/tmp")
+        .join(format!("claude-{uid}"))
+        .join(sanitized))
+}
 
 /// `getconf DARWIN_USER_CACHE_DIR` — no `std` API exposes this (it is not
 /// `dirs::cache_dir()`, which is the stable `~/Library/Caches`; this is the
@@ -185,6 +238,10 @@ pub fn define_args(project: &Path, home: &Path, access: Access) -> io::Result<Ve
     let scratch = std::env::temp_dir().join(SCRATCH_DIR_NAME);
     std::fs::create_dir_all(&scratch)?;
     define("SCRATCH_DIR", &scratch)?;
+
+    let claude_scratch = claude_scratch_dir(project)?;
+    std::fs::create_dir_all(&claude_scratch)?;
+    define("CLAUDE_SCRATCH_DIR", &claude_scratch)?;
 
     define("SYSTEM_CACHE_DIR", &darwin_user_cache_dir()?)?;
 
@@ -409,6 +466,81 @@ mod tests {
             "the scratch exception must not be the whole temp directory"
         );
         assert!(scratch.ends_with(SCRATCH_DIR_NAME), "{scratch}");
+    }
+
+    #[test]
+    fn the_cwd_tracker_pattern_is_present() {
+        let home = fake_home("cwd-tracker-pattern");
+        let p = profile(&home, Access::ReadWrite);
+        assert!(
+            p.contains(r#"(regex #"^/private/tmp/claude-[0-9a-f]+-cwd$")"#),
+            "{p}"
+        );
+    }
+
+    #[test]
+    fn claude_scratch_dir_is_writable() {
+        let home = fake_home("claude-scratch");
+        let p = profile(&home, Access::ReadWrite);
+        assert!(p.contains("\"CLAUDE_SCRATCH_DIR\""), "{p}");
+    }
+
+    #[test]
+    fn define_args_scopes_the_claude_scratch_dir_to_this_project() {
+        // The fix for the EPERM Claude Code's own inner sandbox hits when
+        // wrapped: grant its scratch write only within *this* project's own
+        // subdirectory of the shared `claude-<uid>` tree, never the whole
+        // tree — that tree holds every project's scratch files, not just
+        // this one's.
+        let home = fake_home("claude-scratch-args");
+        let project = std::env::temp_dir();
+        let args = define_args(&project, &home, Access::ReadWrite).unwrap();
+
+        let value = args
+            .iter()
+            .find(|a| a.starts_with("CLAUDE_SCRATCH_DIR="))
+            .expect("CLAUDE_SCRATCH_DIR must be defined")
+            .split_once('=')
+            .unwrap()
+            .1
+            .to_string();
+
+        let uid = unsafe { libc::getuid() };
+        let shared_root = format!("/private/tmp/claude-{uid}");
+        assert_ne!(
+            value, shared_root,
+            "must not grant the whole shared claude-<uid> tree, only this project's own subdirectory within it"
+        );
+        assert!(
+            value.starts_with(&format!("{shared_root}/")),
+            "expected {value} under {shared_root}"
+        );
+
+        let real_project = std::fs::canonicalize(&project).unwrap();
+        let sanitized = real_project.to_string_lossy().replace('/', "-");
+        assert!(value.ends_with(&sanitized), "{value}");
+    }
+
+    #[test]
+    fn two_projects_get_different_claude_scratch_dirs() {
+        // Isolation is the entire point: project A's agent must not land in
+        // project B's Claude-Code-internal scratch directory just because
+        // both share the same uid-scoped parent tree.
+        let home = fake_home("claude-scratch-iso");
+        let project_a = std::env::temp_dir();
+        let project_b = home.clone();
+
+        let args_a = define_args(&project_a, &home, Access::ReadWrite).unwrap();
+        let args_b = define_args(&project_b, &home, Access::ReadWrite).unwrap();
+
+        let val = |args: &[String]| {
+            args.iter()
+                .find(|a| a.starts_with("CLAUDE_SCRATCH_DIR="))
+                .unwrap()
+                .clone()
+        };
+
+        assert_ne!(val(&args_a), val(&args_b));
     }
 
     #[test]

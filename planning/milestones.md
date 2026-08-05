@@ -178,7 +178,11 @@ blocked, every allowed op attempted and passing. Ship on green only.
       third found the same day in real use (Keychain access blocked, which
       broke Claude Code's login) were each caught by running the real
       sandbox, not by asserting profile text — `cargo test --test
-      guardrails` now covers both platforms
+      guardrails` now covers both platforms. A fourth and fifth followed
+      2026-08-05, from the hands-on `claude` run D27 had flagged as still
+      owed: every Bash call failed (`EPERM` creating Claude Code's own
+      scratch directory), then a second `EPERM` on a per-session working-
+      directory tracker file once the first was fixed — both closed in D27
 
 ### M5 — Panels and project cards
 **Status:** done

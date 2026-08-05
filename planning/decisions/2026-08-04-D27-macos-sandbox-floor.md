@@ -42,11 +42,13 @@ and denies only what matters.
 | `/dev` | read-write | bwrap's equivalent is a fresh device tree via `--dev /dev`; Seatbelt has no such mount to hand out, so this allows the real one instead |
 | one app-owned scratch directory under `$TMPDIR` (canonicalized) | read-write | Scratch — **not the whole temp tree**, and not a private tmpfs either. See below |
 | the per-user system cache dir (`getconf DARWIN_USER_CACHE_DIR`, canonicalized) | read-write | `security`(1) needs a lock file here for even a plain Keychain *read* — see below |
+| Claude Code's own scratch directory, `/private/tmp/claude-<uid>/<project path, '/' → '-'>` (`guard::macos::claude_scratch_dir`) | read-write, this project's subdirectory only | Claude Code's own *inner* Bash-tool sandbox creates this before this floor's sandbox has anything to do with it — see below |
+| `/private/tmp/claude-<hex>-cwd`, matched by Seatbelt `regex`, not `subpath` | read-write, pattern-matched | Claude Code's persistent shell tracks its cwd in a randomly-named-per-session file — see below |
 | `~/.ssh` | **read denied**, if present | Masks keys without needing to make everything else unreadable too |
 | `~/.gitconfig` | **write denied**, if present | An identity to commit with, not one to rewrite |
 | network | **allowed** | The API call is the entire point, same as D19 |
 
-Three of these were not guesses corrected on paper — they were caught by
+Five of these were not guesses corrected on paper — they were caught by
 actually running the profile against real `sandbox-exec` and asserting real
 filesystem behavior (`cargo test --test guardrails`), exactly the standard
 this record holds the Linux floor to:
@@ -85,6 +87,33 @@ this record holds the Linux floor to:
   fundamentally cannot provide — that failure mode is inherent to
   non-interactive invocation, not a sandbox bug, and is expected to recur
   for any genuinely-interactive command regardless of this fix.
+- **Every real `claude` invocation failed outright with `EPERM: operation
+  not permitted, mkdir '/private/tmp/claude-<uid>/<project>/<session-id>'`**
+  — found 2026-08-05, on exactly the hands-on run this record's own
+  Consequences section had flagged as still owed. Claude Code's own *inner*
+  Bash-tool sandbox creates a per-project scratch directory there before
+  this floor's sandbox has anything to do with it, and nothing above
+  granted it, so every single Bash call failed the same way. Confirmed
+  end-to-end by running the real `claude` CLI under the exact profile
+  `agent::sandbox_command` builds: fails identically before the fix,
+  prints real output after. The exception (`guard::macos::claude_scratch_dir`)
+  is scoped to this one project's own subdirectory of the shared
+  `claude-<uid>` tree, computed from the project path and uid GIT HUD
+  already has — not the whole tree, which holds every other project's
+  scratch contents too, the same "narrow, not the whole shared root" call
+  already made for `$TMPDIR` above.
+- **A second, different `EPERM` followed once the first was fixed:
+  `mkdir '/tmp/claude-<hex>-cwd'`**, a small file Claude Code's persistent
+  Bash-tool shell uses to track its own working directory. Unlike the
+  scratch directory above, `<hex>` is random per session — confirmed by
+  running two sessions in the same project and getting two different
+  values (`claude-f5f9-cwd`, then `claude-b460-cwd`) — so there is no exact
+  path to compute and grant in advance the way `claude_scratch_dir` does.
+  Matched by Seatbelt `regex` instead of `subpath`,
+  `^/private/tmp/claude-[0-9a-f]+-cwd$`, proven narrow with a live test
+  showing a similarly-prefixed-but-different filename still denied. Still
+  short of opening the shared tree: this pattern cannot match anything
+  holding actual scratch *content*, only this one class of tracking file.
 
 Built in `guard::macos` (`profile` for the SBPL text, `define_args` for the
 `-D KEY=value` pairs, `install` to write it to disk). Invoked via
@@ -178,12 +207,13 @@ weakening of anything the app relies on.
   the granted exceptions, `.gitconfig` reads but doesn't write) — asserting
   the profile text is not enough, per the same standard D19 already set for
   the Linux floor.
-- **Open, unverified before wider use:** the real `claude` CLI (not just
-  `bash`/`cat`/`tail`, which is what design validation exercised) needs a
-  hands-on run under this profile to confirm no Seatbelt operation class
-  it touches — a real HTTPS call, whatever auth-token storage it uses —
-  was missed. The built `.app`'s actual `Contents/MacOS/` binary name
-  should also be confirmed as literally `githud` before leaning further on
+- **The hands-on `claude` run this record called for happened 2026-08-05**
+  and found the two real misses detailed above — both Seatbelt operation
+  classes the `bash`/`cat`/`tail` design validation never exercised, exactly
+  the gap this line predicted. Auth-token storage was already covered by
+  the Keychain fix above; no further HTTPS or auth misses turned up.
+  **Still open:** the built `.app`'s actual `Contents/MacOS/` binary name
+  should be confirmed as literally `githud` before leaning further on
   the `ucomm == "githud"` parent-identity check in `reap::sweep`
   (`tauri.conf.json`'s `productName` is `"GIT HUD"` with a space, but there
   is no `mainBinaryName` override, so this should already hold — the wrong
