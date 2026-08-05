@@ -367,11 +367,12 @@ transforms and into reacting to real events — not into a third-party runtime.
       M9 exist for** — it is a finding, not a failure of this milestone
 
 ### M8 — App direction
-**Status:** in-progress
+**Status:** done
 **Validation:** a screenshot a stranger would call *designed* rather than
 *default* — and the user's own words for it are "a place I want to be", judged by
-eye, in the app, on his machine. **Not yet judged against a finished repaint** —
-see below.
+eye, in the app, on his machine. **Passed 2026-08-05** — personalization plus
+the character stage built on top of it, judged by eye: "I like the feel." The
+repaint this validation once waited on is dropped, not owed — see D28.
 
 The app is currently cyan-on-near-black, which is the single most generic
 technical register there is: spaceship bridge. The user's ask is **homey and
@@ -403,31 +404,26 @@ the repaint.
       2026-08-02: personalization** — each project is its own room, coloured
       and pictured by whoever's project it is, not one fixed palette imposed
       on all of them
-- [ ] Material and light: where illumination comes from, what surfaces are made
-      of. Still open — this is about the cockpit tokens, which the
-      personalization direction deliberately leaves alone
-- [ ] A palette with warmth in it, and semantic rather than decorative colour.
-      A project can warm its own accent now; the app's own tokens are still the
-      cyan cockpit
-- [ ] A real type pairing, chosen deliberately — one voice for prose, one for
-      machine values, and a reason for both
-- [ ] Texture: grain, paper, or none, decided rather than defaulted to flat
-- [ ] Motion language — what eases, how fast, and what it means. Referenced
-      against [motionsites.ai](https://motionsites.ai)
-- [ ] Contrast and legibility re-proven after the repaint. **The cockpit tokens
-      are load-bearing** — a character accents them and cannot repaint them
-      (D21), so warming the app is a change to the tokens themselves and every
-      accent has to still read against the new surfaces
 - [x] Applied across every surface: sidebar, tab strip, chat, terminal chrome,
       panel, cards, Settings. Per-project accent and background are wired
       through all of them, not half-finished on any one
 
+**Dropped 2026-08-05, not owed (D28):** the cockpit-token repaint this
+milestone originally scoped underneath personalization — material and light,
+a warm base palette, a type pairing, texture, a motion language, and the
+contrast re-proof that depended on all of it. Personalization plus the
+character stage already read as "a place I want to be"; the repaint would be
+change for its own sake on top of a direction that's already landed. The
+cockpit tokens (`characters/lessons/theming.md`) stay exactly what they are.
+
+**Backlog, not scoped to any milestone:** style presets — a panel type (glass,
+today's only one), a text colour, and a different default background, bundled
+and swappable. Named candidates: "tech" (current) and "notebook" (paper
+panels, different text colour). See D28 for the shape and why it's deferred
+rather than built now.
+
 Implementation green: 323 Rust tests (`cargo test theme` — 12/12), `tsc` clean,
-252 Vitest tests (`characterHeight`, `tabs`, `types`, `split`). **Not yet
-judged by the validation itself** — the user has not yet looked at a themed
-project and called it "a place I want to be"; the cockpit-token repaint
-(material, light, warm palette at the base, type pairing, texture, motion)
-is still ahead of that verdict.
+252 Vitest tests (`characterHeight`, `tabs`, `types`, `split`).
 
 ### M9 — Avatar
 **Status:** not-started

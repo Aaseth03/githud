@@ -4,7 +4,7 @@ Where GIT HUD stands, for a session starting cold. Living document — rewrite i
 do not append. `milestones.md` remains the only place milestone *status* lives;
 this file says what is in flight and what is waiting on a human.
 
-**Updated:** 2026-07-30
+**Updated:** 2026-08-05
 
 ---
 
@@ -50,7 +50,7 @@ coin toss, not a process.
 | M5 — Panels and project cards | done |
 | M6 — Voice | done |
 | M7 — Character | done |
-| M8 — App direction | not-started |
+| M8 — App direction | done |
 | M9 — Avatar | not-started |
 | M10 — Character design suite | not-started |
 | M11 — Speech shaping | not-started |
@@ -60,7 +60,7 @@ coin toss, not a process.
 
 <!-- END GENERATED: state -->
 
-**M8 is the next build.** M9 is the aesthetic half of M7, carved out
+**M8 is closed (D28).** M9 is next — the aesthetic half of M7, carved out
 deliberately; see below.
 
 **Milestones were renumbered twice on 2026-07-30**, both times because the
@@ -104,11 +104,14 @@ So the aesthetic half was carved out:
 - **M9 — avatar.** Gaze, a three-quarter bust-framed re-pose, a room strictly
   *behind* the character, and richer idle with anticipation.
 
-**M8 is blocked on one decision from the user:** which visual direction. Three
-concrete options were promised — each a *material and a light* in the register
-[Refero](https://styles.refero.design) uses, with palette, type pairing and
-texture spelled out, plus a mockup of the project tab in each. Do not start
-repainting before he picks one.
+**M8 closed 2026-08-05 at personalization** — per-project accent colour,
+background image, and glass panels (`theme.rs`, `ThemeSection.tsx`, D24) — not
+at the cockpit-token repaint (material, light, warm palette, type pairing,
+texture, motion) this section originally promised. That repaint is dropped,
+not owed (D28); the user judged personalization plus the character stage
+built on top of it as "a place I want to be" by eye, without it. Style
+presets — panel type, text colour, default background, bundled and
+swappable — are named as backlog in D28 if picked up later.
 
 ## What M7 cost, and what generalises
 
