@@ -19,10 +19,14 @@ use serde::{Deserialize, Serialize};
 /// The port Voicebox listens on by default — ships with the app, used until a
 /// machine sets its own in `machine.toml` (D8).
 ///
-/// Verified 2026-07-29 against a running instance. Voicebox's own README says
-/// `17493`, which is the container-internal port — the discrepancy flagged at
-/// M0 resolves in favour of this one.
-pub const DEFAULT_PORT: u16 = 17600;
+/// Was `17600` (verified 2026-07-29), on the theory that Voicebox's own
+/// README-listed `17493` was a stale container-internal port. Re-verified
+/// 2026-08-05 against a live instance (both the packaged app and a
+/// from-source build): nothing answers on `17600` at all; `17493` is what
+/// Voicebox actually serves on. The earlier verification was wrong, or
+/// Voicebox's port changed since — either way, this is the current ground
+/// truth. See `docs/research/tts-stt-alternatives.md`.
+pub const DEFAULT_PORT: u16 = 17493;
 
 /// The URL Voicebox answers on for a given port.
 ///

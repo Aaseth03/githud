@@ -49,7 +49,10 @@ async fn spoken_audio_survives_a_round_trip_through_transcription() {
 #[tokio::test]
 #[ignore = "needs Voicebox running; run explicitly with --ignored"]
 async fn voicebox_is_reachable_on_the_port_we_settled_on() {
-    // The M0 discrepancy: its README says 17493, Professor said 17600.
+    // The M0 discrepancy resolved the other way than first thought: M0 settled
+    // on 17600 over the README's 17493, but a live re-check on 2026-08-05 found
+    // nothing answering on 17600 at all — 17493 is what Voicebox actually
+    // serves on, packaged app or built from source alike.
     let base = voice::base_url(voice::DEFAULT_PORT);
     match voice::health(&base).await {
         Health::Up { model_loaded, gpu } => {

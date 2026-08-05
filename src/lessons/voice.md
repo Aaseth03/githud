@@ -75,8 +75,14 @@ Add to this file when a lesson is earned; the index is `../CONTEXT.md`.
   not the same as absent, and reporting it as *down* sends you looking in the
   wrong place. The real instance failed exactly this way — running, and unable
   to write its own audio directory.
-- **Voicebox's REST port is 17600.** Its own README says `17493`, which is the
-  container-internal port. Probe before believing either.
+- **Voicebox's REST port is 17493, not 17600.** M0 probed a live instance and
+  settled on 17600 over the README's 17493, believing 17493 was a stale
+  container-internal port. That verification was wrong, or Voicebox's port
+  changed since — a 2026-08-05 re-check found nothing answering on 17600 at
+  all, on the packaged app or a from-source build. **A probed fact is only as
+  good as the instance it was probed against staying the same instance** —
+  reprobe rather than trusting an old lesson when something that talks to an
+  external service stops working for no visible reason.
 - **A voice carries the engine it is built on, and it must be sent.** Preset
   profiles refuse any other engine, and the server's default is not one they
   support. Read the engine from the profile rather than defaulting.
