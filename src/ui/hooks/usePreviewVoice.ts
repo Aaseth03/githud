@@ -13,7 +13,7 @@ import type { LiveSpeech } from "../useVoice";
  * own audio element and its own `live`/`speaking` pair rather than
  * borrowing (and disrupting) the app-wide one.
  *
- * Same shape as `useVoice.ts`'s `speakChunk` — envelope computed before
+ * Same shape as `useVoice.ts`'s `playAudio` — envelope computed before
  * playback, a blob URL rather than a `data:` URI, the element held in a ref
  * so it survives past the microtask `play()` resolves on — just for one
  * ad hoc line instead of a queued conversation.

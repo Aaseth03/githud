@@ -6,6 +6,8 @@ import {
   dropSpoken,
   enqueueSpoken,
   prepareSpeech,
+  remainingSpeech,
+  SPEECH_GAP_MS,
   type Spoken,
   type Voice,
   type VoiceHealth,
@@ -40,6 +42,100 @@ export interface LiveSpeech {
   envelope: Envelope;
 }
 
+/** One chunk, synthesized but not yet played. */
+interface SynthesizedChunk {
+  bytes: Uint8Array<ArrayBuffer>;
+  mime: string;
+  envelope: Envelope;
+}
+
+/**
+ * One message being spoken, from the first chunk to the last.
+ *
+ * **The identity is the point.** This used to be three refs — `busy`,
+ * `cancelled`, `finish` — shared by every playback that would ever run, with
+ * nothing saying which playback a given callback belonged to. So the next
+ * message's `play()` set `cancelled` back to `false` while the previous one may
+ * not have read it yet, and `stop()` could only reach playback through
+ * `finish`, which a chunk still waiting on Voicebox had not set. Given a
+ * session, every callback can ask whether it is still the live one before
+ * acting, and a stop has exactly one thing to interrupt.
+ */
+interface Session {
+  cancelled: boolean;
+  /**
+   * Settle whatever this session is waiting on *right now* — a clip playing, an
+   * inter-chunk gap, or a synthesis request in flight. Reassigned as the
+   * session moves between those; `null` between them.
+   */
+  interrupt: (() => void) | null;
+}
+
+/**
+ * Wait for `work`, unless the session is cancelled first.
+ *
+ * Resolves `null` on a cancel, so every caller's next line is the same check.
+ * Rejections pass through: a chunk Voicebox refused is a failure to report, not
+ * a cancel to swallow.
+ */
+function untilCancelled<T>(
+  session: Session,
+  work: Promise<T>,
+): Promise<T | null> {
+  return new Promise<T | null>((resolve, reject) => {
+    let settled = false;
+    const settle = (fn: () => void) => {
+      if (settled) return;
+      settled = true;
+      session.interrupt = null;
+      fn();
+    };
+    session.interrupt = () => settle(() => resolve(null));
+    work.then(
+      (value) => settle(() => resolve(session.cancelled ? null : value)),
+      (error: unknown) => settle(() => reject(error)),
+    );
+  });
+}
+
+/**
+ * Let go of an element completely.
+ *
+ * `pause()` stops the element being *fed*; it does not stop the pipeline
+ * underneath from finishing what it has already buffered, which is how a
+ * "stopped" chunk kept sounding under the next one. Tearing the source off and
+ * calling `load()` forces that pipeline to actually release. The handlers come
+ * off first: an element being emptied can still fire at them, and a torn-down
+ * clip reporting an error reads as a fault in the clip that replaced it.
+ */
+function teardown(audio: HTMLAudioElement | null): void {
+  if (!audio) return;
+  audio.onplaying = null;
+  audio.onended = null;
+  audio.onerror = null;
+  audio.pause();
+  audio.removeAttribute("src");
+  audio.load();
+}
+
+/**
+ * How long past a clip's own known length to wait before giving up on `ended`.
+ *
+ * A backstop, not a timeout on playback: it is armed for the clip's duration
+ * *plus* this, so it can never release anything early. Without it, an element
+ * that plays and then never fires `ended` parks the queue on a promise nothing
+ * will settle, which looks exactly like the app deciding to stop talking.
+ *
+ * **This replaced a five-second ceiling on the wait for the first sound, and
+ * that ceiling was a loaded gun.** It assumed the `playing` event fires here.
+ * It does not — so on a twenty-second clip it fired at five seconds, released
+ * the queue, and the next chunk started while the first was still audibly
+ * going, since tearing an element down does not stop the pipeline. A safeguard
+ * that resolves *early* on a webview where stopping is unreliable causes the
+ * exact fault it was added to bound.
+ */
+const BACKSTOP_MS = 3000;
+
 const MUTE_KEY = "githud.voice.muted";
 const VOICE_KEY = "githud.voice.id";
 const AUTO_KEY = "githud.voice.auto";
@@ -66,27 +162,18 @@ export function useVoice() {
   /**
    * What is waiting to be said, in the order it arrived.
    *
-   * State rather than a ref so the player effect re-runs when it changes — the
-   * queue advancing *is* the trigger for the next thing to be spoken.
+   * A ref, not state. It used to be state so the player effect would re-run
+   * when it changed — but `useState` bails out on an identical value, and
+   * `dropSpoken` returns *its own argument* whenever the head has already been
+   * replaced by an explicit click. No re-render, no effect, and a full queue
+   * sitting in silence. The queue advancing now calls `pump()` directly instead
+   * of hoping a render happens.
    */
-  const [queue, setQueue] = useState<Spoken[]>([]);
-  /** One voice at a time. This is what makes replies queue instead of overlap. */
-  const busy = useRef(false);
-  /**
-   * Resolves the in-flight playback.
-   *
-   * `pause()` fires no `ended` event, so stopping without this would leave the
-   * player waiting on a promise nothing will ever settle — and the queue would
-   * never move again.
-   */
-  const finish = useRef<(() => void) | null>(null);
-  /**
-   * Stop between chunks.
-   *
-   * A long reply is several requests spoken back to back; without this, MUTE
-   * would silence the chunk that is sounding and the next one would start.
-   */
-  const cancelled = useRef(false);
+  const queue = useRef<Spoken[]>([]);
+  /** The count, purely so the UI can show a backlog. Nothing is hidden. */
+  const [pending, setPending] = useState(0);
+  /** The message being spoken, if any. One at a time — see `Session`. */
+  const session = useRef<Session | null>(null);
   /**
    * The element has to be held somewhere the render does not own.
    *
@@ -100,6 +187,21 @@ export function useVoice() {
   const live = useRef<LiveSpeech | null>(null);
   const [playbackError, setPlaybackError] = useState<string | null>(null);
 
+  /**
+   * What the player needs to know at the moment it decides to speak.
+   *
+   * Read through a ref so `pump` and `play` never have to be re-created — the
+   * five-second health poll would otherwise change their identity constantly,
+   * and a player whose identity churns is a player that has to defend itself
+   * against being started twice.
+   */
+  const settings = useRef({ muted, health, voice, voices });
+  // No dependency array: this is the one thing that must be true on every
+  // render, and it has to be synced before the restart effect below runs.
+  useEffect(() => {
+    settings.current = { muted, health, voice, voices };
+  });
+
   // Silence whatever is sounding if this hook's owner goes away — a hot
   // reload during development swaps in a fresh `useVoice()` with its own
   // refs, and nothing else would ever pause the orphaned element from the
@@ -107,7 +209,9 @@ export function useVoice() {
   // the new instance speaks.
   useEffect(() => {
     return () => {
-      audioRef.current?.pause();
+      session.current?.interrupt?.();
+      teardown(audioRef.current);
+      audioRef.current = null;
       if (urlRef.current) URL.revokeObjectURL(urlRef.current);
     };
   }, []);
@@ -154,100 +258,166 @@ export function useVoice() {
 
   /** Silence now, and nothing waiting. */
   const stop = useCallback(() => {
-    audioRef.current?.pause();
+    const current = session.current;
+    if (current) {
+      current.cancelled = true;
+      // Settle whatever it is waiting on — a clip, a gap, or a request still
+      // in flight. Without this the player parks on a promise nothing will
+      // ever resolve and the queue never moves again.
+      current.interrupt?.();
+    }
+    // The same letting-go the player does between chunks. `pause()` on its own
+    // was what this used to do, and it left a half-stopped element whose tail
+    // sounded under the next message — and by nulling the ref first, it also
+    // robbed the next chunk of its chance to finish the job.
+    teardown(audioRef.current);
     audioRef.current = null;
     // The mouth closes with the sound. Leaving this set would freeze a
     // character mid-vowel against an element that is never going to advance.
     live.current = null;
     if (urlRef.current) URL.revokeObjectURL(urlRef.current);
     urlRef.current = null;
-    setQueue([]);
+    queue.current = [];
+    setPending(0);
     setSpeaking(null);
-    cancelled.current = true;
-    // Settle the in-flight playback, or the player waits on it forever.
-    finish.current?.();
   }, []);
 
   /**
-   * Generate one chunk and play it, from start to silence.
-   *
-   * Resolves when playback **ends**, not when it starts — that difference is
-   * what lets the next chunk, and the next message, wait its turn instead of
-   * talking over this one.
+   * Ask Voicebox for one chunk's audio. Pure request/response — no element,
+   * no ref, so it can run for chunk *n+1* while chunk *n* is still sounding.
    */
-  const speakChunk = useCallback(
+  const synthesizeChunk = useCallback(
     async (
       text: string,
       voiceId: string,
       engine: string | null,
-    ): Promise<void> => {
+    ): Promise<SynthesizedChunk> => {
       const speech = await invoke<{ audio: string; mime: string }>(
         "voice_speak",
         { text, voiceId, engine },
       );
-
-      // `stop()` only reaches a chunk through `finish.current`, which this
-      // chunk has not set yet while the request above is in flight — so a
-      // stop during synthesis leaves nothing to interrupt. Without this
-      // check the chunk plays anyway once Voicebox answers, landing on top
-      // of whatever the queue has since started in its place.
-      if (cancelled.current) return;
-
       const bytes = fromBase64(speech.audio);
-
       // Read the samples before playing rather than tapping the graph during
       // playback. A `MediaElementAudioSourceNode` diverts the element's output,
       // and an analyser not connected onward to `destination` plays *silently
       // with no error* — this webview has four of those already. Worst case
       // here is a mouth moving on invented data, and it says when it is.
       const envelope = envelopeOf(bytes);
+      return { bytes, mime: speech.mime, envelope };
+    },
+    [],
+  );
 
+  /**
+   * Play one already-synthesized chunk, from start to actual silence.
+   *
+   * Resolves when the clip has **stopped sounding**, not when the element says
+   * it has ended — that difference is what lets the next chunk, and the next
+   * message, wait its turn instead of talking over this one.
+   */
+  const playAudio = useCallback(
+    (current: Session, chunk: SynthesizedChunk): Promise<void> => {
       // A blob URL, not a `data:` URI. A hundred kilobytes of base64 in a URL
       // is the fragile path in this webview, and it fails as a *source*
       // refusal — which reads like Voicebox being at fault when Voicebox has
       // already handed over the audio.
-      const blob = new Blob([bytes], { type: speech.mime });
+      const blob = new Blob([chunk.bytes], { type: chunk.mime });
       const url = URL.createObjectURL(blob);
-      urlRef.current = url;
 
-      // The previous chunk's element believed it was done — `done()` already
-      // ran, or this webview would not have reached here — but WebKitGTK has
-      // been proven to fire `ended` on a blob-sourced element while it keeps
-      // actually producing sound underneath (see the module doc: this webview
-      // does not get the benefit of the doubt on media APIs). Left alone, that
-      // is a second chunk's audio landing on top of the first's tail — an echo
-      // lagging behind. Pausing whatever is still referenced here costs
-      // nothing when the previous element really has stopped.
-      audioRef.current?.pause();
+      // Normally already `null`: each clip lets go of its own element when it
+      // finishes, so the gap before this one is real silence rather than the
+      // previous pipeline still draining. This covers the paths that do not go
+      // through a clean finish.
+      teardown(audioRef.current);
 
       const audio = new Audio(url);
       audioRef.current = audio;
-      live.current = { audio, envelope };
+      urlRef.current = url;
+      live.current = { audio, envelope: chunk.envelope };
 
-      await new Promise<void>((resolve) => {
+      // The true length of this clip, read off the decoded samples before
+      // playback ever started — independent of anything the `<audio>` element
+      // itself reports. That independence is the point: `ended` firing early is
+      // this webview's element lying about its own state, and asking the same
+      // element's `duration`/`currentTime` would be asking the liar to confirm
+      // itself. A duration measured from the bytes cannot be wrong the same way.
+      const durationMs = chunk.envelope.seconds * 1000;
+      /**
+       * When this clip is taken to have started sounding.
+       *
+       * `play()` being *requested* is the fallback and, on this webview, the
+       * only value it ever takes: the `playing` event was not observed to fire
+       * on a blob-sourced element here at all. That makes the anchor early by
+       * the element's start-up latency, which `SPEECH_GAP_MS` exists to absorb.
+       * If `playing` does arrive, it is strictly better and replaces it.
+       */
+      let anchor = performance.now();
+      let sounding = false;
+
+      return new Promise<void>((resolve) => {
         let settled = false;
-        const done = () => {
+        let backstop: ReturnType<typeof setTimeout> | undefined;
+        // Resolves immediately, for a real stop — `stop()` means silence *now*,
+        // not silence once a duration nobody is waiting for elapses.
+        const finishNow = () => {
           if (settled) return;
           settled = true;
-          finish.current = null;
+          clearTimeout(backstop);
+          current.interrupt = null;
           // Between chunks there is nothing sounding, so nothing to move to.
           if (live.current?.audio === audio) live.current = null;
+          // Let go here rather than when the next clip starts, so the gap that
+          // follows is time the pipeline actually has to release the output.
+          teardown(audio);
+          if (audioRef.current === audio) audioRef.current = null;
           URL.revokeObjectURL(url);
+          if (urlRef.current === url) urlRef.current = null;
           resolve();
         };
-        // `stop()` calls this: a paused element never fires `ended`.
-        finish.current = done;
+        // `ended` firing does not mean sounding has stopped — this webview
+        // fires it early on a blob-sourced element while the pipeline is still
+        // producing. It is only trusted once the clip's own known length has
+        // elapsed *since sound began*; short by that much, the resolve waits
+        // out the remainder instead of letting the next chunk start on top of
+        // this one's tail.
+        const done = () => {
+          if (settled) return;
+          const remaining = remainingSpeech(
+            durationMs,
+            anchor,
+            performance.now(),
+          );
+          if (remaining > 0) setTimeout(finishNow, remaining);
+          else finishNow();
+        };
+        // `stop()` calls this: a paused element never fires `ended`, and a stop
+        // is exactly the case that must not wait out the remainder above.
+        current.interrupt = finishNow;
+        // The one event that would prove audio is actually flowing. Taken at
+        // the first: a clip that stalls and resumes is rare enough not to have
+        // earned the machinery for accumulating playing time.
+        audio.onplaying = () => {
+          if (sounding) return;
+          sounding = true;
+          anchor = performance.now();
+        };
         audio.onended = done;
         audio.onerror = () => {
-          // The element reports a number and the number is the diagnosis.
-          setPlaybackError(describeMediaError(audio.error?.code, speech.mime));
-          done();
+          // The element reports a number and the number is the diagnosis. A
+          // real failure means nothing is sounding, so there is nothing to wait
+          // out either.
+          setPlaybackError(describeMediaError(audio.error?.code, chunk.mime));
+          finishNow();
         };
+        // `ended` may never arrive. Armed for the clip's own length plus a
+        // grace, so it is incapable of releasing anything early — `done()`
+        // still applies the floor when it fires.
+        backstop = setTimeout(done, durationMs + BACKSTOP_MS);
         audio.play().catch((e: unknown) => {
           setPlaybackError(
             e instanceof Error ? `${e.name}: ${e.message}` : String(e),
           );
-          done();
+          finishNow();
         });
       });
     },
@@ -256,58 +426,122 @@ export function useVoice() {
 
   /** Say one message — every chunk of it, in order. */
   const play = useCallback(
-    async (item: Spoken): Promise<void> => {
+    async (current: Session, item: Spoken): Promise<void> => {
       // D15: strip what should never be read aloud before it reaches a voice.
       // A message that is all code is skipped rather than blocking the queue.
       const chunks = prepareSpeech(item.markdown);
       // The character's voice if it has one and this machine has it; otherwise
       // whatever the app is set to. `character.ts::voiceFor` decides that, and
       // the caller has already applied it — here it is simply honoured.
-      const chosen = item.voice ?? voice;
+      const chosen = item.voice ?? settings.current.voice;
       if (chunks.length === 0 || !chosen) return;
 
-      setSpeaking(item.key);
       setPlaybackError(null);
-      cancelled.current = false;
       try {
-        const engine = voices.find((v) => v.id === chosen)?.engine ?? null;
+        const engine =
+          settings.current.voices.find((v) => v.id === chosen)?.engine ?? null;
+        const synth = (i: number) =>
+          i < chunks.length
+            ? synthesizeChunk(chunks[i], chosen, engine)
+            : null;
+
         // A long reply is several requests, spoken back to back. It stays one
         // queue item so the transcript still highlights one message and an
         // offer is still deduplicated by one key.
-        for (const text of chunks) {
-          if (cancelled.current) break;
-          await speakChunk(text, chosen, engine);
+        //
+        // Pipelined, not sequential: chunk n+1 is requested the moment chunk
+        // n's audio is in hand, so it renders in the background while chunk n
+        // plays instead of after it. That is the wait that used to land as a
+        // silent gap between every paragraph — hiding it behind playback is
+        // what closes it, without shortening or dropping anything.
+        let ahead = synth(0);
+        ahead?.catch(() => {
+          // Only observed when it is actually awaited below; this just keeps
+          // a chunk requested ahead of need from logging as unhandled.
+        });
+        for (let i = 0; i < chunks.length; i++) {
+          if (current.cancelled || !ahead) break;
+          // Interruptible: a stop landing while Voicebox is still rendering
+          // used to be unfeelable, because this wait had nothing registered
+          // for `stop()` to settle and held the queue for as long as the
+          // request took.
+          const chunk = await untilCancelled(current, ahead);
+          if (!chunk || current.cancelled) break;
+          // A floor derived from a container we could not read is not a floor.
+          // Say so rather than let the overlap come back unexplained.
+          if (chunk.envelope.synthetic) {
+            setPlaybackError(
+              `speech timing is a guess — ${chunk.envelope.synthetic}`,
+            );
+          }
+          ahead = synth(i + 1);
+          ahead?.catch(() => {});
+          // The margin, after whatever was sounding let go and before this
+          // starts. Held before *every* chunk, including the first: the boundary
+          // between two queued messages is the same boundary as the one between
+          // two chunks, and skipping it there is how a reply used to start on
+          // top of the tail of the one before it. Interruptible like everything
+          // else — a stop must not have to wait it out.
+          await untilCancelled(
+            current,
+            new Promise<void>((r) => setTimeout(r, SPEECH_GAP_MS)),
+          );
+          if (current.cancelled) break;
+          await playAudio(current, chunk);
         }
       } catch (e) {
         setPlaybackError(
           e instanceof Error ? `${e.name}: ${e.message}` : String(e),
         );
-      } finally {
-        setSpeaking(null);
       }
     },
-    [speakChunk, voice, voices],
+    [synthesizeChunk, playAudio],
   );
-
 
   /**
    * The player.
    *
-   * Takes the head of the queue whenever nothing is sounding, and drops it once
-   * it has finished — which re-runs this effect for whatever arrived meanwhile.
-   * `busy` is what makes it one voice: this effect re-runs on every health poll
-   * and every queue change, and must not start a second player over the first.
+   * Takes the head of the queue whenever nothing is sounding, and calls itself
+   * once that item is done. Called rather than rendered: the effect this
+   * replaced re-ran on every five-second health poll, and could *fail* to re-run
+   * exactly when it mattered — see the note on `queue`.
+   *
+   * `session.current` is what makes it one voice. Only the session that owns the
+   * slot may release it, so a playback cancelled and replaced cannot clear the
+   * one that replaced it.
    */
-  useEffect(() => {
-    const next = queue[0];
-    if (!next || busy.current || muted || !canSpeak(health) || !voice) return;
+  const pump = useCallback(() => {
+    if (session.current) return;
+    const { muted, health, voice } = settings.current;
+    if (muted || !canSpeak(health) || !voice) return;
+    const next = queue.current[0];
+    if (!next) return;
 
-    busy.current = true;
-    void play(next).finally(() => {
-      busy.current = false;
-      setQueue((q) => dropSpoken(q, next.key));
+    const current: Session = { cancelled: false, interrupt: null };
+    session.current = current;
+    setSpeaking(next.key);
+
+    void play(current, next).finally(() => {
+      if (session.current === current) {
+        session.current = null;
+        setSpeaking(null);
+      }
+      // `dropSpoken` refuses to drop a head that is not the item that finished,
+      // because an explicit click replaces the queue while the previous
+      // playback is still unwinding.
+      queue.current = dropSpoken(queue.current, next.key);
+      setPending(queue.current.length);
+      pump();
     });
-  }, [queue, muted, health, voice, play]);
+  }, [play]);
+
+  // Every condition the player gives up on can come back: Voicebox returning,
+  // MUTE going off, the voice list finally arriving. Nothing else would restart
+  // it, because the queue no longer lives in state. Cheap when there is nothing
+  // to say — `pump` returns without touching anything.
+  useEffect(() => {
+    pump();
+  }, [muted, health, voice, voices, pump]);
 
   /**
    * Offer a message for automatic speaking.
@@ -319,9 +553,15 @@ export function useVoice() {
   const offer = useCallback(
     (key: string, markdown: string, inVoice?: string | null) => {
       if (!auto) return;
-      setQueue((q) => enqueueSpoken(q, { key, markdown, voice: inVoice }));
+      queue.current = enqueueSpoken(queue.current, {
+        key,
+        markdown,
+        voice: inVoice,
+      });
+      setPending(queue.current.length);
+      pump();
     },
-    [auto],
+    [auto, pump],
   );
 
   /**
@@ -340,15 +580,25 @@ export function useVoice() {
       if (muted) return "muted";
       if (!canSpeak(health)) return "voicebox unavailable";
       if (!(inVoice ?? voice)) return "no voice selected";
-      if (!prepareSpeech(markdown)) {
+      // `.length`, not the array. `prepareSpeech` returns `string[]`, so the
+      // bare truthiness test this used to be was never false — an all-code
+      // message was queued, silently dropped by `play`, and the button reported
+      // success for something nobody was ever going to hear.
+      if (prepareSpeech(markdown).length === 0) {
         return "nothing to say — that message is all code";
       }
 
       stop();
-      setQueue([{ key, markdown, voice: inVoice }]);
+      queue.current = [{ key, markdown, voice: inVoice }];
+      setPending(1);
+      // A stop leaves its session cancelled but still holding the slot until it
+      // unwinds; `pump` then no-ops here and the session's own completion picks
+      // this up. Calling it anyway is what covers the case where nothing was
+      // playing at all.
+      pump();
       return null;
     },
-    [health, muted, speaking, stop, voice],
+    [health, muted, pump, speaking, stop, voice],
   );
 
   return {
@@ -379,7 +629,7 @@ export function useVoice() {
      */
     live,
     /** How many replies are still waiting. Nothing is hidden, including a backlog. */
-    pending: queue.length,
+    pending,
     speak,
     offer,
     stop,

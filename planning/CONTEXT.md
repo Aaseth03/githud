@@ -30,7 +30,8 @@ planning/
 │  ├─ 2026-07-29-m6-settings-and-audio-devices.plan.md
 │  ├─ 2026-07-30-m7-character.plan.md
 │  ├─ 2026-08-02-m10-frames-pipeline.plan.md
-│  └─ 2026-08-02-character-library-shell.plan.md
+│  ├─ 2026-08-02-character-library-shell.plan.md
+│  └─ 2026-08-06-voice-playback-overlap.plan.md
 └─ decisions/
    ├─ 2026-07-28-D01-dual-channel.md
    ├─ 2026-07-28-D02-adapters-target-harnesses.md
@@ -155,6 +156,7 @@ its job on the day it is overturned.**
 | 2026-07-30 | [M7 — character](plans/2026-07-30-m7-character.plan.md) | **Done** — rescoped by D21 once the first face ran; its verdict became M8 and M9 |
 | 2026-08-02 | [M10 — the `frames` ComfyUI pipeline](plans/2026-08-02-m10-frames-pipeline.plan.md) | **Draft** |
 | 2026-08-02 | [M10 — the character library shell](plans/2026-08-02-character-library-shell.plan.md) | **Implemented** — `cargo test`, `tsc`, `vitest`, `oxlint` green |
+| 2026-08-06 | [Voice playback overlaps itself](plans/2026-08-06-voice-playback-overlap.plan.md) | **Implemented** — `tsc`, `vitest`, `oxlint` green, and confirmed by ear |
 
 ## Plan contract
 
