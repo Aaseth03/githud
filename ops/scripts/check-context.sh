@@ -30,7 +30,11 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$repo_root"
 
 # What git sees, as a sorted list of repo-relative paths.
-visible="$(mktemp)"; trap 'rm -f "$visible" "$doc" "$act"' EXIT
+# All three temp files are created before the trap that removes them: under
+# `set -u` a trap firing on an early exit would otherwise die on the unset
+# name rather than report whatever went wrong.
+visible="$(mktemp)"; doc="$(mktemp)"; act="$(mktemp)"
+trap 'rm -f "$visible" "$doc" "$act"' EXIT
 git ls-files -co --exclude-standard | sort -u > "$visible"
 
 # Vendored third-party trees (D17). Their internal docs are the vendor's and do
@@ -41,11 +45,22 @@ vendored='^config/skills/'
 if [[ $# -gt 0 ]]; then
     context_files=("$@")
 else
-    mapfile -t context_files < <(git ls-files -co --exclude-standard \
-        | grep '/CONTEXT\.md$\|^CONTEXT\.md$' | grep -Ev "$vendored" | sort)
+    # A read loop rather than `mapfile`: that is a bash 4 builtin, and macOS
+    # still ships bash 3.2, so the one script enforcing the repo's central
+    # convention could not run at all on half the machines that develop it.
+    #
+    # `grep -E` rather than a BRE with `\|`: alternation is a GNU extension to
+    # basic regular expressions, and BSD grep reads it literally. The pattern
+    # matched 1 of this repo's 14 CONTEXT.md files on macOS — one file checked,
+    # thirteen skipped, and a confident "trees match disk" for a tree nobody
+    # looked at.
+    context_files=()
+    while IFS= read -r f; do
+        context_files+=("$f")
+    done < <(git ls-files -co --exclude-standard \
+        | grep -E '(^|/)CONTEXT\.md$' | grep -Ev "$vendored" | sort)
 fi
 
-doc="$(mktemp)"; act="$(mktemp)"
 drifted=0
 checked=0
 
@@ -55,18 +70,26 @@ for cf in "${context_files[@]}"; do
     prefix=""; [[ "$dir" != "." ]] && prefix="$dir/"
 
     # Extract the first ```text fence and turn the ASCII tree into relative paths.
-    # Indent is three characters per level ("│  " or "   "); the entry glyph is
-    # ├ or └, so the glyph's byte offset divided by three is the depth. The name
-    # is the first whitespace-delimited token after the glyph — everything after
-    # it is the aligned annotation.
-    awk '
+    #
+    # The glyphs are flattened to one-byte stand-ins first, and that is not
+    # cosmetic. `index`/`substr` are byte-oriented in macOS's awk and
+    # character-oriented in gawk, and every box-drawing glyph is three bytes in
+    # UTF-8 — so `substr(line, pos + 3)` stepped over the whole of "├─ " on
+    # Linux and over only the "├" on macOS, leaving every entry parsed with the
+    # name "─". The script did not fail there; it reported the entire repo as
+    # undocumented, which is worse. On ASCII the two behaviours are identical.
+    #
+    # Indent is then three characters per level ("|  " or "   ") and the entry
+    # glyph is "+- ", so the glyph's offset divided by three is the depth. The
+    # name is the first whitespace-delimited token after it — everything past
+    # that is the aligned annotation.
+    sed 's/│/|/g; s/├/+/g; s/└/+/g; s/─/-/g' "$cf" | awk '
         /^```text/ { infence = 1; next }
         /^```/     { if (infence) exit; next }
         !infence   { next }
         {
             line = $0
-            pos = index(line, "├─ "); glyph = 3
-            if (pos == 0) { pos = index(line, "└─ ") }
+            pos = index(line, "+- ")
             if (pos == 0) { next }
             depth = int((pos - 1) / 3)
             rest = substr(line, pos + 3)
@@ -82,7 +105,7 @@ for cf in "${context_files[@]}"; do
             }
             print path name
         }
-    ' "$cf" | sed 's|^\./||' | sort -u > "$doc"
+    ' | sed 's|^\./||' | sort -u > "$doc"
 
     if [[ ! -s "$doc" ]]; then
         printf '%s\n  no ```text tree found — the convention requires one\n' "$cf"

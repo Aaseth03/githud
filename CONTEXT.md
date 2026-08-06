@@ -9,6 +9,7 @@ the rest of the repo.
 ```text
 githud/
 ├─ AGENTS.md              Layer 0 — what this is, how to work, hard rules
+├─ CLAUDE.md              symlink → AGENTS.md, so Claude Code finds Layer 0 by its own name
 ├─ CONTEXT.md             Layer 1 — this file, routing
 ├─ README.md              Human-facing summary
 ├─ .gitignore

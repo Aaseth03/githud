@@ -20,7 +20,8 @@ src/
 ├─ .oxlintrc.json
 ├─ .gitignore
 ├─ scripts/
-│  └─ check-rust.sh        preflight: is cargo on PATH, with install steps if not
+│  ├─ check-rust.sh        preflight: is cargo on PATH, with install steps if not
+│  └─ check-sandbox.sh     preflight: is the sandbox floor present for this OS (D16, D27)
 ├─ lessons/                the rules that bite, split by what they constrain — shared by both workspaces below
 │  ├─ boundary.md          the Rust↔TS wire
 │  ├─ process.md           processes, sessions, lifetime
@@ -40,6 +41,7 @@ src/
 | Write, change, or debug the Rust core (Tauri commands, PTY, git, agent adapters, guardrails) | [`src-tauri/CONTEXT.md`](src-tauri/CONTEXT.md) |
 | Build, run, or package the app | `../docs/guides/build-and-run.md` |
 | Change the cargo-on-PATH preflight | `scripts/check-rust.sh` |
+| Change what the app refuses to launch without | `scripts/check-sandbox.sh` |
 
 `lessons/` has no `CONTEXT.md` of its own — it is shared reference material, not
 a workspace. Each side's `CONTEXT.md` links to the one file in here that
