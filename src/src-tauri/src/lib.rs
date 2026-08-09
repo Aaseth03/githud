@@ -21,7 +21,7 @@ pub mod scan;
 pub mod theme;
 pub mod voice;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use scan::{ScanResult, DEFAULT_MAX_DEPTH};
 
@@ -953,6 +953,148 @@ fn character_library_parts(id: String, dir: String) -> Result<Vec<character::Par
     character::load_layers(&character::library::entry_dir(&characters_library_dir()?, &id), &dir)
 }
 
+// ── The vrm type (D28) ──────────────────────────────────────────────────────
+//
+// A `.vrm` and a `.vrma` arrive as a *path* from the file dialog, never as
+// bytes: a VRoid model is routinely tens of megabytes, and base64-ing that
+// across the IPC boundary only to hand it back to the filesystem is a copy
+// with no purpose. Bytes cross the other way — to the renderer — as a raw
+// `Response`, which reaches the webview as an `ArrayBuffer` that
+// `GLTFLoader.parse` takes directly.
+
+/// The shared animation library's folder. One for the whole app, not one per
+/// character — a `.vrma` retargets onto any VRM, so a copy per character
+/// would be N identical files that can drift.
+fn vrm_animations_dir() -> Result<PathBuf, String> {
+    if let Ok(explicit) = std::env::var("GITHUD_VRM_ANIMATIONS_DIR") {
+        return Ok(PathBuf::from(explicit));
+    }
+    let data_home = dirs::data_local_dir().ok_or("could not resolve the data directory")?;
+    Ok(data_home.join("githud/vrm-animations"))
+}
+
+/// Import a picked `.vrm` into a character and switch it to the `vrm` kind.
+///
+/// The model is validated and stored *before* the profile is rewritten, so a
+/// refused file leaves the character exactly as it was rather than pointing at
+/// a model that is not there.
+#[tauri::command]
+fn character_library_vrm_import(
+    id: String,
+    source_path: String,
+) -> Result<character::vrm::VrmInfo, String> {
+    let dir = character::library::entry_dir(&characters_library_dir()?, &id);
+    let info = character::vrm::import(&dir, Path::new(&source_path))?;
+    update_character_library(&id, |text| character::set_sprite_vrm(text, &info.spec))?;
+    Ok(info)
+}
+
+/// A library character's model, as raw bytes for `GLTFLoader.parse`.
+#[tauri::command]
+fn character_library_vrm_model(id: String) -> Result<tauri::ipc::Response, String> {
+    let dir = character::library::entry_dir(&characters_library_dir()?, &id);
+    Ok(tauri::ipc::Response::new(character::vrm::read_model(&dir)?))
+}
+
+/// Store the still preview the webview baked after loading the model.
+///
+/// Base64 here rather than a path, unlike the model: this is a small PNG the
+/// webview produced in memory, so there is no file to point at.
+#[tauri::command]
+fn character_library_vrm_thumbnail_set(id: String, png_base64: Option<String>) -> Result<(), String> {
+    use base64::Engine as _;
+    let dir = character::library::entry_dir(&characters_library_dir()?, &id);
+    match png_base64 {
+        Some(b64) => {
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(&b64)
+                .map_err(|e| format!("bad thumbnail encoding: {e}"))?;
+            character::vrm::save_thumbnail(&dir, Some(&bytes))
+        }
+        None => character::vrm::save_thumbnail(&dir, None),
+    }
+}
+
+#[tauri::command]
+fn character_library_vrm_thumbnail(id: String) -> Result<Option<String>, String> {
+    let dir = character::library::entry_dir(&characters_library_dir()?, &id);
+    character::vrm::read_thumbnail(&dir)
+}
+
+/// Set a `vrm` character's camera framing.
+#[tauri::command]
+fn character_library_vrm_frame(id: String, height: f64, distance: f64) -> Result<(), String> {
+    update_character_library(&id, |text| character::set_vrm_frame(text, height, distance))
+}
+
+/// Set, or clear, one of a `vrm` character's mouth tuning numbers (BETA).
+///
+/// One field per call rather than the whole table: a reset is the *absence* of
+/// a value, and a whole-table write cannot express "this one field is back to
+/// tracking the default" without the UI sending its own copy of every default.
+#[tauri::command]
+fn character_library_vrm_tuning(id: String, field: String, value: Option<f64>) -> Result<(), String> {
+    update_character_library(&id, |text| character::set_vrm_tuning(text, &field, value))
+}
+
+/// Assign or clear the shared clip that plays in one state.
+#[tauri::command]
+fn character_library_vrm_clip(
+    id: String,
+    state: String,
+    clip: Option<String>,
+) -> Result<(), String> {
+    update_character_library(&id, |text| {
+        character::set_vrm_clip(text, &state, clip.as_deref())
+    })
+}
+
+/// Every clip in the shared animation library, and everything that failed.
+#[tauri::command]
+fn vrm_animations_list() -> Result<character::vrma::Clips, String> {
+    Ok(character::vrma::load_all(&vrm_animations_dir()?))
+}
+
+#[tauri::command]
+fn vrm_animation_import(source_path: String) -> Result<character::vrma::Clip, String> {
+    character::vrma::import(&vrm_animations_dir()?, Path::new(&source_path))
+}
+
+#[tauri::command]
+fn vrm_animation_delete(id: String) -> Result<(), String> {
+    character::vrma::delete(&vrm_animations_dir()?, &id)
+}
+
+/// One clip's bytes, for `GLTFLoader.parse`.
+#[tauri::command]
+fn vrm_animation_clip(id: String) -> Result<tauri::ipc::Response, String> {
+    let bytes = character::vrma::read_clip(&vrm_animations_dir()?, &id)?;
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
+/// Store a clip the VRM suite's generator baked in the webview.
+///
+/// Base64 in, like every other JS→Rust byte payload here — a generated clip is
+/// tens of kilobytes, three orders of magnitude off the model path that earned
+/// its raw-bytes command, and one encoding on a button press is not worth a
+/// second convention.
+///
+/// `replace` comes from the user, not from the absence of a file: overwriting
+/// an id changes it for every character already using it, so the suite asks
+/// before it happens.
+#[tauri::command]
+fn vrm_animation_save(
+    id: String,
+    vrma_base64: String,
+    replace: bool,
+) -> Result<character::vrma::Clip, String> {
+    use base64::Engine as _;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(vrma_base64.as_bytes())
+        .map_err(|e| format!("bad animation encoding: {e}"))?;
+    character::vrma::save(&vrm_animations_dir()?, &id, &bytes, replace)
+}
+
 /// Point this project at a library character, or clear the pointer (D26).
 /// The pointer is the whole assignment — no embedded copy, nothing else to
 /// write.
@@ -1115,6 +1257,18 @@ pub fn run() {
             character_library_background_image,
             character_library_frames,
             character_library_parts,
+            character_library_vrm_import,
+            character_library_vrm_model,
+            character_library_vrm_thumbnail_set,
+            character_library_vrm_thumbnail,
+            character_library_vrm_frame,
+            character_library_vrm_tuning,
+            character_library_vrm_clip,
+            vrm_animations_list,
+            vrm_animation_import,
+            vrm_animation_delete,
+            vrm_animation_clip,
+            vrm_animation_save,
             project_character_assign,
             project_note_set,
             project_accent_set,

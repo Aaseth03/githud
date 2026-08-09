@@ -91,7 +91,118 @@ export type Sprite =
       headwear: Headwear;
     }
   | { kind: "frames"; dir: string }
-  | { kind: "layered"; dir: string; face: Face | null; pivot: Pivots };
+  | { kind: "layered"; dir: string; face: Face | null; pivot: Pivots }
+  | {
+      kind: "vrm";
+      /** The model inside this character's own library folder. */
+      file: string;
+      /**
+       * The spec version the imported file declared — `"1.0"` or `"0.0"`.
+       *
+       * Read from the file's own bytes at import, never guessed, because the
+       * renderer needs it before the first frame: VRM 0.x faces +Z where 1.0
+       * faces -Z, so a 0.x model drawn without `VRMUtils.rotateVRM0` shows the
+       * camera its back and reads as a broken import rather than a spec
+       * difference.
+       */
+      spec: string;
+      frame: VrmFrame;
+      clips: VrmClips;
+      /**
+       * The mouth's tunable numbers (BETA) — see `tuning.ts`.
+       *
+       * Optional on the wire: every profile written before this existed parses
+       * without it, and a character that has never been tuned carries no table
+       * at all rather than a copy of today's defaults.
+       */
+      tuning?: MouthTuning | null;
+    };
+
+/**
+ * Mirrors `character::MouthTuning` — the per-character lip-sync numbers (BETA).
+ *
+ * **Every field nullable, and null means "the default".** The defaults live in
+ * `ui/tuning.ts` and nowhere else; Rust round-trips this table without an
+ * opinion about any value in it. That is deliberate — serde defaults on the
+ * Rust side would be a second copy of twelve numbers, and the first time one
+ * was improved the two copies would disagree with nothing to say so.
+ *
+ * Temporary. This is a panel for finding good values, not a permanent part of
+ * what a character is.
+ */
+export interface MouthTuning {
+  /** How open the mouth stays through a syllable's quiet dips. */
+  floor: number | null;
+  gain_aa: number | null;
+  gain_ih: number | null;
+  gain_ee: number | null;
+  gain_ou: number | null;
+  gain_oh: number | null;
+  /** Milliseconds of audio per level, for loudness and vowel alike. */
+  bucket_ms: number | null;
+  quiet_reference: number | null;
+  silence: number | null;
+  fricative_zcr: number | null;
+  window_buckets: number | null;
+  /** How far below the strongest peak a resonance still counts as a formant. */
+  prominence_db: number | null;
+}
+
+/** Mirrors `character::VrmFrame` — where the camera looks, in the model's own metres. */
+export interface VrmFrame {
+  /** Height above the model's feet that the camera looks at. */
+  height: number;
+  /** How far in front of the model the camera stands. */
+  distance: number;
+}
+
+/**
+ * Mirrors `character::VrmClips` — which shared `.vrma` plays in which state.
+ *
+ * Every field optional: a character with no clips still renders, standing in
+ * its rest pose and lip-syncing. A name the library no longer has is a real,
+ * expected state, reported rather than silently skipped.
+ */
+export interface VrmClips {
+  idle: string | null;
+  listening: string | null;
+  thinking: string | null;
+  speaking: string | null;
+  alarmed: string | null;
+}
+
+/** Mirrors `character::vrm::VrmInfo` — what an imported `.vrm` turned out to be. */
+export interface VrmInfo {
+  spec: string;
+  title: string | null;
+  author: string | null;
+  exporter: string | null;
+  bytes: number;
+}
+
+/** Mirrors `character::vrma::Clip` — one entry in the shared animation library. */
+export interface VrmClip {
+  id: string;
+  display: string;
+  spec: string;
+  bytes: number;
+}
+
+/** Mirrors `character::vrma::ClipError`. */
+export interface VrmClipError {
+  id: string;
+  error: string;
+}
+
+/**
+ * Mirrors `character::vrma::Clips`. Both halves cross together, for the same
+ * reason `Characters` does — a clip lost to a bad file must not look like a
+ * clip nobody imported.
+ */
+export interface VrmClipLibrary {
+  clips: VrmClip[];
+  errors: VrmClipError[];
+}
 
 /** A point on the part canvas, as `[x, y]` fractions — never pixels. */
 export type Point = [number, number];

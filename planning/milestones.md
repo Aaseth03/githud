@@ -498,8 +498,13 @@ plugin surface. Two types are committed:
   fiddly and the outcome less predictable than the procedural type; built
   anyway, absence handled as a state rather than an error.
 
-Candidates, not committed: ASCII-sign faces, CSS-drawn faces, 3D — the open
-end of the registry, shape not yet decided.
+**3D landed 2026-08-06 as the `vrm` type** ([D28](decisions/2026-08-06-D28-vrm-is-the-3d-character-type.md)):
+a VRoid `.vrm` model posed by shared `.vrma` clips, with its own motion model
+rather than `motion.ts`'s springs. It also settled the WebGL question the
+renderer spec had been holding `live2d` and `rive` behind.
+
+Candidates still open, not committed: ASCII-sign faces, CSS-drawn faces — the
+open end of the registry, shape not yet decided.
 
 **No AI in the render path, for any design type** (D20's constraint, applied
 to authoring rather than motion) — a type may use a model to help *author* a
@@ -516,6 +521,12 @@ milestone).
       not an open plugin system. The Characters window's create flow: Procedural
       real, `2D Frame` present but inert until its own pipeline lands
 - [x] Procedural editor: in-app UI over `Sprite::Procedural`'s existing fields
+- [x] 3D type: `Sprite::Vrm`, a `.vrm` validated by its bytes and version-stamped
+      at import, a shared `.vrma` clip library, and its own suite (D28)
+- [x] A clip generator for the ambient loops — ~20 sliders, live preview on the
+      character's own model, baked to a real `.vrma` in the shared library
+      (D31). Authoring only; the render loop still plays nothing but keyframes.
+      Gestures stay an import, from VRoid's free set or Blender's VRM add-on
 - [ ] ComfyUI availability probed on this machine before the workflow is ever
       offered — absent is a state, not an error
 - [ ] `character-preview` — a prompt yields candidate portraits, front-facing

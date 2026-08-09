@@ -61,6 +61,8 @@ export interface VoiceReadiness {
  * moment of speaking, so a change to what is speakable applies to everything
  * still in the queue rather than only to what is added after.
  */
+import type { ResolvedTuning } from "./tuning";
+
 export interface Spoken {
   /** The message this is, so the same one is never queued twice. */
   key: string;
@@ -74,6 +76,15 @@ export interface Spoken {
    * voice of the room it came from.
    */
   voice?: string | null;
+  /**
+   * The character's mouth tuning, already resolved (BETA, D30).
+   *
+   * Carried on the item for exactly the reason `voice` is: the queue can hold
+   * replies from two projects at once, and by the time the second is spoken the
+   * selected character may have moved on. A reply is analysed with the tuning
+   * of the room it came from.
+   */
+  tuning?: ResolvedTuning | null;
 }
 
 /**

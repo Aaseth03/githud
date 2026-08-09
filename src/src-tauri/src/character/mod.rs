@@ -13,6 +13,8 @@
 
 pub mod library;
 pub mod migrate;
+pub mod vrm;
+pub mod vrma;
 
 use std::path::{Path, PathBuf};
 
@@ -130,6 +132,174 @@ pub enum Sprite {
         #[serde(default)]
         pivot: Pivots,
     },
+    /// A VRoid `.vrm` model, posed by `.vrma` clips (D28).
+    ///
+    /// **The one kind with its own motion model.** Every other kind is
+    /// `motion.ts`'s springs applied to different art; this one is authored
+    /// animation retargeted onto a humanoid rig, which is a different
+    /// experience on purpose rather than the same character in 3D. What it
+    /// still shares — and must — is the two inputs every kind consumes: the
+    /// amplitude envelope and the five character states.
+    Vrm {
+        /// The model inside this character's own library folder. Always
+        /// `vrm::MODEL_FILE` today; declared rather than assumed so a file
+        /// that is somehow named otherwise reports as missing instead of
+        /// being looked for under a name nothing wrote.
+        #[serde(default = "default_model_file")]
+        file: String,
+        /// The spec version the file itself declared, recorded at import.
+        ///
+        /// Not decoration. VRM 0.x faces +Z and VRM 1.0 faces -Z, so the
+        /// renderer must know which it has before the first frame — a 0.x
+        /// model drawn without the compensating rotation faces away from the
+        /// camera and reads as a broken import.
+        #[serde(default = "default_spec")]
+        spec: String,
+        /// What the camera looks at. Per-character because rigs differ: a
+        /// chibi and a tall model framed identically put the face in two
+        /// different places, and the face is where the lip-sync is.
+        #[serde(default)]
+        frame: VrmFrame,
+        /// Which shared clip plays in which state.
+        #[serde(default)]
+        clips: VrmClips,
+        /// The mouth's tunable numbers (BETA) — see `ui/tuning.ts`.
+        ///
+        /// **Round-tripped without an opinion, deliberately.** Every field is
+        /// optional and `None` means "use the default", and the defaults live
+        /// in `ui/tuning.ts` and nowhere else. Repeating them here as serde
+        /// defaults would be a second copy of twelve numbers that agree today
+        /// and silently disagree the first time one is improved — the shape of
+        /// the `Health` bug, which cost all of M6.
+        ///
+        /// `skip_serializing_if` so an untuned character writes no table at
+        /// all: a `character.toml` full of nulls suggests something was
+        /// configured when nothing was.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        tuning: Option<MouthTuning>,
+    },
+}
+
+/// The per-character lip-sync numbers (BETA).
+///
+/// Temporary: a panel for finding good values against real voices and real
+/// rigs, not a permanent part of what a character is. See `ui/tuning.ts` for
+/// what each one does and what it falls back to.
+///
+/// **No validation here beyond the type.** The UI clamps every value into the
+/// range its slider offers when it resolves the table, which is the only place
+/// that knows what a sane range is — a rule duplicated here would be the same
+/// drift this struct's own doc warns about. A hand-edited file with a wild
+/// number is clamped, not rejected, because refusing to load a character over
+/// a lip-sync dial would be a far worse failure than a strange-looking mouth.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct MouthTuning {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub floor: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gain_aa: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gain_ih: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gain_ee: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gain_ou: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gain_oh: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub bucket_ms: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub quiet_reference: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub silence: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fricative_zcr: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub window_buckets: Option<f32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prominence_db: Option<f32>,
+}
+
+/// Where the camera sits, in the model's own metres.
+///
+/// Metres rather than fractions — unlike a part canvas, a VRM has a real
+/// scale, and 1.35 m up means the same place on every humanoid rig ever
+/// exported. That is exactly what a fraction of a bounding box would not
+/// guarantee once a model has cat ears.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct VrmFrame {
+    /// Height above the model's feet that the camera looks at.
+    #[serde(default = "default_frame_height")]
+    pub height: f32,
+    /// How far in front of the model the camera stands.
+    #[serde(default = "default_frame_distance")]
+    pub distance: f32,
+}
+
+impl Default for VrmFrame {
+    /// A bust: head and upper chest. The stage is a narrow column, and a whole
+    /// avatar fitted into it puts the mouth a few pixels across.
+    fn default() -> Self {
+        Self {
+            height: default_frame_height(),
+            distance: default_frame_distance(),
+        }
+    }
+}
+
+/// The state-to-clip map, naming entries in the shared animation library.
+///
+/// **Every field optional, and that is the design.** A character with no clips
+/// still renders — it stands in its rest pose, breathing via its own spring
+/// bones, and lip-syncs. Requiring five clips before a freshly imported model
+/// would show anything would make importing a character a five-step errand.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct VrmClips {
+    pub idle: Option<String>,
+    pub listening: Option<String>,
+    pub thinking: Option<String>,
+    pub speaking: Option<String>,
+    pub alarmed: Option<String>,
+}
+
+impl VrmClips {
+    /// Every clip id named here, for validation and for reporting which of
+    /// them the library no longer has.
+    pub fn ids(&self) -> impl Iterator<Item = (&'static str, &str)> {
+        [
+            ("idle", &self.idle),
+            ("listening", &self.listening),
+            ("thinking", &self.thinking),
+            ("speaking", &self.speaking),
+            ("alarmed", &self.alarmed),
+        ]
+        .into_iter()
+        .filter_map(|(state, id)| id.as_deref().map(|id| (state, id)))
+        .collect::<Vec<_>>()
+        .into_iter()
+    }
+}
+
+fn default_model_file() -> String {
+    vrm::MODEL_FILE.to_string()
+}
+
+/// Only reached by a hand-written profile that omits it. A file that does not
+/// say which spec it is gets the current one rather than a guess at 0.x — and
+/// the renderer's own `metaVersion` check is the backstop either way.
+fn default_spec() -> String {
+    "1.0".to_string()
+}
+
+fn default_frame_height() -> f32 {
+    1.35
+}
+
+fn default_frame_distance() -> f32 {
+    0.9
 }
 
 /// Where a character's features sit, as fractions of the part canvas.
@@ -337,6 +507,37 @@ impl Profile {
                     fraction("sprite.pivot.antenna", p)?;
                 }
             }
+            Sprite::Vrm {
+                file,
+                spec,
+                frame,
+                clips,
+                // Not validated: the UI clamps every value when it resolves
+                // the table, and it is the only side that knows the ranges.
+                tuning: _,
+            } => {
+                validate_single_name("sprite.file", file)?;
+                if spec.trim().is_empty() {
+                    return Err(
+                        "sprite.spec is empty — the VRM version is detected at import and \
+                         recorded, never blank"
+                            .into(),
+                    );
+                }
+                // A camera at zero distance sits inside the model's head and
+                // renders the inside of a skull, which reads as a black stage.
+                for (field, v) in [
+                    ("sprite.frame.height", frame.height),
+                    ("sprite.frame.distance", frame.distance),
+                ] {
+                    if !v.is_finite() || v <= 0.0 {
+                        return Err(format!("{field}: {v} must be a positive number of metres"));
+                    }
+                }
+                for (state, id) in clips.ids() {
+                    validate_single_name(&format!("sprite.clips.{state}"), id)?;
+                }
+            }
             Sprite::Procedural { .. } => {}
         }
 
@@ -379,7 +580,7 @@ impl Profile {
     pub fn frames_dir(&self) -> Option<&str> {
         match &self.sprite {
             Sprite::Frames { dir } => Some(dir.as_str()),
-            Sprite::Layered { .. } | Sprite::Procedural { .. } => None,
+            Sprite::Layered { .. } | Sprite::Procedural { .. } | Sprite::Vrm { .. } => None,
         }
     }
 
@@ -387,9 +588,28 @@ impl Profile {
     pub fn layered_dir(&self) -> Option<&str> {
         match &self.sprite {
             Sprite::Layered { dir, .. } => Some(dir.as_str()),
-            Sprite::Frames { .. } | Sprite::Procedural { .. } => None,
+            Sprite::Frames { .. } | Sprite::Procedural { .. } | Sprite::Vrm { .. } => None,
         }
     }
+}
+
+/// A path fragment that names one file or one entry, and only that.
+///
+/// It arrives from a file the user owns, which is the argument for trusting it
+/// and exactly why it is checked anyway: this is joined onto a directory and
+/// read, and `../../..` in a config file is a boundary whether or not today's
+/// writer is the user. `validate_frames_dir`'s sibling, kept separate only so
+/// each can name the field it is complaining about.
+fn validate_single_name(field: &str, value: &str) -> Result<(), String> {
+    if value.is_empty() {
+        return Err(format!("{field} is empty"));
+    }
+    if value.contains('/') || value.contains('\\') || value.contains("..") {
+        return Err(format!(
+            "{field}: `{value}` must be a single name, with no path separators"
+        ));
+    }
+    Ok(())
 }
 
 /// A frame directory names a folder, and only a folder.
@@ -763,6 +983,204 @@ pub fn set_sprite_procedural(
     sprite["headwear"] = toml_edit::value(headwear);
 
     Ok(doc.to_string())
+}
+
+/// Turn a character into a `vrm` one, recording the spec version the imported
+/// file declared (D28).
+///
+/// Called only after `vrm::import` has actually stored a model, so the profile
+/// never claims a model that is not on disk. Clears the previous kind's fields
+/// for the same reason `set_sprite_procedural` does, but **keeps any existing
+/// `frame` and `clips`**: re-importing a better export of the same character
+/// should not silently throw away the framing the user tuned by hand.
+///
+/// Pure, so the rule is testable without a filesystem.
+pub fn set_sprite_vrm(text: &str, spec: &str) -> Result<String, String> {
+    let mut doc = text
+        .parse::<toml_edit::DocumentMut>()
+        .map_err(|e| format!("profile is malformed: {e}"))?;
+
+    if !doc.contains_key("sprite") {
+        doc["sprite"] = toml_edit::table();
+    }
+    let Some(sprite) = doc["sprite"].as_table_mut() else {
+        return Err("sprite is not a table".to_string());
+    };
+
+    let frame = sprite.remove("frame");
+    let clips = sprite.remove("clips");
+    sprite.clear();
+    sprite["kind"] = toml_edit::value("vrm");
+    sprite["file"] = toml_edit::value(vrm::MODEL_FILE);
+    sprite["spec"] = toml_edit::value(spec);
+    if let Some(frame) = frame {
+        sprite.insert("frame", frame);
+    }
+    if let Some(clips) = clips {
+        sprite.insert("clips", clips);
+    }
+
+    Ok(doc.to_string())
+}
+
+/// Set the camera framing on a `vrm` character.
+///
+/// Refuses on any other kind rather than writing a `frame` nothing reads — a
+/// key that is silently inert is worse than an error, because the slider would
+/// appear to work.
+pub fn set_vrm_frame(text: &str, height: f64, distance: f64) -> Result<String, String> {
+    let mut doc = text
+        .parse::<toml_edit::DocumentMut>()
+        .map_err(|e| format!("profile is malformed: {e}"))?;
+
+    require_vrm(&doc, "framing")?;
+    for (field, v) in [("height", height), ("distance", distance)] {
+        if !v.is_finite() || v <= 0.0 {
+            return Err(format!(
+                "sprite.frame.{field}: {v} must be a positive number of metres"
+            ));
+        }
+    }
+
+    let Some(sprite) = doc["sprite"].as_table_mut() else {
+        return Err("sprite is not a table".to_string());
+    };
+    let mut frame = toml_edit::InlineTable::new();
+    frame.insert("height", toml_edit::value(height).into_value().unwrap());
+    frame.insert("distance", toml_edit::value(distance).into_value().unwrap());
+    sprite["frame"] = toml_edit::value(frame);
+
+    Ok(doc.to_string())
+}
+
+/// Assign, or clear, the shared-library clip that plays in one state.
+pub fn set_vrm_clip(text: &str, state: &str, clip: Option<&str>) -> Result<String, String> {
+    const STATES: [&str; 5] = ["idle", "listening", "thinking", "speaking", "alarmed"];
+    if !STATES.contains(&state) {
+        return Err(format!(
+            "`{state}` is not a character state — one of {}",
+            STATES.join(", ")
+        ));
+    }
+
+    let mut doc = text
+        .parse::<toml_edit::DocumentMut>()
+        .map_err(|e| format!("profile is malformed: {e}"))?;
+
+    require_vrm(&doc, "animation clips")?;
+    if let Some(id) = clip {
+        validate_single_name(&format!("sprite.clips.{state}"), id)?;
+    }
+
+    let Some(sprite) = doc["sprite"].as_table_mut() else {
+        return Err("sprite is not a table".to_string());
+    };
+    if !sprite.contains_key("clips") {
+        sprite["clips"] = toml_edit::table();
+    }
+    let Some(clips) = sprite["clips"].as_table_like_mut() else {
+        return Err("sprite.clips is not a table".to_string());
+    };
+    match clip {
+        Some(id) => {
+            clips.insert(state, toml_edit::value(id));
+        }
+        None => {
+            clips.remove(state);
+        }
+    }
+
+    Ok(doc.to_string())
+}
+
+/// Set, or clear, one of the mouth's tunable numbers (BETA).
+///
+/// **Clearing removes the key rather than writing a default.** A field nobody
+/// moved must stay absent, so that improving a default in `ui/tuning.ts` reaches
+/// every character that never disagreed with it. Writing today's value in on
+/// reset would freeze each character against the day its slider was touched,
+/// and nothing would ever say why two characters that both "look default"
+/// behave differently.
+///
+/// The last field being cleared takes the whole `[sprite.tuning]` table with it,
+/// for the same reason: an empty table in a profile reads as something having
+/// been configured.
+pub fn set_vrm_tuning(text: &str, field: &str, value: Option<f64>) -> Result<String, String> {
+    const FIELDS: [&str; 12] = [
+        "floor",
+        "gain_aa",
+        "gain_ih",
+        "gain_ee",
+        "gain_ou",
+        "gain_oh",
+        "bucket_ms",
+        "quiet_reference",
+        "silence",
+        "fricative_zcr",
+        "window_buckets",
+        "prominence_db",
+    ];
+    if !FIELDS.contains(&field) {
+        return Err(format!(
+            "`{field}` is not a mouth tuning field — one of {}",
+            FIELDS.join(", ")
+        ));
+    }
+    if let Some(v) = value {
+        // Range is the UI's business (it owns the sliders); finiteness is not.
+        // A NaN reaching the analyser propagates into every morph weight and
+        // freezes the whole face, with nothing anywhere naming the cause.
+        if !v.is_finite() {
+            return Err(format!("sprite.tuning.{field}: {v} is not a finite number"));
+        }
+    }
+
+    let mut doc = text
+        .parse::<toml_edit::DocumentMut>()
+        .map_err(|e| format!("profile is malformed: {e}"))?;
+
+    require_vrm(&doc, "mouth tuning")?;
+
+    let Some(sprite) = doc["sprite"].as_table_mut() else {
+        return Err("sprite is not a table".to_string());
+    };
+    match value {
+        Some(v) => {
+            if !sprite.contains_key("tuning") {
+                sprite["tuning"] = toml_edit::table();
+            }
+            let Some(tuning) = sprite["tuning"].as_table_like_mut() else {
+                return Err("sprite.tuning is not a table".to_string());
+            };
+            tuning.insert(field, toml_edit::value(v));
+        }
+        None => {
+            if let Some(tuning) = sprite.get_mut("tuning").and_then(|t| t.as_table_like_mut()) {
+                tuning.remove(field);
+                if tuning.is_empty() {
+                    sprite.remove("tuning");
+                }
+            }
+        }
+    }
+
+    Ok(doc.to_string())
+}
+
+/// A guard for the setters above: the field they write only means anything
+/// on a `vrm` character.
+fn require_vrm(doc: &toml_edit::DocumentMut, what: &str) -> Result<(), String> {
+    let kind = doc
+        .get("sprite")
+        .and_then(|s| s.get("kind"))
+        .and_then(|k| k.as_str());
+    match kind {
+        Some("vrm") => Ok(()),
+        Some(other) => Err(format!(
+            "{what} applies to a vrm character; this one is `{other}`"
+        )),
+        None => Err(format!("{what} applies to a vrm character; this one is not")),
+    }
 }
 
 /// Set or clear one field of a character's `[palette]` — `field` is `accent`,
@@ -1480,6 +1898,92 @@ mod tests {
         v
     }
 
+    /// A minimal `vrm` profile, for the tuning setters below.
+    fn vrm_toml() -> String {
+        "display = \"Test\"\n\n[palette]\n\n[sprite]\nkind = \"vrm\"\nfile = \"model.vrm\"\n\
+         spec = \"1.0\"\n\n[temperament]\n"
+            .to_string()
+    }
+
+    #[test]
+    fn setting_a_mouth_tuning_field_writes_only_that_field() {
+        let out = set_vrm_tuning(&vrm_toml(), "floor", Some(0.5)).unwrap();
+        assert!(out.contains("floor = 0.5"));
+        // Sparse on purpose: a field nobody moved must stay absent, so that
+        // improving a default in `ui/tuning.ts` still reaches this character.
+        assert!(!out.contains("gain_aa"));
+        assert!(!out.contains("bucket_ms"));
+
+        let both = set_vrm_tuning(&out, "gain_ih", Some(1.2)).unwrap();
+        assert!(both.contains("floor = 0.5"));
+        assert!(both.contains("gain_ih = 1.2"));
+    }
+
+    #[test]
+    fn clearing_a_field_removes_the_key_rather_than_writing_the_default() {
+        // Writing today's value in on reset would freeze the character against
+        // the day its slider was touched, and nothing would ever say why two
+        // characters that both look untouched behave differently.
+        let set = set_vrm_tuning(&vrm_toml(), "floor", Some(0.5)).unwrap();
+        let cleared = set_vrm_tuning(&set, "floor", None).unwrap();
+        assert!(!cleared.contains("floor"));
+        // The last field going takes the table with it — an empty
+        // `[sprite.tuning]` reads as something having been configured.
+        assert!(!cleared.contains("tuning"));
+    }
+
+    #[test]
+    fn clearing_one_field_leaves_the_others_alone() {
+        let a = set_vrm_tuning(&vrm_toml(), "floor", Some(0.5)).unwrap();
+        let b = set_vrm_tuning(&a, "silence", Some(0.2)).unwrap();
+        let c = set_vrm_tuning(&b, "floor", None).unwrap();
+        assert!(!c.contains("floor"));
+        assert!(c.contains("silence = 0.2"));
+        assert!(c.contains("tuning"));
+    }
+
+    #[test]
+    fn a_tuning_field_that_does_not_exist_is_named_not_ignored() {
+        // Silently accepting it would write a key nothing reads, and the
+        // slider would appear to work.
+        let e = set_vrm_tuning(&vrm_toml(), "flooor", Some(0.5)).unwrap_err();
+        assert!(e.contains("flooor"), "{e}");
+        assert!(e.contains("floor"), "the error should list the real fields: {e}");
+    }
+
+    #[test]
+    fn a_non_finite_tuning_value_is_refused() {
+        // A NaN reaches a morph target and freezes the whole face, with
+        // nothing anywhere naming the cause.
+        assert!(set_vrm_tuning(&vrm_toml(), "floor", Some(f64::NAN)).is_err());
+        assert!(set_vrm_tuning(&vrm_toml(), "floor", Some(f64::INFINITY)).is_err());
+    }
+
+    #[test]
+    fn mouth_tuning_applies_to_a_vrm_character_only() {
+        // The same rule as the framing setter: a key that is silently inert is
+        // worse than an error, because the slider would appear to work.
+        let procedural = "display = \"P\"\n\n[palette]\n\n[sprite]\nkind = \"procedural\"\n\n[temperament]\n";
+        let e = set_vrm_tuning(procedural, "floor", Some(0.5)).unwrap_err();
+        assert!(e.contains("procedural"), "{e}");
+    }
+
+    #[test]
+    fn a_tuned_profile_round_trips_through_the_parser() {
+        let text = set_vrm_tuning(&vrm_toml(), "floor", Some(0.5)).unwrap();
+        let profile = Profile::parse("test", &text).expect("a tuned profile must still load");
+        match &profile.sprite {
+            Sprite::Vrm { tuning, .. } => {
+                assert_eq!(tuning.and_then(|t| t.floor), Some(0.5));
+                // Untouched fields stay `None` rather than becoming a default
+                // here — the UI owns the defaults, and a copy on this side is
+                // exactly the drift `MouthTuning`'s own doc warns about.
+                assert_eq!(tuning.and_then(|t| t.gain_aa), None);
+            }
+            other => panic!("expected a vrm sprite, got {other:?}"),
+        }
+    }
+
     #[test]
     fn the_committed_wire_fixture_is_exactly_what_this_module_serializes() {
         // **This is the M6 `Health` bug's only real defence.** That fault was
@@ -1517,12 +2021,21 @@ mod tests {
 
         // And the parts the UI actually branches on, stated rather than implied.
         // Every sprite kind appears, so adding one cannot slip past this test.
-        assert_eq!(parsed.profiles.len(), 4);
+        assert_eq!(parsed.profiles.len(), 5);
         assert_eq!(declared["profiles"][0]["name"], HOUSE);
         assert_eq!(declared["profiles"][0]["sprite"]["kind"], "procedural");
         assert_eq!(declared["profiles"][1]["sprite"]["kind"], "layered");
         assert_eq!(declared["profiles"][2]["sprite"]["kind"], "procedural");
         assert_eq!(declared["profiles"][3]["sprite"]["kind"], "frames");
+        assert_eq!(declared["profiles"][4]["sprite"]["kind"], "vrm");
+        // The spec version is a *string* on the wire, not a number: `1.0`
+        // parsed as a float and re-serialized comes back `1.0` by luck and a
+        // future `1.10` comes back `1.1`, which is a different version.
+        assert!(declared["profiles"][4]["sprite"]["spec"].is_string());
+        // An unassigned state is `null`, never a missing key — the UI reads
+        // five states off this object and an absent one would read `undefined`
+        // on a type that says `string | null`.
+        assert!(declared["profiles"][4]["sprite"]["clips"]["listening"].is_null());
         assert!(
             declared["profiles"][0].get("procedural").is_none(),
             "an externally tagged encoding would nest the variant here — the \

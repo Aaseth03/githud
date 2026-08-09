@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import type { ResolvedTuning } from "../tuning";
 import {
   activityLabel,
   appendNotice,
@@ -29,11 +30,13 @@ interface Props {
   /**
    * The voice this project's replies are spoken in.
    *
-   * Resolved by `character.ts::voiceFor` — the character's own if it has one and
+   * ResolvedTuning by `character.ts::voiceFor` — the character's own if it has one and
    * this machine's Voicebox has it, otherwise the app's selection. `null` means
    * no preference, which is not the same as silence.
    */
   roomVoice?: string | null;
+  /** The character's resolved mouth tuning (BETA, D30). */
+  roomTuning?: ResolvedTuning | null;
   /**
    * Push-to-talk is held.
    *
@@ -51,7 +54,7 @@ interface Props {
  * JSON (D1, D2). The status line under the composer comes from real `tool_call`
  * events, so it names the actual file rather than inventing a word.
  */
-export function Chat({ project, visible, voice, roomVoice, onListening }: Props) {
+export function Chat({ project, visible, voice, roomVoice, roomTuning, onListening }: Props) {
   const [state, setState] = useState(initialChatState);
   const [draft, setDraft] = useState("");
   const [startError, setStartError] = useState<string | null>(null);
@@ -120,9 +123,9 @@ export function Chat({ project, visible, voice, roomVoice, onListening }: Props)
     for (const entry of state.entries) {
       if (entry.kind !== "assistant" || offered.current.has(entry.id)) continue;
       offered.current.add(entry.id);
-      offer(entry.id, entry.text, roomVoice);
+      offer(entry.id, entry.text, roomVoice, roomTuning);
     }
-  }, [state.entries, offer, roomVoice]);
+  }, [state.entries, offer, roomVoice, roomTuning]);
 
   useEffect(() => {
     if (visible && !readOnly) inputRef.current?.focus();
@@ -242,7 +245,7 @@ export function Chat({ project, visible, voice, roomVoice, onListening }: Props)
             speaking={voice.speaking === entry.id}
             onSpeak={
               entry.kind === "assistant"
-                ? () => setVoiceError(voice.speak(entry.id, entry.text, roomVoice))
+                ? () => setVoiceError(voice.speak(entry.id, entry.text, roomVoice, roomTuning))
                 : undefined
             }
           />

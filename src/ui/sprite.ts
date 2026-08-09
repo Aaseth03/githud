@@ -21,17 +21,24 @@
  * 25 ms is about a syllable's rise time — long enough that the mouth is not
  * chattering per-sample, short enough that a plosive still registers.
  */
-export const BUCKET_MS = 25;
+import { syntheticVisemes, visemesOfPcm, type VisemeTrack } from "./viseme";
+import { DEFAULT_TUNING, type ResolvedTuning } from "./tuning";
 
 /**
- * The quietest peak that still counts as a full-open mouth.
+ * The default bucket width, and the one every synthetic envelope uses.
  *
- * Levels are normalized against the loudest bucket so a softly-spoken reply
- * still animates — but normalizing an *almost silent* chunk would amplify room
- * tone into a shout. Below this reference the audio is scaled absolutely and
- * simply reads as quiet, which is what it is.
+ * Per-character tuning can move it (`tuning.ts`, BETA); this stays the number
+ * the app falls back to and the one every test that is not about tuning uses.
  */
-const QUIET_REFERENCE = 0.06;
+export const BUCKET_MS = 25;
+
+/*
+ * `quiet_reference` — the quietest peak that still counts as a full-open mouth
+ * — is now tuning too. Levels are normalized against the loudest bucket so a
+ * softly-spoken reply still animates, but normalizing an *almost silent* chunk
+ * would amplify room tone into a shout. Below this reference the audio is
+ * scaled absolutely and simply reads as quiet, which is what it is.
+ */
 
 export interface Pcm {
   /** Mono, -1…1. Multi-channel input is mixed down. */
@@ -42,6 +49,16 @@ export interface Pcm {
 export interface Envelope {
   /** Loudness per bucket, 0…1. */
   levels: Float32Array;
+  /**
+   * Which vowel is sounding per bucket — the *shape*, where `levels` is the
+   * strength. Exactly as long as `levels`, and indexed by the same time.
+   *
+   * Only the `vrm` kind can use it: a rig with five vowel morphs needs to know
+   * which one, where a mouth drawn as one ellipse only ever needed how much.
+   * See `viseme.ts` for why it is precomputed here rather than read off the
+   * audio graph during playback.
+   */
+  visemes?: VisemeTrack;
   /** Seconds of audio one level covers. */
   bucketSeconds: number;
   seconds: number;
@@ -136,9 +153,9 @@ export function parseWav(bytes: Uint8Array): Pcm | string {
 }
 
 /** RMS per bucket, normalized so a quiet voice still opens its mouth. */
-export function envelopeOfPcm(pcm: Pcm): Envelope {
+export function envelopeOfPcm(pcm: Pcm, tuning: ResolvedTuning = DEFAULT_TUNING): Envelope {
   const { samples, sampleRate } = pcm;
-  const bucketSeconds = BUCKET_MS / 1000;
+  const bucketSeconds = Math.max(1, tuning.bucket_ms) / 1000;
   const per = Math.max(1, Math.round(sampleRate * bucketSeconds));
   const count = Math.ceil(samples.length / per);
   const levels = new Float32Array(count);
@@ -154,13 +171,18 @@ export function envelopeOfPcm(pcm: Pcm): Envelope {
     if (rms > loudest) loudest = rms;
   }
 
-  const reference = Math.max(loudest, QUIET_REFERENCE);
+  const reference = Math.max(loudest, tuning.quiet_reference);
   for (let b = 0; b < count; b++) {
     levels[b] = Math.min(1, levels[b]! / reference);
   }
 
   return {
     levels,
+    // The same samples, walked again for shape rather than strength. One pass
+    // could produce both, and keeping them apart is deliberate: every 2D kind
+    // uses only the levels, and this file stays the thing that decides how
+    // open a mouth is.
+    visemes: visemesOfPcm(pcm, bucketSeconds, tuning),
     bucketSeconds,
     seconds: sampleRate > 0 ? samples.length / sampleRate : 0,
   };
@@ -175,10 +197,14 @@ export function envelopeOfPcm(pcm: Pcm): Envelope {
  * invented data reads as normal — and only one of those can be corrected by
  * being told about it.
  */
-export function envelopeOf(bytes: Uint8Array, fallbackSeconds = 3): Envelope {
+export function envelopeOf(
+  bytes: Uint8Array,
+  fallbackSeconds = 3,
+  tuning: ResolvedTuning = DEFAULT_TUNING,
+): Envelope {
   const pcm = parseWav(bytes);
   if (typeof pcm === "string") return syntheticEnvelope(fallbackSeconds, pcm);
-  return envelopeOfPcm(pcm);
+  return envelopeOfPcm(pcm, tuning);
 }
 
 /**
@@ -202,7 +228,13 @@ export function syntheticEnvelope(seconds: number, reason: string): Envelope {
     levels[b] = Math.max(0, 0.55 + 0.35 * syllable + 0.18 * phrase) * 0.9;
   }
 
-  return { levels, bucketSeconds, seconds, synthetic: reason };
+  return {
+    levels,
+    visemes: syntheticVisemes(count),
+    bucketSeconds,
+    seconds,
+    synthetic: reason,
+  };
 }
 
 /**

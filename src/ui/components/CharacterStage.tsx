@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { accentOf } from "../character";
 import { frameAt, mouthAt } from "../sprite";
@@ -25,6 +25,9 @@ import {
   type Profile,
 } from "../types";
 import { EyesGlyph, HeadGlyph, HeadwearGlyph, MouthGlyph } from "./proceduralParts";
+import { VrmFigure } from "./VrmFigure";
+import { vrmSpriteOf } from "../vrm";
+import { resolve as resolveTuning } from "../tuning";
 
 /**
  * The character, moving with what is being said and with what is happening.
@@ -77,7 +80,17 @@ export function CharacterStage({
    * character simply holds its listening pose until it lets go.
    */
   paused?: boolean;
-  size?: "stage" | "inset";
+  /**
+   * How this stage is being used — which is **two axes, not one**.
+   *
+   * `stage` and `inset` differ only in *layout*: both are live, and both move
+   * with what is being said. `card` is the one that is a still. Collapsing
+   * "small" and "not alive" into a single `inset` flag is what made a VRM
+   * character render as a frozen thumbnail inside a project, where the whole
+   * point is that it is talking — the fault looked like broken lip-sync and
+   * was a branch on the wrong word.
+   */
+  size?: "stage" | "inset" | "card";
 }) {
   const figure = useRef<HTMLDivElement>(null);
   const headGroup = useRef<HTMLDivElement>(null);
@@ -97,9 +110,17 @@ export function CharacterStage({
   const [synthetic, setSynthetic] = useState<string | null>(null);
 
   const temperament = profile?.temperament;
+  const vrm = vrmSpriteOf(profile);
+  // Resolved here rather than inside the renderer so the defaults are applied
+  // in exactly one place, and so a profile that carries no table at all is
+  // indistinguishable downstream from one that carries an empty one.
+  const tuning = useMemo(() => resolveTuning(vrm?.tuning), [vrm?.tuning]);
 
   useEffect(() => {
-    if (!visible || !temperament || paused) return;
+    // A VRM runs its own loop, against its own motion model (D28) — none of
+    // the refs below exist for one, so this loop would spin sixty times a
+    // second writing nothing.
+    if (!visible || !temperament || paused || vrm) return;
 
     let raf = 0;
     let last = performance.now();
@@ -178,9 +199,11 @@ export function CharacterStage({
 
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [visible, temperament, state, speaking, live, frames.length, paused]);
+  }, [visible, temperament, state, speaking, live, frames.length, paused, vrm]);
 
-  const inset = size === "inset";
+  // Compact layout covers both of the small variants; only `card` is a still.
+  const inset = size !== "stage";
+  const still = size === "card";
   const layered = parts.length > 0 ? parts : null;
   const canvas = layered?.[0];
   const face = profile?.sprite.kind === "layered" ? profile.sprite.face : null;
@@ -227,7 +250,34 @@ export function CharacterStage({
       >
         <div className="character-glow pointer-events-none absolute inset-0" />
 
-        {layered ? (
+        {vrm ? (
+          // The one kind that owns its own loop and its own motion model
+          // (D28). It takes the same two inputs as every other — the envelope
+          // and the state — which is what keeps it a variant rather than a
+          // second design.
+          //
+          // A **card** gets the baked still; a project's inset stage does not.
+          // A library grid holds a dozen of these at once and WebKit caps
+          // concurrent WebGL contexts, so the grid stays contexts-free — but
+          // the inset inside a project is the character you are talking to,
+          // and a still there is simply the feature not working.
+          still ? (
+            <VrmPreview id={profile!.name} display={profile!.display} />
+          ) : (
+            <VrmFigure
+              id={profile!.name}
+              spec={vrm.spec}
+              frame={vrm.frame}
+              clips={vrm.clips}
+              live={live}
+              speaking={speaking}
+              state={state}
+              tuning={tuning}
+              visible={visible}
+              paused={paused}
+            />
+          )
+        ) : layered ? (
           <LayeredFigure
             parts={layered}
             face={face}
@@ -408,6 +458,56 @@ function Face({
         />
       </g>
     </svg>
+  );
+}
+
+/**
+ * A VRM character's baked still, for a card.
+ *
+ * **Not a live scene, deliberately.** A library grid renders one of these per
+ * character, and one WebGL context per card hits WebKit's cap — which drops
+ * the *oldest* context, so the failure surfaces as a stage elsewhere in the
+ * app going blank rather than as anything wrong here. The still is baked once,
+ * when the model is first drawn full size, and costs nothing to show.
+ */
+function VrmPreview({ id, display }: { id: string; display: string }) {
+  const [src, setSrc] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    let live = true;
+    void invoke<string | null>("character_library_vrm_thumbnail", { id })
+      .then((uri) => {
+        if (!live) return;
+        setSrc(uri);
+        setLoaded(true);
+      })
+      .catch(() => live && setLoaded(true));
+    return () => {
+      live = false;
+    };
+  }, [id]);
+
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt={display}
+        draggable={false}
+        className="absolute inset-0 h-full w-full object-contain select-none"
+      />
+    );
+  }
+
+  // A character with no baked still is a real state — the model was imported
+  // on a machine whose webview had no WebGL — so it says so rather than
+  // showing an empty box that reads as a broken image.
+  return (
+    <div className="absolute inset-0 flex items-center justify-center">
+      <span className="font-mono text-[9px] tracking-wider text-ink-faint">
+        {loaded ? "VRM" : "…"}
+      </span>
+    </div>
   );
 }
 

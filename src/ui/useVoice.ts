@@ -23,6 +23,7 @@ import {
   type CaptureSession,
 } from "./capture";
 import { envelopeOf, type Envelope } from "./sprite";
+import { DEFAULT_TUNING, type ResolvedTuning } from "./tuning";
 
 /**
  * What is sounding right now, for anything that has to move with it.
@@ -180,6 +181,7 @@ export function useVoice() {
       text: string,
       voiceId: string,
       engine: string | null,
+      tuning: ResolvedTuning = DEFAULT_TUNING,
     ): Promise<void> => {
       const speech = await invoke<{ audio: string; mime: string }>(
         "voice_speak",
@@ -200,7 +202,7 @@ export function useVoice() {
       // and an analyser not connected onward to `destination` plays *silently
       // with no error* — this webview has four of those already. Worst case
       // here is a mouth moving on invented data, and it says when it is.
-      const envelope = envelopeOf(bytes);
+      const envelope = envelopeOf(bytes, 3, tuning);
 
       // A blob URL, not a `data:` URI. A hundred kilobytes of base64 in a URL
       // is the fragile path in this webview, and it fails as a *source*
@@ -276,7 +278,7 @@ export function useVoice() {
         // offer is still deduplicated by one key.
         for (const text of chunks) {
           if (cancelled.current) break;
-          await speakChunk(text, chosen, engine);
+          await speakChunk(text, chosen, engine, item.tuning ?? DEFAULT_TUNING);
         }
       } catch (e) {
         setPlaybackError(
@@ -317,9 +319,14 @@ export function useVoice() {
    * backlog, because the caller has already offered and moved past them.
    */
   const offer = useCallback(
-    (key: string, markdown: string, inVoice?: string | null) => {
+    (
+      key: string,
+      markdown: string,
+      inVoice?: string | null,
+      inTuning?: ResolvedTuning | null,
+    ) => {
       if (!auto) return;
-      setQueue((q) => enqueueSpoken(q, { key, markdown, voice: inVoice }));
+      setQueue((q) => enqueueSpoken(q, { key, markdown, voice: inVoice, tuning: inTuning }));
     },
     [auto],
   );
@@ -332,7 +339,12 @@ export function useVoice() {
    * the button had done nothing.
    */
   const speak = useCallback(
-    (key: string, markdown: string, inVoice?: string | null): string | null => {
+    (
+      key: string,
+      markdown: string,
+      inVoice?: string | null,
+      inTuning?: ResolvedTuning | null,
+    ): string | null => {
       if (speaking === key) {
         stop();
         return null;
@@ -345,7 +357,7 @@ export function useVoice() {
       }
 
       stop();
-      setQueue([{ key, markdown, voice: inVoice }]);
+      setQueue([{ key, markdown, voice: inVoice, tuning: inTuning }]);
       return null;
     },
     [health, muted, speaking, stop, voice],
