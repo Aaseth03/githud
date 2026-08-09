@@ -4,7 +4,7 @@ Where GIT HUD stands, for a session starting cold. Living document — rewrite i
 do not append. `milestones.md` remains the only place milestone *status* lives;
 this file says what is in flight and what is waiting on a human.
 
-**Updated:** 2026-08-06
+**Updated:** 2026-08-09
 
 ---
 
@@ -60,7 +60,16 @@ coin toss, not a process.
 
 <!-- END GENERATED: state -->
 
-**M8 is closed (D28).** M9 is next — the aesthetic half of M7, carved out
+**M8 is closed** — see D28 *app direction scope closed* (2026-08-05), not the
+`vrm` D28; the number is used twice and wants renumbering.
+
+**This table is stale as of 2026-08-07: M8 and M10 are both `in-progress` in
+`milestones.md`.** It was not regenerated because `handoff-state.sh` cannot run
+on macOS — see "Waiting for a Linux machine" below, and re-run it there before
+trusting this table. Hand-editing it is what the markers exist to prevent.
+
+**M10 is what is in flight** — the whole `vrm` character type, built on macOS and
+unverified on the target. M9 is the aesthetic half of M7, carved out
 deliberately; see below.
 
 **Milestones were renumbered twice on 2026-07-30**, both times because the
@@ -70,16 +79,158 @@ of *other people's* repos, so the milestone moves, never the parser. If you inse
 one, expect to renumber and update every cross-reference; the contract test
 catches you if you do not.
 
-TypeScript: **278**, re-run 2026-08-06, with `tsc` and oxlint clean. Rust was
-**260 unit · 21 guardrail** when last run on Linux on 2026-07-30, clippy
-`-D warnings`, production build green; that number is not re-verifiable here —
-see the trap below about `cargo test` on macOS. Eleven Rust tests are
-`#[ignore]`d because they need something real — a live Voicebox, a real Claude
-session, a real orphaned sandbox, the actual `~/github`. Run them with
-`--ignored` when you have the thing they need.
+Counts, re-run 2026-08-09 before being written here: **343 Rust unit ·
+430 TypeScript**, clippy `-D warnings` clean on the lib, `tsc -b` and oxlint
+clean, and `vite build` green. Eleven Rust tests are `#[ignore]`d because they
+need something real — a live Voicebox, a real Claude session, a real orphaned
+sandbox, the actual `~/github`. Run them with `--ignored` when you have the thing
+they need.
+
+**These counts are macOS-only and incomplete.** 17 `pty::` unit tests and the
+entire integration suite did not run at all; the next section is the list.
+
+**Unreconciled, from the 2026-08-09 merge.** The `character` line recorded the
+Rust count above on macOS; the `main` line recorded on 2026-08-06 that `cargo
+test` does *not* compile on macOS at all (see the trap below) and that TypeScript
+stood at **278**. Both cannot be true. Neither number is trustworthy until it is
+re-run on Linux — do that before quoting either.
 
 `cargo test` output is summarised by RTK; use `rtk proxy cargo test` for the
 per-suite breakdown.
+
+## M10 — the `vrm` character type, in flight
+
+**Committed 2026-08-09 on `character`**, unmerged and unverified on the target.
+PR and review gate — the usual, when the user asks for it. The commit fixed one
+fault the boundary test caught on the way in: `src/ui/fixtures/characters.json`
+carried a `shadow` table that exists on neither side of the wire. `tsc` cannot
+see it — the fixture is `JSON.parse(...) as Characters`, not an object literal,
+so there is no excess-property check — and only Rust's `deny_unknown_fields`
+said so. That pairing is exactly what the fixture is for.
+
+Four decision records, all new and all unmerged:
+
+- **D28** — `vrm` is the 3D character type, closing the open end of the
+  design-type registry. A VRoid `.vrm` is validated by its **bytes** (GLB magic,
+  version 2, then `extensions.VRMC_vrm` or `extensions.VRM`), never by its
+  extension, and the spec version falls out of that same walk rather than a
+  second pass. Motion is authored `.vrma` clips from a shared library, one per
+  state — deliberately a different experience from procedural's springs.
+- **D29** — lip-sync from formants, not amplitude. Driving five vowel morphs from
+  loudness alone is what made the mouth barely move: every vowel got the same
+  weight, so they cancelled. Now pre-emphasis → Hamming → autocorrelation →
+  Levinson-Durbin → LPC spectrum → prominence-ranked peaks → F1/F2 → nearest
+  vowel.
+- **D30** — those numbers are tunable per character, **time-boxed**, with the two
+  exit conditions written down. The panel's removal is the expected outcome.
+- **D31** — a generated `.vrma` is an *authoring tool whose product is a file*.
+  The GENERATE panel's arithmetic runs once, at author time, and bakes real
+  keyframes into the shared library; the render loop plays those keyframes and
+  nothing else. That line is what keeps D28 true — the moment an oscillator runs
+  per frame, this stops being a clip-driven type.
+
+The three faults found on 2026-08-06 were all **silent**, which is the finding
+worth keeping: a model with no mouth blendshapes, a character with no clips, and
+a webview with no WebGL each reported success at every layer. All three now
+report, through `VrmFigure`'s problem slot — which had to become a map keyed by
+source first, because a single slot meant whichever fault was written last erased
+the others.
+
+Two fixes landed on 2026-08-07, both in `src/lessons/character.md`:
+
+- **`▶ LOOP A CLIP` now loops a stored WAV** instead of asking Voicebox for a
+  line. It reuses `src/ui/fixtures/voicebox-speech.wav` — the same 2.5 s the
+  defaults in `ui/tuning.ts` were fitted against, and which `viseme.test.ts`
+  already asserts contains all five vowels. That dual role is the point: a second
+  recording would drift from the audio the numbers came from. It also means
+  tuning works with the engine down, and that two settings are compared against
+  the *same* waveform, which is the only comparison that means anything.
+  Consequence: the fixture is now bundled into the app (120 kB, emitted as a
+  separate asset — above Vite's 4 kB inline limit). Both CSPs already carried
+  `media-src 'self' data: blob:` and `connect-src 'self'`, so no CSP change.
+- **The freeze had nothing to do with the synthesis** and swapping the audio
+  source alone would not have fixed it. See item 2 of the manual list below.
+
+Still open, and the user's call rather than an agent's:
+
+- Should the **import step** reject or warn on a mouthless model up front, rather
+  than only at render time? Asked on 2026-08-06, unanswered.
+- Should `model.vrm` be **excluded from export bundles**? `collect_other_files`
+  base64s every file in a character folder into one in-memory JSON, so a 30 MB
+  model becomes ~40 MB of string. Recommendation is to include it anyway — a
+  character whose model does not travel is a broken character, which is what
+  D24/D26 promise against — but the export summary should state the size.
+
+## Waiting for a Linux machine
+
+Everything below was written and type-checked on macOS and **has never been
+executed on the target**. It is not a list of suspected failures — it is the
+list of things this machine is not able to have an opinion about. Work down it
+in order; the first two items are cheap and the third gates the rest.
+
+### 1. The test suites that could not run
+
+| Run | Why it did not run here | What it covers |
+|---|---|---|
+| `cargo test --lib` | Hangs on **`pty::tests::kill_all_empties_the_registry`** (`pty/mod.rs:330`), which spawns two real shells and calls `kill_all`. Isolated with `--test-threads=1`: the two tests before it pass, that one never returns. 339 tests were run with `-- --skip pty::`; **17 `pty::` tests were not**. Pre-existing and untouched by M10 — `src/src-tauri/src/pty/` is not in the changed-file list. | The embedded terminal. Spawning and reaping a real pty is exactly where macOS and Linux differ, so this may well be green there — but "may well be" is why it is on this list. |
+| `npm run test:core` (`cargo test`) | **Does not compile.** `tests/sweep_proof.rs:21` calls `githud_lib::guard::sandbox`, which is `#[cfg(target_os = "linux")]`. One integration binary failing to build takes the whole `cargo test` invocation with it. | All six integration binaries, including the 15 guardrail tests. **None of them have run since M10 started.** |
+| `cargo clippy --all-targets -- -D warnings` | Same compile failure, same cause. Only `--lib` was checkable here, and it is clean. | The integration tests and every `#[cfg(target_os = "linux")]` block — which is `guard::sandbox`, i.e. the guardrails, i.e. the part where being wrong matters most. |
+| `bash ops/scripts/check-context.sh` | Cannot run on macOS at all — see below. | The convention that every `CONTEXT.md` tree matches disk. M10 added a workspace (`characters/vrm/`) and eleven files across two trees, so this is the run that actually matters. |
+| `bash ops/scripts/handoff-state.sh` | Same. | The generated State table above, currently stale. |
+| `cargo test -- --ignored` | Needs a live Voicebox, a real Claude session, a real orphaned sandbox, the real `~/github`. | The eleven tests that only mean anything against the real thing. |
+
+`npx vitest run` (347) and `npx tsc -b` and `npm run lint` **did** run clean here
+and do not need repeating.
+
+### 2. The ops scripts are broken on macOS, and it is one cause
+
+Both failures are the same bug wearing two hats: **`ops/scripts/` assumes GNU
+awk and bash 4**, and macOS ships BWK awk and bash 3.2.
+
+- `check-context.sh:44` uses `mapfile`, which is bash 4+. With no arguments it
+  enumerates nothing.
+- Passing files explicitly gets past that and then fails differently: the tree
+  parser does `index(line, "├─ ")` and divides by 3 for the depth. In gawk under
+  a UTF-8 locale `index()` counts **characters**, so `"│  "` is 3 and the maths
+  works. In BWK awk it counts **bytes**, and `│` alone is 3 of them, so every
+  path comes out as `─` and `─/─` and the script reports the entire tree as
+  drifted.
+- `handoff-state.sh` dies on `awk: newline in string`, a gawk-only extension.
+
+Commit `6279156` claims to have fixed `check-context.sh` on macOS. It did not —
+it is still unrunnable here by either path. Worth deciding whether these scripts
+should be portable or should simply declare Linux, because right now they claim
+to be checkable anywhere and are not. Until then the tree check was done by hand
+in Python against `git ls-files`, which reported `src/ui/` matching disk.
+
+### 3. The manual runs M10 exists for
+
+None of this can be faked and none of it should be — standing constraint, below.
+
+1. **Settings → Graphics.** Phase 0 of the VRM plan, still not done. If WebGL is
+   absent or on llvmpipe, the whole `vrm` type is contingent and the answer
+   changes what is worth polishing. **Read this before anything else in this
+   list.**
+2. **The freeze fix.** Open a VRM character's suite → ADVANCED → `▶ LOOP A CLIP`.
+   It must loop indefinitely without the app locking up. This is the fix for a
+   reported hard freeze whose cause — `live` sitting in `VrmFigure`'s scene-effect
+   dependency array, so every start and stop of speech tore down the WebGL
+   context and re-parsed the model — was found by reading, not by reproducing.
+   **Nothing has ever observed it working.**
+3. **The tuning panel end to end.** Drag a `shape · live` slider and watch the
+   face change on the next frame; drag an `analysis · re-derived` slider with the
+   clip looping and watch the mouth change mid-word without the audio gapping.
+   Reset one slider, reset all, save, reopen, confirm `[sprite.tuning]` survived.
+4. **Frame time.** A VRM at 60 fps beside a running PTY is the risk the plan
+   flagged. Measure it in the suite before anyone spends effort on polish.
+5. **The mouthless-model report.** The Dwarf in GHD_tester (`new-character-ed20`)
+   declares all five vowel expressions with **zero binds on every one** — it has
+   no mouth blendshapes and physically cannot lip-sync. It should now say so in
+   the problem line instead of standing there silently. Tune against
+   `new-character-1d50`, which has real `Aa/Ih/Ou/Ee/Oh` targets.
+6. **The T-pose report.** That same character has one clip on `thinking` and no
+   `idle` to borrow, so four of five states resolve to nothing. That was correct
+   behaviour, reported nowhere; it should now name the states it is resting in.
 
 ## M7 is closed, and its verdict is the next two milestones
 
@@ -113,6 +264,10 @@ not owed (D28); the user judged personalization plus the character stage
 built on top of it as "a place I want to be" by eye, without it. Style
 presets — panel type, text colour, default background, bundled and
 swappable — are named as backlog in D28 if picked up later.
+
+The cockpit tokens themselves — surfaces, lines, ink — remain the app's own
+floor, which neither a character's accent nor a project's theme may repaint
+(D21, `characters/lessons/theming.md`).
 
 ## What M7 cost, and what generalises
 
@@ -206,6 +361,9 @@ code-level versions, split by what they constrain; these are the workflow ones.
   name `─`. All three are fixed. **The failure mode worth remembering is the
   middle one** — it did not error, it silently narrowed the check to a single
   file and then reported success. Four real drifts had accumulated behind it.
+- **This repo is developed on two machines and only one can run it.** Anything
+  built on the Mac is type-checked, not verified. Say which it is; do not report
+  a milestone validated because it compiled.
 - **A wrong diagnosis costs more than no diagnosis.** The black-window bug was
   first blamed on compositor access; the real cause was
   `WEBKIT_DISABLE_DMABUF_RENDERER`, now baked into the npm scripts. The white

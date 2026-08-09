@@ -1,7 +1,10 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
 import { CharacterCard } from "./CharacterCard";
 import { ProceduralSuite } from "./ProceduralSuite";
+import { VrmSuite } from "./VrmSuite";
+import { hasWebGL } from "../webgl";
 import type { Characters, Project } from "../types";
 import type { VoiceControls } from "../useVoice";
 
@@ -58,16 +61,33 @@ export function CharactersView({
             {editing.display}
           </h1>
         </header>
-        <ProceduralSuite
-          character={editing}
-          projects={projects}
-          voice={voice}
-          onSaved={async () => {
-            await onChanged();
-            setEditingId(null);
-          }}
-          onCancel={() => setEditingId(null)}
-        />
+        {editing.sprite.kind === "vrm" ? (
+          <VrmSuite
+            character={editing}
+            projects={projects}
+            voice={voice}
+            onSaved={async () => {
+              await onChanged();
+              setEditingId(null);
+            }}
+            onCancel={() => setEditingId(null)}
+            // A model import rewrites `sprite`, so the suite needs the
+            // reloaded profile to keep editing against — without closing,
+            // which would send the user back to the grid mid-setup.
+            onModelChanged={onChanged}
+          />
+        ) : (
+          <ProceduralSuite
+            character={editing}
+            projects={projects}
+            voice={voice}
+            onSaved={async () => {
+              await onChanged();
+              setEditingId(null);
+            }}
+            onCancel={() => setEditingId(null)}
+          />
+        )}
       </div>
     );
   }
@@ -150,6 +170,7 @@ function CreatePanel({ onCreated }: { onCreated: (id: string) => Promise<void> |
   const [display, setDisplay] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const webgl = useMemo(hasWebGL, []);
 
   const createProcedural = useCallback(async () => {
     setBusy(true);
@@ -161,6 +182,41 @@ function CreatePanel({ onCreated }: { onCreated: (id: string) => Promise<void> |
       setDisplay("");
       await onCreated(id);
     } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }, [display, onCreated]);
+
+  /**
+   * Pick the model *first*, then create the character around it.
+   *
+   * The other order leaves a procedural character behind every time someone
+   * opens the picker and changes their mind — and a character that says `vrm`
+   * with no model is a state worth never having. A failed import undoes the
+   * character it just made, so a rejected file leaves the library exactly as
+   * it was.
+   */
+  const createVrm = useCallback(async () => {
+    const picked = await open({
+      multiple: false,
+      directory: false,
+      filters: [{ name: "VRM model", extensions: ["vrm"] }],
+    });
+    if (typeof picked !== "string") return;
+
+    setBusy(true);
+    setError(null);
+    let id: string | null = null;
+    try {
+      id = await invoke<string>("character_library_create", {
+        display: display.trim() || "New character",
+      });
+      await invoke("character_library_vrm_import", { id, sourcePath: picked });
+      setDisplay("");
+      await onCreated(id);
+    } catch (e) {
+      if (id) await invoke("character_library_delete", { id }).catch(() => {});
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
@@ -200,6 +256,34 @@ function CreatePanel({ onCreated }: { onCreated: (id: string) => Promise<void> |
             not built yet — ComfyUI pipeline
           </span>
         </div>
+        {webgl ? (
+          <button
+            onClick={() => void createVrm()}
+            disabled={busy}
+            className="rounded border border-signal-deep bg-signal/10 px-4 py-3 text-left transition-colors
+                       hover:bg-signal/20 focus-visible:outline-2 focus-visible:outline-offset-2
+                       focus-visible:outline-signal disabled:opacity-40"
+          >
+            <span className="block text-sm text-ink">3D — VRM</span>
+            <span className="block font-mono text-[10px] text-ink-faint">
+              a VRoid .vrm model, posed by shared .vrma clips
+            </span>
+          </button>
+        ) : (
+          // Offering a 3D type on a webview that cannot draw one would fail at
+          // the last step, after the user picked a file. Better to say so
+          // first — and to say *why*, since this is a property of the webview
+          // rather than of the model they were about to choose.
+          <div
+            title="This webview reports no WebGL context — see Settings → Graphics"
+            className="cursor-not-allowed rounded border border-line px-4 py-3 text-left opacity-50"
+          >
+            <span className="block text-sm text-ink-dim">3D — VRM</span>
+            <span className="block font-mono text-[10px] text-ink-faint">
+              unavailable — this webview has no WebGL
+            </span>
+          </div>
+        )}
       </div>
       {error && <p className="mt-2 font-mono text-[11px] text-danger">{error}</p>}
     </div>

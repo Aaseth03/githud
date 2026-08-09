@@ -132,6 +132,47 @@
         "blink_seconds": 6.0,
         "spring": 0.5
       }
+    },
+    {
+      "name": "vroid",
+      "display": "Vroid",
+      "voice": null,
+      "notes": null,
+      "has_background": false,
+      "palette": {
+        "accent": "#c8a2ff",
+        "glow": null,
+        "field": null
+      },
+      "sprite": {
+        "kind": "vrm",
+        "file": "model.vrm",
+        "spec": "1.0",
+        "frame": {
+          "height": 1.375,
+          "distance": 0.875
+        },
+        "clips": {
+          "idle": "idle-breathing",
+          "listening": null,
+          "thinking": null,
+          "speaking": "talk-gesture",
+          "alarmed": null
+        },
+        "tuning": {
+          "floor": 0.375,
+          "gain_ih": 1.125,
+          "bucket_ms": 20.0,
+          "prominence_db": 24.0
+        }
+      },
+      "temperament": {
+        "idle": 0.5,
+        "bob": 0.5,
+        "lean": 0.5,
+        "blink_seconds": 6.0,
+        "spring": 0.5
+      }
     }
   ],
   "errors": [

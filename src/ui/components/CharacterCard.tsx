@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { CharacterStage } from "./CharacterStage";
 import { ConfirmDialog } from "./ConfirmDialog";
 import { useCharacterState } from "../hooks/useCharacterState";
+import { specLabel, vrmSpriteOf } from "../vrm";
 import type { Profile, Project } from "../types";
 import type { LiveSpeech } from "../useVoice";
 
@@ -38,7 +39,10 @@ export function CharacterCard({
   const previewState = useCharacterState(null, false);
 
   const assignedProject = projects.find((p) => p.character_id === character.name) ?? null;
-  const editable = character.sprite.kind === "procedural";
+  const vrm = vrmSpriteOf(character);
+  // `frames` and `layered` are still edited through their own files; the two
+  // types with a suite are the two that have one.
+  const editable = character.sprite.kind === "procedural" || vrm !== null;
 
   useEffect(() => {
     let live = true;
@@ -77,7 +81,7 @@ export function CharacterCard({
             speaking={false}
             state={previewState}
             problem={null}
-            size="inset"
+            size="card"
           />
         </div>
 
@@ -90,7 +94,11 @@ export function CharacterCard({
             voice: {character.voice ?? "— the app's voice —"}
           </p>
           <p className="truncate font-mono text-[10px] text-ink-faint" title={character.name}>
-            {character.name} · {character.sprite.kind}
+            {/* The spec version is on the card because 0.x and 1.0 are
+                genuinely different models to work with — different shaders,
+                different orientation — and knowing which you have belongs
+                where you pick between characters, not three clicks in. */}
+            {character.name} · {vrm ? specLabel(vrm.spec) : character.sprite.kind}
           </p>
         </div>
 
@@ -132,6 +140,7 @@ export function CharacterCard({
           <>
             This removes the character and its voice, notes and background
             for good.
+            {vrm && " Its imported .vrm model goes with it; the shared animation library does not."}
             {assignedProject && (
               <>
                 {" "}

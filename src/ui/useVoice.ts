@@ -25,6 +25,7 @@ import {
   type CaptureSession,
 } from "./capture";
 import { envelopeOf, type Envelope } from "./sprite";
+import { DEFAULT_TUNING, type ResolvedTuning } from "./tuning";
 
 /**
  * What is sounding right now, for anything that has to move with it.
@@ -291,6 +292,7 @@ export function useVoice() {
       text: string,
       voiceId: string,
       engine: string | null,
+      tuning: ResolvedTuning = DEFAULT_TUNING,
     ): Promise<SynthesizedChunk> => {
       const speech = await invoke<{ audio: string; mime: string }>(
         "voice_speak",
@@ -302,7 +304,7 @@ export function useVoice() {
       // and an analyser not connected onward to `destination` plays *silently
       // with no error* — this webview has four of those already. Worst case
       // here is a mouth moving on invented data, and it says when it is.
-      const envelope = envelopeOf(bytes);
+      const envelope = envelopeOf(bytes, 3, tuning);
       return { bytes, mime: speech.mime, envelope };
     },
     [],
@@ -440,9 +442,13 @@ export function useVoice() {
       try {
         const engine =
           settings.current.voices.find((v) => v.id === chosen)?.engine ?? null;
+        // The character's mouth tuning travels with the item (D30), not with
+        // the hook: the queue can hold replies from two characters at once, and
+        // the envelope this produces is what the mouth is driven from.
+        const tuning = item.tuning ?? DEFAULT_TUNING;
         const synth = (i: number) =>
           i < chunks.length
-            ? synthesizeChunk(chunks[i], chosen, engine)
+            ? synthesizeChunk(chunks[i], chosen, engine, tuning)
             : null;
 
         // A long reply is several requests, spoken back to back. It stays one
@@ -551,12 +557,18 @@ export function useVoice() {
    * backlog, because the caller has already offered and moved past them.
    */
   const offer = useCallback(
-    (key: string, markdown: string, inVoice?: string | null) => {
+    (
+      key: string,
+      markdown: string,
+      inVoice?: string | null,
+      inTuning?: ResolvedTuning | null,
+    ) => {
       if (!auto) return;
       queue.current = enqueueSpoken(queue.current, {
         key,
         markdown,
         voice: inVoice,
+        tuning: inTuning,
       });
       setPending(queue.current.length);
       pump();
@@ -572,7 +584,12 @@ export function useVoice() {
    * the button had done nothing.
    */
   const speak = useCallback(
-    (key: string, markdown: string, inVoice?: string | null): string | null => {
+    (
+      key: string,
+      markdown: string,
+      inVoice?: string | null,
+      inTuning?: ResolvedTuning | null,
+    ): string | null => {
       if (speaking === key) {
         stop();
         return null;
@@ -589,7 +606,7 @@ export function useVoice() {
       }
 
       stop();
-      queue.current = [{ key, markdown, voice: inVoice }];
+      queue.current = [{ key, markdown, voice: inVoice, tuning: inTuning }];
       setPending(1);
       // A stop leaves its session cancelled but still holding the slot until it
       // unwinds; `pump` then no-ops here and the session's own completion picks

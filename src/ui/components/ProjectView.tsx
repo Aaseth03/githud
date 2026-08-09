@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Project } from "../types";
 import { initialPaneState, isMounted, showPane, type Pane } from "../panes";
@@ -10,6 +10,8 @@ import { FileViewer } from "./FileViewer";
 import { ProjectCard } from "./ProjectCard";
 import { CharacterStage } from "./CharacterStage";
 import { accentOf, voiceFor, type Resolved } from "../character";
+import { resolve as resolveTuning } from "../tuning";
+import { vrmSpriteOf } from "../vrm";
 import { useCharacterBackground } from "../hooks/useCharacterBackground";
 import { useCharacterState } from "../hooks/useCharacterState";
 import type { Card } from "../card";
@@ -81,6 +83,13 @@ export function ProjectView({
   // Two projects with two characters is two voices — which is half of what M7
   // validates on.
   const roomVoice = voiceFor(character.profile, voice.voices, voice.voice);
+  // A reply is analysed with the tuning of the character that says it (D30) —
+  // carried alongside the voice for the same reason the voice is carried at
+  // all: the queue can hold replies from two projects at once.
+  const roomTuning = useMemo(
+    () => resolveTuning(vrmSpriteOf(character.profile)?.tuning),
+    [character.profile],
+  );
   const [available, setAvailable] = useState(Number.POSITIVE_INFINITY);
   const columnsRef = useRef<HTMLDivElement | null>(null);
 
@@ -264,6 +273,7 @@ export function ProjectView({
               visible={visible && panes.active === "chat"}
               voice={voice}
               roomVoice={roomVoice}
+              roomTuning={roomTuning}
               onListening={setListening}
             />
           </div>

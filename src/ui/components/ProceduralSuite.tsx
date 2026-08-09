@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { CharacterStage } from "./CharacterStage";
 import { FaceShapes } from "./proceduralParts";
 import { EYES, HEAD_SHAPES, HEADWEAR, MOUTHS } from "../proceduralOptions";
+import { ButtonGrid, Field, TextButton } from "./suiteControls";
 import { useCharacterState } from "../hooks/useCharacterState";
 import { usePreviewVoice } from "../hooks/usePreviewVoice";
 import { canSpeak, healthLabel } from "../voice";
@@ -439,19 +440,6 @@ export function ProceduralSuite({
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <p className="mb-1.5 font-mono text-[10px] tracking-wider text-ink-faint uppercase">{label}</p>
-      {children}
-    </div>
-  );
-}
-
-function ButtonGrid({ children }: { children: React.ReactNode }) {
-  return <div className="flex flex-wrap gap-1.5">{children}</div>;
-}
-
 /** A visual option — eyes, mouth, headwear — shown as its own drawn shape. */
 function GlyphButton({
   active,
@@ -482,30 +470,6 @@ function GlyphButton({
         <g>{glyph}</g>
       </svg>
       <span className="mt-0.5 truncate text-[8px] text-ink-faint">{label}</span>
-    </button>
-  );
-}
-
-/** A non-visual option — a project, a voice — a plain labeled button. */
-function TextButton({
-  active,
-  onClick,
-  label,
-}: {
-  active: boolean;
-  onClick: () => void;
-  label: string;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className={`rounded border px-2.5 py-1.5 font-mono text-[10px] transition-colors ${
-        active
-          ? "border-signal bg-signal/10 text-signal"
-          : "border-line text-ink-dim hover:border-line-bright hover:text-ink"
-      }`}
-    >
-      {label}
     </button>
   );
 }

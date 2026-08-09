@@ -2,7 +2,7 @@
 
 **Date:** 2026-07-30 · **Implements:**
 [D21](../decisions/2026-07-30-D21-character-is-layered-parts.md) · **Status:**
-`procedural` and `frames` shipped; `layered` in progress; the rest deferred
+`procedural`, `frames` and `vrm` shipped; `layered` in progress; the rest deferred
 
 How a character is *drawn* is a variant, not a fork. A profile declares one
 `sprite.kind` and gets that renderer; adding a kind touches no existing one.
@@ -27,6 +27,13 @@ character state from the event stream (idle · listening · thinking · speaking
 alarmed). A renderer that needed its own audio path or its own event source
 would not be a variant, it would be a second design.
 
+The envelope also carries a **viseme track** — which vowel is sounding per
+bucket, from `ui/viseme.ts` (D29). That is still two inputs, deliberately: it
+rides on the envelope object, is computed from the same samples in the same
+pass, and every kind that has one mouth shape ignores it. Only a renderer with
+per-vowel morphs can use it, which today is `vrm`. A kind that wanted a *third*
+input would be the second design this rule exists to prevent.
+
 ## The registry
 
 | Kind | Status | Assets | Runtime | Notes |
@@ -34,6 +41,7 @@ would not be a variant, it would be a second design.
 | `procedural` | **Shipped** | none | SVG + CSS transforms | The floor. Guarantees no character is ever missing, including on a fresh clone with no art. Reads as a placeholder, which is exactly what it is for. |
 | `frames` | **Shipped** | `mouth-0.png` … | `<img>` opacity swap | Full-frame sprite sequences. Stepped motion, so liveliness costs frames. Kept for anything genuinely frame-authored. |
 | `layered` | **In progress** | one PNG per named part | CSS transforms + springs | D21. Continuous motion, scripted, no dependency, fully automatable pipeline (M10). |
+| `vrm` | **Shipped** | one `.vrm`, plus shared `.vrma` clips | `three` + `@pixiv/three-vrm` (WebGL) | [D28](../decisions/2026-08-06-D28-vrm-is-the-3d-character-type.md). The 3D slot M10 left open. **The only kind with its own motion model** — authored clips retargeted onto a humanoid rig, not `motion.ts`'s springs. Same two inputs regardless. Answered the WebGL question below in the process. |
 | `live2d` | **Deferred** | `.moc3` + `.model3.json` + textures, from the same PSD | Cubism SDK for Web (WebGL) | The highest ceiling and the best fit on quality. Free below ¥10M annual revenue. Two blockers, both recorded below. |
 | `rive` | **Deferred** | `.riv` | rive-wasm, inlinable | State machines with number inputs; the envelope maps straight onto one. Rejected on dependency cost, not quality. |
 | `spine` | **Excluded** | `.json` + atlas | spine-ts | Paid ($69–$379). Excluded by the standing constraint — nothing paid without explicit approval. |
@@ -54,6 +62,12 @@ Blocked on two things, in order:
    nobody has ever asked WebKitGTK here for a GPU canvas. A probe lands in
    Settings during M7. If WebGL is absent or software-rendered, `live2d` and
    `rive` are both dead and `layered` was the only option all along.
+
+   **Superseded by D28 as a *blocker*, not as a question.** `vrm` shipped with
+   `ui/webgl.ts` probing per machine and refusing the type with a reason where
+   the answer is no. So this is now a per-machine fact the app states rather
+   than an unknown holding a decision — but "yes" can still mean software
+   rendering, which is why Settings → Graphics reports the renderer's name.
 2. **Rigging is a manual Cubism session per character** and cannot be scripted,
    which collides with principle 4 and with the M10 pipeline. Viable as a
    per-character opt-in for a character worth the hand work, not as the default.

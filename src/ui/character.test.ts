@@ -8,6 +8,7 @@ import {
   UNTHEMED,
   voiceFor,
 } from "./character";
+import { DEFAULT_TUNING, resolve } from "./tuning";
 import type { Characters, Profile } from "./types";
 
 /**
@@ -26,7 +27,7 @@ describe("the wire shape", () => {
   it("is what the UI expects, field for field", () => {
     // Typed as `Characters` above, so `tsc` fails if the interface and the
     // fixture disagree. These assertions cover what types cannot: the values.
-    expect(WIRE.profiles).toHaveLength(4);
+    expect(WIRE.profiles).toHaveLength(5);
     // `default` is the fallback and is deliberately procedural — it needs no art,
     // so a fresh clone renders something, and it does not impersonate a designed
     // character. GIT HUD's own persona is `hud`, assigned to the githud project.
@@ -44,14 +45,16 @@ describe("the wire shape", () => {
     // the UI discriminated on a `status` field, so the check read `undefined`
     // and every speaker button lied for a month.
     //
-    // All three kinds appear in the fixture, so adding one cannot slip past.
+    // Every kind appears in the fixture, so adding one cannot slip past.
     const layered = WIRE.profiles[1]!.sprite;
     const procedural = WIRE.profiles[2]!.sprite;
     const frames = WIRE.profiles[3]!.sprite;
+    const vrm = WIRE.profiles[4]!.sprite;
 
     expect(layered.kind).toBe("layered");
     expect(procedural.kind).toBe("procedural");
     expect(frames.kind).toBe("frames");
+    expect(vrm.kind).toBe("vrm");
     expect(Object.keys(procedural)).not.toContain("procedural");
 
     // And the branch actually narrows, which is the only reason the tag exists.
@@ -68,6 +71,29 @@ describe("the wire shape", () => {
 
     if (frames.kind !== "frames") throw new Error("wrong variant");
     expect(frames.dir).toBe("relic");
+
+    if (vrm.kind !== "vrm") throw new Error("wrong variant");
+    expect(vrm.file).toBe("model.vrm");
+    // A string, never a number. `1.0` survives a float round-trip by luck;
+    // a future `1.10` would come back as `1.1`, which is a different version.
+    expect(typeof vrm.spec).toBe("string");
+    expect(vrm.frame.distance).toBeGreaterThan(0);
+    // An unassigned state is `null`, not a missing key — the suite reads all
+    // five off this object, and `undefined` on a `string | null` is the kind
+    // of gap that only shows up as an animation that never plays.
+    expect(vrm.clips.listening).toBeNull();
+    expect(vrm.clips.idle).toBe("idle-breathing");
+
+    // The tuning table is *sparse on the wire* (BETA): a field nobody moved is
+    // absent, not null and not a copy of today's default. That is what lets
+    // the defaults be improved in `tuning.ts` without rewriting every profile
+    // that never disagreed with them — so `resolve` must treat an absent key
+    // and a null key identically, and this fixture carries both cases.
+    expect(vrm.tuning?.floor).toBe(0.375);
+    expect(vrm.tuning?.gain_ih).toBe(1.125);
+    expect(vrm.tuning).not.toHaveProperty("gain_aa");
+    expect(resolve(vrm.tuning).gain_aa).toBe(DEFAULT_TUNING.gain_aa);
+    expect(resolve(vrm.tuning).floor).toBe(0.375);
   });
 
   it("keeps face geometry as fractions, never pixels", () => {

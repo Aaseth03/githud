@@ -9,7 +9,7 @@ reads, and — per type — the parts or frames they point at, the contract each
 type's art must satisfy, and the pipeline that produces it.
 
 **A character's *type* is a sub-workspace** ([D25](../planning/decisions/2026-08-02-D25-character-types-are-sub-workspaces.md)):
-`procedural/`, `layered/`, `frames/`, one per `sprite.kind`. Each type has its
+`procedural/`, `layered/`, `frames/`, `vrm/`, one per `sprite.kind`. Each type has its
 own rendering philosophy and its own hard-won rules, and those rules do not
 transfer — `layered`'s "eyes and mouth are vectors, never baked in" is a
 statement about *that* type's clean-silhouette art, not a universal law, and
@@ -30,6 +30,8 @@ characters/
 │  └─ CONTEXT.md               sprite.kind = "layered" — PNG parts, vector eyes/mouth, springs (D21)
 ├─ frames/
 │  └─ CONTEXT.md               sprite.kind = "frames" — baked full-frame mouth/blink/gaze cycles
+├─ vrm/
+│  └─ CONTEXT.md               sprite.kind = "vrm" — a VRoid model, posed by shared .vrma clips (D28)
 └─ lessons/                    cross-cutting only — read one, not three
    ├─ theming.md               what a profile may paint vs. what stays the app's own
    └─ governance.md            what ships, what's provenanced, tooling-only Python, no AI in render
@@ -53,6 +55,7 @@ requires.
 | Work on a `procedural` character (no art, palette-drawn) | `procedural/CONTEXT.md` |
 | Work on a `layered` character (PNG parts, vector eyes/mouth, springs) | `layered/CONTEXT.md` |
 | Work on a `frames` character (baked mouth-cycle / blink / gaze frames) | `frames/CONTEXT.md` |
+| Work on a `vrm` character (a VRoid model, `.vrma` clips, its own motion model) | `vrm/CONTEXT.md` |
 | Know how an existing character was made | its local folder's `character/SOURCE.md` |
 | Compare renderer stacks, or pick up a deferred one (`live2d`, `rive`) | `../planning/specs/character-renderers_spec.md` |
 | Give a character a voice | The Characters window, or Settings → Characters. Written into that character's own `character.toml` in the library (D26) — a project only holds a pointer to it |

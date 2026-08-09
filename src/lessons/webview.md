@@ -43,3 +43,12 @@ Add to this file when a lesson is earned; the index is `../CONTEXT.md`.
   like Voicebox is failing when Voicebox has already done its job. `img-src`
   and `font-src` were listed and `media-src` was not, which is exactly the kind
   of omission a working test suite never catches.
+- **`img-src` needs `blob:` for any glTF model, and nothing says so.**
+  `GLTFLoader` turns each texture embedded in a `.glb`/`.vrm` into a `Blob` and
+  loads it through an `<img>` with an object URL — so the CSP rule governing a
+  3D model's textures is `img-src`, which is the last directive anyone checks
+  when a *model* renders wrong. Without it the mesh appears correctly lit and
+  completely untextured, with no console error. The model's own bytes are a
+  different question and deliberately avoid this whole class: they cross as an
+  `ArrayBuffer` into `GLTFLoader.parse`, so they are never fetched and
+  `connect-src` is not involved.

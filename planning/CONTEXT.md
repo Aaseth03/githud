@@ -31,7 +31,8 @@ planning/
 │  ├─ 2026-07-30-m7-character.plan.md
 │  ├─ 2026-08-02-m10-frames-pipeline.plan.md
 │  ├─ 2026-08-02-character-library-shell.plan.md
-│  └─ 2026-08-06-voice-playback-overlap.plan.md
+│  ├─ 2026-08-06-voice-playback-overlap.plan.md
+│  └─ 2026-08-06-vrm-character-type.plan.md
 └─ decisions/
    ├─ 2026-07-28-D01-dual-channel.md
    ├─ 2026-07-28-D02-adapters-target-harnesses.md
@@ -60,7 +61,11 @@ planning/
    ├─ 2026-08-02-D25-character-types-are-sub-workspaces.md
    ├─ 2026-08-02-D26-character-library-with-project-pointers.md
    ├─ 2026-08-04-D27-macos-sandbox-floor.md
-   └─ 2026-08-05-D28-app-direction-scope-closed.md
+   ├─ 2026-08-05-D28-app-direction-scope-closed.md
+   ├─ 2026-08-06-D28-vrm-is-the-3d-character-type.md
+   ├─ 2026-08-06-D29-phoneme-lip-sync-from-formants.md
+   ├─ 2026-08-07-D30-lip-sync-numbers-are-tunable-per-character.md
+   └─ 2026-08-07-D31-generated-vrma-clips-are-an-authoring-tool.md
 ```
 
 `specs/` holds the detail a decision record deliberately does not carry.
@@ -131,6 +136,10 @@ its job on the day it is overturned.**
 | D26 | [Character library with project pointers](decisions/2026-08-02-D26-character-library-with-project-pointers.md) — a character lives in its own local library, keyed by id; a project holds a pointer, not an embedded copy — amends D24's storage-shape clause |
 | D27 | [The macOS floor is Seatbelt](decisions/2026-08-04-D27-macos-sandbox-floor.md), narrower than Linux's `bwrap` on purpose — `bwrap` cannot exist on macOS at all |
 | D28 | [M8's scope is closed at personalization](decisions/2026-08-05-D28-app-direction-scope-closed.md) — the cockpit-token repaint is dropped, not owed; style presets are named as backlog instead |
+| D28 | ⚠️ number collision — [`vrm` is the 3D character type](decisions/2026-08-06-D28-vrm-is-the-3d-character-type.md) — a VRoid model posed by shared `.vrma` clips, with its own motion model; commits the 3D candidate M10 left open |
+| D29 | [Lip-sync reads vowels out of the audio](decisions/2026-08-06-D29-phoneme-lip-sync-from-formants.md) — formants per bucket, in our own code; every cloud TTS and every `AnalyserNode` library is ruled out by decisions already made |
+| D30 | [The lip-sync numbers are tunable per character, for now](decisions/2026-08-07-D30-lip-sync-numbers-are-tunable-per-character.md) — a BETA workbench with a stated end; defaults live in one file and `null` means "track it" |
+| D31 | [Generated `.vrma` clips are an authoring tool](decisions/2026-08-07-D31-generated-vrma-clips-are-an-authoring-tool.md) — ambient loops built from ~20 numbers and baked to a real file; the arithmetic runs at author time, never in the render loop, which is what keeps D28 true |
 
 ## Architecture
 
@@ -157,6 +166,7 @@ its job on the day it is overturned.**
 | 2026-08-02 | [M10 — the `frames` ComfyUI pipeline](plans/2026-08-02-m10-frames-pipeline.plan.md) | **Draft** |
 | 2026-08-02 | [M10 — the character library shell](plans/2026-08-02-character-library-shell.plan.md) | **Implemented** — `cargo test`, `tsc`, `vitest`, `oxlint` green |
 | 2026-08-06 | [Voice playback overlaps itself](plans/2026-08-06-voice-playback-overlap.plan.md) | **Implemented** — `tsc`, `vitest`, `oxlint` green, and confirmed by ear |
+| 2026-08-06 | [M10 — the `vrm` character type](plans/2026-08-06-vrm-character-type.plan.md) | **Implemented** — D28; WebGL confirmed per machine by `ui/webgl.ts` |
 
 ## Plan contract
 

@@ -45,6 +45,9 @@ src-tauri/
 │  ├─ character/
 │  │  ├─ mod.rs         character profiles (D9) — parse, load, frame sets
 │  │  ├─ library.rs     the character library (D26) — nested-folder CRUD, independent of any project
+│  │  ├─ vrm.rs         the vrm type (D28) — GLB validation, spec detection, model and thumbnail storage
+│  │  ├─ vrma.rs        the shared .vrma animation library (D28) — one flat folder for every vrm
+│  │  │                 character; `import` copies an authored clip in, `save` stores a generated one (D31)
 │  │  └─ migrate.rs     embedded→library migration, and the same transform a v1 bundle upgrades through
 │  ├─ audio.rs          what the machine's audio devices actually are
 │  ├─ mic.rs            webview media permission policy (Linux)
@@ -96,6 +99,8 @@ do. Never hand-edit it; it is rebuilt.
 | `src/git/` | Status, diff, stack, tree | Anything the card or panels read |
 | `src/card.rs` | Assembling and caching the card | Changing what a project shows cold |
 | `src/character/` | Profile parsing, loading, frame sets (D9); the character library and embedded→library migration (D26) | Changing what a character may declare, or how the library stores one |
+| `src/character/vrm.rs` | The GLB walk that validates a `.vrm`/`.vrma` and reads its spec version (D28) | Anything about accepting, storing or version-detecting a model |
+| `src/character/vrma.rs` | The shared animation library, one flat folder for every `vrm` character (D28); both ways in — `import` for an authored clip, `save` for a generated one (D31), validated identically | Changing how clips are stored, listed or named |
 | `src/voice/` | Voicebox: health, voices, speech, transcription | Anything the app asks of Voicebox |
 | `src/mic.rs` | What the webview may access | Changing device permissions |
 | `src/reap.rs` | Reaping sandboxes a dead app left behind | Anything about process lifetime across a crash |
