@@ -8,9 +8,11 @@ architecture contracts are `../planning/architecture/`. Neither belongs here.
 ```text
 docs/
 ├─ CONTEXT.md
-└─ guides/
-   ├─ build-and-run.md
-   └─ procedural-assets-inkscape.md
+├─ guides/
+│  ├─ build-and-run.md
+│  └─ procedural-assets-inkscape.md
+└─ research/
+   └─ tts-stt-alternatives.md
 ```
 
 ## Routing
@@ -18,6 +20,7 @@ docs/
 | Path | Contains | When to use |
 |---|---|---|
 | `guides/` | How to do a thing: build, run, package, debug | Writing or following a procedure |
+| `research/` | Evaluations of external options (libraries, services, stacks) not yet a committed decision | Comparing alternatives before a `planning/decisions/` record is written |
 
 ## Canonical
 

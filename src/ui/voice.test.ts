@@ -8,7 +8,9 @@ import {
   healthTone,
   parsePort,
   prepareSpeech,
+  remainingSpeech,
   speakableText,
+  SPEECH_GAP_MS,
   SPOKEN_CHUNK,
   splitForSpeech,
   type VoiceHealth,
@@ -255,5 +257,80 @@ describe("the speaking queue", () => {
     // completion must not then swallow the message just asked for.
     expect(dropSpoken([c], "a")).toEqual([c]);
     expect(dropSpoken([], "a")).toEqual([]);
+  });
+});
+
+describe("how much of a clip is still sounding", () => {
+  it("counts from where the clip started, not from when it is asked", () => {
+    expect(remainingSpeech(2000, 1000, 1500)).toBe(1500);
+    expect(remainingSpeech(2000, 1000, 2999)).toBe(1);
+  });
+
+  it("owes nothing once the clip's own length has elapsed", () => {
+    // `ended` arriving on time is the ordinary case, and it must not be padded.
+    expect(remainingSpeech(2000, 1000, 3000)).toBe(0);
+    expect(remainingSpeech(2000, 1000, 9000)).toBe(0);
+  });
+
+  it("owes nothing for a clip with no length to speak of", () => {
+    // A synthesized envelope of an unreadable container can report zero. Waiting
+    // on a duration nobody measured is a stall, not a safeguard.
+    expect(remainingSpeech(0, 1000, 5000)).toBe(0);
+    expect(remainingSpeech(Number.NaN, 1000, 2000)).toBe(0);
+  });
+
+  it("holds enough of a margin to cover a clip's start-up latency", () => {
+    // The anchor falls back to the moment `play()` was requested, because the
+    // `playing` event was never observed to fire on this webview. That makes
+    // every clip release early by however long the element took to begin, and
+    // this gap is the only thing absorbing it — too small and two clips sound
+    // at once, which is the whole bug.
+    expect(SPEECH_GAP_MS).toBeGreaterThanOrEqual(500);
+  });
+});
+
+describe("splitting the message that surfaced the overlap", () => {
+  // Two paragraphs, sentence ends at 120, 302 and 468 characters, and a
+  // paragraph break after the one at 468.
+  const message = [
+    "Paragraph 1: The foundation of effective communication lies in understanding the needs and perspectives of your audience. Whether you're crafting a message for a professional setting or a casual conversation, taking time to consider who will receive your words can dramatically improve clarity and impact. This principle applies across all mediums, from written documents to verbal presentations, and forms the cornerstone of meaningful dialogue in our interconnected world.",
+    "",
+    "Paragraph 2: Learning new skills requires dedication, consistency, and a willingness to embrace failure as part of the growth process. When approaching any challenge, breaking it down into manageable steps makes the journey less overwhelming and more rewarding. The path to mastery is rarely linear, and setbacks often provide the most valuable lessons that ultimately accelerate your progress toward excellence.",
+  ].join("\n");
+
+  it("takes the last sentence end in the window, even before a newline", () => {
+    // The regression: matching `". "` rather than `"."` made the break at 468
+    // invisible, because a paragraph break follows it rather than a space. The
+    // chunk was cut at 302 instead — nothing lost, but one more clip, one more
+    // request, and one more boundary than the message needed.
+    const chunks = prepareSpeech(message);
+
+    expect(chunks[0]!.endsWith("in our interconnected world.")).toBe(true);
+    expect(chunks[0]!.length).toBeGreaterThan(400);
+  });
+
+  it("says every word exactly once", () => {
+    const chunks = prepareSpeech(message);
+    const spoken = chunks.join(" ");
+
+    for (const phrase of [
+      "needs and perspectives",
+      "improve clarity and impact",
+      "This principle applies",
+      "interconnected world",
+      "Learning new skills",
+      "toward excellence",
+    ]) {
+      expect(spoken.split(phrase)).toHaveLength(2);
+    }
+    expect(spoken.replace(/\s+/g, " ")).toBe(
+      speakableText(message).replace(/\s+/g, " "),
+    );
+  });
+
+  it("keeps every chunk inside the request size", () => {
+    for (const c of prepareSpeech(message)) {
+      expect(c.length).toBeLessThanOrEqual(SPOKEN_CHUNK);
+    }
   });
 });

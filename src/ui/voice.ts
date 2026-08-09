@@ -206,10 +206,24 @@ export const SPOKEN_CHUNK = 600;
 /**
  * Break speakable text into ordered chunks, losing nothing.
  *
- * Prefers a sentence end, then a line break, then a word boundary — a chunk cut
- * mid-word is audible, and a cut mid-sentence is worse. The fractional floor
- * stops a boundary near the very start of the window producing a two-word chunk
- * followed by a full-length one.
+ * One rule: **take the last sentence end at or before the limit.** Failing
+ * that, the last word boundary — a chunk cut mid-word is audible, and a cut
+ * mid-sentence is worse.
+ *
+ * The sentence end is matched on the punctuation itself, not on `". "`.
+ * Requiring the trailing space is what made a paragraph break invisible: over
+ * the message that surfaced this, the 600-character window held sentence ends
+ * at 120, 302 and 468, and the one at 468 was followed by a newline rather than
+ * a space. Only the first two were seen, so a chunk that could have run to 468
+ * was cut at 302 — nothing was lost or repeated, but the message was carved
+ * into more pieces than it needed, each of them a separate request, a separate
+ * clip, and a separate boundary to get wrong.
+ *
+ * There is deliberately no minimum chunk length. A fractional floor used to
+ * reject a sentence end that landed early in the window, which meant falling
+ * through to a word boundary and starting the next chunk mid-sentence. A short
+ * chunk is heard as a pause; a chunk that begins mid-thought is heard as a
+ * fault.
  */
 export function splitForSpeech(text: string, limit = SPOKEN_CHUNK): string[] {
   const chunks: string[] = [];
@@ -217,21 +231,16 @@ export function splitForSpeech(text: string, limit = SPOKEN_CHUNK): string[] {
 
   while (rest.length > limit) {
     const window = rest.slice(0, limit);
-    const floor = limit / 3;
 
-    // +1 keeps the punctuation with the sentence it ends.
-    const sentence = Math.max(
-      window.lastIndexOf(". "),
-      window.lastIndexOf("! "),
-      window.lastIndexOf("? "),
-    );
-    let cut = sentence > floor ? sentence + 1 : -1;
+    // +1 keeps the punctuation with the sentence it ends. `lastIndexOf`
+    // returning -1 lands on 0, which is the same as "nothing found" here.
+    let cut = Math.max(
+      window.lastIndexOf("."),
+      window.lastIndexOf("!"),
+      window.lastIndexOf("?"),
+    ) + 1;
 
-    if (cut < 0) {
-      const line = window.lastIndexOf("\n");
-      cut = line > floor ? line : -1;
-    }
-    if (cut < 0) {
+    if (cut <= 0) {
       const space = window.lastIndexOf(" ");
       cut = space > 0 ? space : limit;
     }
@@ -256,4 +265,42 @@ export function splitForSpeech(text: string, limit = SPOKEN_CHUNK): string[] {
  */
 export function prepareSpeech(markdown: string): string[] {
   return splitForSpeech(speakableText(markdown));
+}
+
+/**
+ * The silence held between one clip and the next.
+ *
+ * Not a stylistic pause, though it reads as one. This webview's `<audio>`
+ * element does not reliably stop producing sound when told to — `pause()` stops
+ * it being *fed*, and the pipeline underneath finishes whatever it has already
+ * buffered regardless. It also does not reliably say when it *started*: the
+ * `playing` event was not observed to fire here at all, so a clip's clock has
+ * to fall back to the moment playback was requested, which is early by however
+ * long the element took to fetch, decode and begin.
+ *
+ * Half a second covers that start-up latency with room to spare and gives the
+ * pipeline time to actually release the output. Both unknowns become slack
+ * rather than a race, and the cost is a pause at a sentence boundary that was
+ * going to sound like a pause anyway.
+ */
+export const SPEECH_GAP_MS = 500;
+
+/**
+ * How much of a clip is still sounding, in milliseconds.
+ *
+ * **The clock starts when sound starts, not when the clip's promise is asked
+ * about.** `anchor` is the best available answer to "when did this begin" — the
+ * `playing` event if the element ever reports one, and otherwise the moment
+ * `play()` was called, which is early by the element's start-up latency and
+ * therefore released early by the same amount. `SPEECH_GAP_MS` is what absorbs
+ * that: waiting too long is a pause, releasing too early is two voices at once,
+ * and only one of those is recoverable by listening.
+ */
+export function remainingSpeech(
+  durationMs: number,
+  anchor: number,
+  now: number,
+): number {
+  if (!(durationMs > 0)) return 0;
+  return Math.max(0, durationMs - (now - anchor));
 }

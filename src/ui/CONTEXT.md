@@ -53,6 +53,9 @@ ui/
 ├─ highlight.ts         syntax highlighting — only the grammars this machine has
 ├─ highlight.test.ts
 ├─ proceduralOptions.ts  every value each procedural field can take — pure data, no JSX
+├─ proceduralAssets.ts   loads `assets/procedural/*/*.svg` at build time — one glob, no registry to edit
+├─ assets/
+│  └─ procedural/        one SVG per pickable part, plus its own README and drawing template
 ├─ fixtures/
 │  ├─ voicebox-speech.wav  2.5s of real Voicebox output — silence, speech, a pause, speech
 │  └─ characters.json      the character wire shape, asserted from both sides
@@ -115,6 +118,7 @@ ui/
 | `listbox.ts` | Menu placement near a window edge, highlight keys | Changing how a dropdown opens or is driven |
 | `highlight.ts` | The registered grammars, and the language for a path | Adding a language to the file viewer |
 | `characterHeight.ts` | The character stage's height, bound to the file tree column's width | Changing how tall the character stage may grow |
+| `assets/procedural/` | The part SVGs themselves, and `README.md` for how to draw one | Adding or replacing a face part — no code change needed |
 | `components/` | Presentation | UI work |
 | `styles/index.css` | Design tokens (`@theme`) | Colours, fonts, the starfield |
 

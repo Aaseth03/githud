@@ -134,6 +134,41 @@ mod macos_floor {
 
         assert_eq!(code, 0, "the system cache dir must be writable: {err}");
     }
+
+    /// Regression test for a second real bug found alongside the first:
+    /// Claude Code's persistent Bash-tool shell tracks its own working
+    /// directory in `/tmp/claude-<hex>-cwd`, where `<hex>` is random per
+    /// session — confirmed live by running two sessions in the same project
+    /// and observing two different values, so there is no exact path to
+    /// grant in advance the way `CLAUDE_SCRATCH_DIR` grants one. Caught the
+    /// same way as the Keychain bug: by actually running a git command
+    /// through the real `claude` binary under the real profile, not by
+    /// asserting profile text.
+    #[test]
+    fn the_cwd_tracker_pattern_is_writable_but_nothing_else_matching_the_prefix_is() {
+        let project = scratch("cwd-tracker");
+        let home = dirs::home_dir().unwrap();
+
+        let (code, err) = in_sandbox(
+            &project,
+            &home,
+            Access::ReadWrite,
+            "echo probe > /private/tmp/claude-ab12-cwd && \
+             rm -f /private/tmp/claude-ab12-cwd",
+        );
+        assert_eq!(code, 0, "a path matching claude-<hex>-cwd must be writable: {err}");
+
+        let (code, _) = in_sandbox(
+            &project,
+            &home,
+            Access::ReadWrite,
+            "echo probe > /private/tmp/claude-ab12-not-the-tracker-file",
+        );
+        assert_ne!(
+            code, 0,
+            "a similarly-named path outside the exact pattern must stay denied"
+        );
+    }
 }
 
 // ── The guard: the PATH shim ─────────────────────────────────────────────────

@@ -24,6 +24,13 @@ not per-part scaling:
 Set up a 100×100 artboard in your tool with a circle guide at `cx=50 cy=50
 r=38` and you're drawing in the same space the app renders in.
 
+`_template.svg` in this folder is that artboard, already set up — open it,
+draw, and save into the matching category folder. The leading underscore is
+not decoration: the app's loader globs `assets/procedural/*/*.svg`, one folder
+deep, so a file sitting here beside the categories is never picked up as a
+part. It used to live at the repo root, where nothing referenced it and no
+tree documented it.
+
 ## Color
 
 Don't hardcode a fill. Use `fill="currentColor"` (or `stroke="currentColor"`

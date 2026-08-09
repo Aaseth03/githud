@@ -41,6 +41,12 @@ a character type's own sub-workspace.
 - **A checker exits non-zero and names the file.** `check-context.sh` is only
   worth having if it can fail a commit, and only worth reading if it says which
   tree drifted and how. "Docs are out of date" is not actionable.
+- **These scripts run on macOS too, and bash 3.2 is the floor.** No `mapfile`,
+  no BRE `\|` alternation, and no byte arithmetic over the box-drawing glyphs —
+  `index`/`substr` count bytes in BSD awk and characters in gawk, and every tree
+  glyph is three bytes. `check-context.sh` carried all three at once and, rather
+  than failing, quietly checked one of fourteen trees and reported success.
+  **A portability bug that narrows a check is worse than one that breaks it.**
 - **A generator owns its output between markers, and nothing else.** A script
   that rewrites a whole hand-written file will eventually eat a paragraph
   somebody meant. `handoff-state.sh` replaces the lines between two sentinels and

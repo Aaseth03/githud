@@ -22,6 +22,7 @@ src-tauri/
 ├─ Cargo.lock
 ├─ build.rs
 ├─ tauri.conf.json
+├─ Info.plist           macOS bundle keys — the microphone usage string push-to-talk needs
 ├─ .gitignore
 ├─ capabilities/
 │  └─ default.json

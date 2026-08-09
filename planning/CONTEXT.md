@@ -30,7 +30,8 @@ planning/
 │  ├─ 2026-07-29-m6-settings-and-audio-devices.plan.md
 │  ├─ 2026-07-30-m7-character.plan.md
 │  ├─ 2026-08-02-m10-frames-pipeline.plan.md
-│  └─ 2026-08-02-character-library-shell.plan.md
+│  ├─ 2026-08-02-character-library-shell.plan.md
+│  └─ 2026-08-06-voice-playback-overlap.plan.md
 └─ decisions/
    ├─ 2026-07-28-D01-dual-channel.md
    ├─ 2026-07-28-D02-adapters-target-harnesses.md
@@ -57,7 +58,9 @@ planning/
    ├─ 2026-07-30-D23-characters-are-a-workspace.md
    ├─ 2026-08-01-D24-personal-config-goes-local.md
    ├─ 2026-08-02-D25-character-types-are-sub-workspaces.md
-   └─ 2026-08-02-D26-character-library-with-project-pointers.md
+   ├─ 2026-08-02-D26-character-library-with-project-pointers.md
+   ├─ 2026-08-04-D27-macos-sandbox-floor.md
+   └─ 2026-08-05-D28-app-direction-scope-closed.md
 ```
 
 `specs/` holds the detail a decision record deliberately does not carry.
@@ -76,7 +79,7 @@ later does not mean re-doing the comparison.
 | `plans/` | Implementation plans (`YYYY-MM-DD-title.plan.md`) | Planning a feature before coding — start from `plans/_TEMPLATE.plan.md` |
 | `specs/` | Feature specs (`feature-name_spec.md`) | Spec'ing a feature in detail, or recording an option deferred rather than dropped |
 
-## Decisions D1–D25
+## Decisions D1–D28
 
 D1–D15 were committed 2026-07-28 out of the design interview; D16–D18 followed
 the same day — D16 when a D7 assumption was tested and failed, D17 when M1 turned
@@ -127,6 +130,7 @@ its job on the day it is overturned.**
 | D25 | [Character types are sub-workspaces](decisions/2026-08-02-D25-character-types-are-sub-workspaces.md) — `procedural/`, `layered/`, `frames/` each hold their own spec, pipeline and lessons — amends D23's tree clause |
 | D26 | [Character library with project pointers](decisions/2026-08-02-D26-character-library-with-project-pointers.md) — a character lives in its own local library, keyed by id; a project holds a pointer, not an embedded copy — amends D24's storage-shape clause |
 | D27 | [The macOS floor is Seatbelt](decisions/2026-08-04-D27-macos-sandbox-floor.md), narrower than Linux's `bwrap` on purpose — `bwrap` cannot exist on macOS at all |
+| D28 | [M8's scope is closed at personalization](decisions/2026-08-05-D28-app-direction-scope-closed.md) — the cockpit-token repaint is dropped, not owed; style presets are named as backlog instead |
 
 ## Architecture
 
@@ -152,6 +156,7 @@ its job on the day it is overturned.**
 | 2026-07-30 | [M7 — character](plans/2026-07-30-m7-character.plan.md) | **Done** — rescoped by D21 once the first face ran; its verdict became M8 and M9 |
 | 2026-08-02 | [M10 — the `frames` ComfyUI pipeline](plans/2026-08-02-m10-frames-pipeline.plan.md) | **Draft** |
 | 2026-08-02 | [M10 — the character library shell](plans/2026-08-02-character-library-shell.plan.md) | **Implemented** — `cargo test`, `tsc`, `vitest`, `oxlint` green |
+| 2026-08-06 | [Voice playback overlaps itself](plans/2026-08-06-voice-playback-overlap.plan.md) | **Implemented** — `tsc`, `vitest`, `oxlint` green, and confirmed by ear |
 
 ## Plan contract
 

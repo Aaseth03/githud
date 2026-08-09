@@ -4,7 +4,7 @@ Where GIT HUD stands, for a session starting cold. Living document — rewrite i
 do not append. `milestones.md` remains the only place milestone *status* lives;
 this file says what is in flight and what is waiting on a human.
 
-**Updated:** 2026-07-30
+**Updated:** 2026-08-06
 
 ---
 
@@ -50,7 +50,7 @@ coin toss, not a process.
 | M5 — Panels and project cards | done |
 | M6 — Voice | done |
 | M7 — Character | done |
-| M8 — App direction | not-started |
+| M8 — App direction | done |
 | M9 — Avatar | not-started |
 | M10 — Character design suite | not-started |
 | M11 — Speech shaping | not-started |
@@ -60,7 +60,7 @@ coin toss, not a process.
 
 <!-- END GENERATED: state -->
 
-**M8 is the next build.** M9 is the aesthetic half of M7, carved out
+**M8 is closed (D28).** M9 is next — the aesthetic half of M7, carved out
 deliberately; see below.
 
 **Milestones were renumbered twice on 2026-07-30**, both times because the
@@ -70,12 +70,13 @@ of *other people's* repos, so the milestone moves, never the parser. If you inse
 one, expect to renumber and update every cross-reference; the contract test
 catches you if you do not.
 
-Counts, re-run 2026-07-30 before being written here: **260 Rust unit · 21
-guardrail · 226 TypeScript**, clippy `-D warnings`, `tsc` and oxlint clean, and
-the production build green. Eleven Rust tests are `#[ignore]`d because they need
-something real — a live Voicebox, a real Claude session, a real orphaned sandbox,
-the actual `~/github`. Run them with `--ignored` when you have the thing they
-need.
+TypeScript: **278**, re-run 2026-08-06, with `tsc` and oxlint clean. Rust was
+**260 unit · 21 guardrail** when last run on Linux on 2026-07-30, clippy
+`-D warnings`, production build green; that number is not re-verifiable here —
+see the trap below about `cargo test` on macOS. Eleven Rust tests are
+`#[ignore]`d because they need something real — a live Voicebox, a real Claude
+session, a real orphaned sandbox, the actual `~/github`. Run them with
+`--ignored` when you have the thing they need.
 
 `cargo test` output is summarised by RTK; use `rtk proxy cargo test` for the
 per-suite breakdown.
@@ -104,11 +105,14 @@ So the aesthetic half was carved out:
 - **M9 — avatar.** Gaze, a three-quarter bust-framed re-pose, a room strictly
   *behind* the character, and richer idle with anticipation.
 
-**M8 is blocked on one decision from the user:** which visual direction. Three
-concrete options were promised — each a *material and a light* in the register
-[Refero](https://styles.refero.design) uses, with palette, type pairing and
-texture spelled out, plus a mockup of the project tab in each. Do not start
-repainting before he picks one.
+**M8 closed 2026-08-05 at personalization** — per-project accent colour,
+background image, and glass panels (`theme.rs`, `ThemeSection.tsx`, D24) — not
+at the cockpit-token repaint (material, light, warm palette, type pairing,
+texture, motion) this section originally promised. That repaint is dropped,
+not owed (D28); the user judged personalization plus the character stage
+built on top of it as "a place I want to be" by eye, without it. Style
+presets — panel type, text colour, default background, bundled and
+swappable — are named as backlog in D28 if picked up later.
 
 ## What M7 cost, and what generalises
 
@@ -187,6 +191,21 @@ code-level versions, split by what they constrain; these are the workflow ones.
 - **`r#"…"#` cannot hold a hex colour.** `"#6ee7ff"` closes the delimiter, and the
   error points at the colour rather than at the quoting. Use `r##"…"##`. This has
   now happened twice in the same module.
+- **`cargo test` does not build on macOS.** `src-tauri/tests/sweep_proof.rs`
+  calls `guard::sandbox`, which is `#[cfg(target_os = "linux")]`, and the test
+  file itself is not gated — so the whole suite fails to compile and no Rust
+  test runs at all on this machine. Found 2026-08-06 while trying to verify the
+  counts above. Not fixed: it is guardrail code and wants its own change. **The
+  Rust suite is Linux-only until then**, and a macOS session cannot report Rust
+  results, only TypeScript ones.
+- **`ops/scripts/check-context.sh` was checking one tree out of fourteen on
+  macOS, and saying so cheerfully.** Three portability faults stacked: `mapfile`
+  is a bash 4 builtin and macOS ships 3.2; the file list used a BRE with `\|`,
+  which is a GNU extension BSD grep reads literally; and the awk tree parser used
+  byte offsets into three-byte box-drawing glyphs, so every entry parsed with the
+  name `─`. All three are fixed. **The failure mode worth remembering is the
+  middle one** — it did not error, it silently narrowed the check to a single
+  file and then reported success. Four real drifts had accumulated behind it.
 - **A wrong diagnosis costs more than no diagnosis.** The black-window bug was
   first blamed on compositor access; the real cause was
   `WEBKIT_DISABLE_DMABUF_RENDERER`, now baked into the npm scripts. The white
