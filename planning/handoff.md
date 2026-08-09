@@ -60,8 +60,7 @@ coin toss, not a process.
 
 <!-- END GENERATED: state -->
 
-**M8 is closed** — see D28 *app direction scope closed* (2026-08-05), not the
-`vrm` D28; the number is used twice and wants renumbering.
+**M8 is closed (D28).**
 
 **This table is stale as of 2026-08-07: M8 and M10 are both `in-progress` in
 `milestones.md`.** It was not regenerated because `handoff-state.sh` cannot run
@@ -110,23 +109,23 @@ said so. That pairing is exactly what the fixture is for.
 
 Four decision records, all new and all unmerged:
 
-- **D28** — `vrm` is the 3D character type, closing the open end of the
+- **D29** — `vrm` is the 3D character type, closing the open end of the
   design-type registry. A VRoid `.vrm` is validated by its **bytes** (GLB magic,
   version 2, then `extensions.VRMC_vrm` or `extensions.VRM`), never by its
   extension, and the spec version falls out of that same walk rather than a
   second pass. Motion is authored `.vrma` clips from a shared library, one per
   state — deliberately a different experience from procedural's springs.
-- **D29** — lip-sync from formants, not amplitude. Driving five vowel morphs from
+- **D30** — lip-sync from formants, not amplitude. Driving five vowel morphs from
   loudness alone is what made the mouth barely move: every vowel got the same
   weight, so they cancelled. Now pre-emphasis → Hamming → autocorrelation →
   Levinson-Durbin → LPC spectrum → prominence-ranked peaks → F1/F2 → nearest
   vowel.
-- **D30** — those numbers are tunable per character, **time-boxed**, with the two
+- **D31** — those numbers are tunable per character, **time-boxed**, with the two
   exit conditions written down. The panel's removal is the expected outcome.
-- **D31** — a generated `.vrma` is an *authoring tool whose product is a file*.
+- **D32** — a generated `.vrma` is an *authoring tool whose product is a file*.
   The GENERATE panel's arithmetic runs once, at author time, and bakes real
   keyframes into the shared library; the render loop plays those keyframes and
-  nothing else. That line is what keeps D28 true — the moment an oscillator runs
+  nothing else. That line is what keeps D29 true — the moment an oscillator runs
   per frame, this stops being a clip-driven type.
 
 The three faults found on 2026-08-06 were all **silent**, which is the finding

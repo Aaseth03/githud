@@ -109,7 +109,7 @@ Add to this file when a lesson is earned; the index is `../CONTEXT.md`.
   `aa` opens, so blending a fixed mixture of all five and scaling it by loudness
   produces a face that is technically animating and reads as chewing — and no
   choice of ratios fixes it, because the ratios *are* the problem. A VRM mouth
-  needs which vowel, not only how loud (D29). Never write more than two at
+  needs which vowel, not only how loud (D30). Never write more than two at
   meaningful weight in one frame: two is a mouth crossing between shapes, five
   is the cancellation.
 - **"How open" and "which shape" are different questions.** `sprite.ts` answers

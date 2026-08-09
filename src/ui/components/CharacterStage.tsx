@@ -117,7 +117,7 @@ export function CharacterStage({
   const tuning = useMemo(() => resolveTuning(vrm?.tuning), [vrm?.tuning]);
 
   useEffect(() => {
-    // A VRM runs its own loop, against its own motion model (D28) — none of
+    // A VRM runs its own loop, against its own motion model (D29) — none of
     // the refs below exist for one, so this loop would spin sixty times a
     // second writing nothing.
     if (!visible || !temperament || paused || vrm) return;
@@ -252,7 +252,7 @@ export function CharacterStage({
 
         {vrm ? (
           // The one kind that owns its own loop and its own motion model
-          // (D28). It takes the same two inputs as every other — the envelope
+          // (D29). It takes the same two inputs as every other — the envelope
           // and the state — which is what keeps it a variant rather than a
           // second design.
           //

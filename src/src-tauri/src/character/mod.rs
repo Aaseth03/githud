@@ -132,7 +132,7 @@ pub enum Sprite {
         #[serde(default)]
         pivot: Pivots,
     },
-    /// A VRoid `.vrm` model, posed by `.vrma` clips (D28).
+    /// A VRoid `.vrm` model, posed by `.vrma` clips (D29).
     ///
     /// **The one kind with its own motion model.** Every other kind is
     /// `motion.ts`'s springs applied to different art; this one is authored
@@ -986,7 +986,7 @@ pub fn set_sprite_procedural(
 }
 
 /// Turn a character into a `vrm` one, recording the spec version the imported
-/// file declared (D28).
+/// file declared (D29).
 ///
 /// Called only after `vrm::import` has actually stored a model, so the profile
 /// never claims a model that is not on disk. Clears the previous kind's fields

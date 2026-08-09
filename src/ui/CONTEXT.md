@@ -44,17 +44,17 @@ ui/
 ├─ capture.test.ts
 ├─ sprite.ts            how open the mouth is, from the audio itself, pure
 ├─ sprite.test.ts
-├─ viseme.ts            which vowel is sounding — formants per bucket (D29), pure
+├─ viseme.ts            which vowel is sounding — formants per bucket (D30), pure
 ├─ viseme.test.ts
-├─ tuning.ts            the mouth's tunable numbers and their defaults (BETA, D30), pure
+├─ tuning.ts            the mouth's tunable numbers and their defaults (BETA, D31), pure
 ├─ tuning.test.ts
 ├─ character.ts         project → profile → accent → voice (D9), pure
 ├─ character.test.ts
-├─ vrm.ts               the vrm type's own rules — clip choice, mouth weights, framing (D28), pure
+├─ vrm.ts               the vrm type's own rules — clip choice, mouth weights, framing (D29), pure
 ├─ vrm.test.ts
-├─ vrma.ts              the clip generator — body, eyes and blink from ~28 numbers (D31), pure
+├─ vrma.ts              the clip generator — body, eyes and blink from ~28 numbers (D32), pure
 ├─ vrma.test.ts
-├─ glb.ts               writes those numbers out as a real `.vrma` file (D31), pure
+├─ glb.ts               writes those numbers out as a real `.vrma` file (D32), pure
 ├─ glb.test.ts
 ├─ webgl.ts             whether this webview can draw 3D at all
 ├─ motion.ts            springs, blink, breathing, the five states — pure
@@ -73,7 +73,7 @@ ui/
 │  │                       so the numbers are dragged against the audio they were measured on
 │  ├─ characters.json      the character wire shape, asserted from both sides
 │  └─ generated-idle.vrma  the clip generator's own output, baked by `glb.test.ts`
-│                          and validated by `character::vrma`'s Rust tests (D31)
+│                          and validated by `character::vrma`'s Rust tests (D32)
 ├─ useVoice.ts          speech in and out; owned by App, one per app
 ├─ hooks/
 │  ├─ useProjects.ts    calls the scan command; parses nothing
@@ -103,7 +103,7 @@ ui/
 │  ├─ CharactersView.tsx  the character library window — read-only cards, EDIT opens a type's own suite (M10, D26)
 │  ├─ CharacterCard.tsx  one library character's card — read-only info, delete, EDIT
 │  ├─ ProceduralSuite.tsx  the procedural type's own suite — big preview, button-grid fields, save/cancel staging
-│  ├─ VrmFigure.tsx     the vrm renderer — the only file that touches `three` (D28)
+│  ├─ VrmFigure.tsx     the vrm renderer — the only file that touches `three` (D29)
 │  ├─ VrmSuite.tsx      the vrm type's own suite — model import, framing, state→clip, the shared clip library
 │  ├─ suiteControls.tsx  the layout primitives every suite shares — Field, ButtonGrid, TextButton
 │  ├─ CharacterSection.tsx  Settings: which library character a project is pointed at, WebGL facts
@@ -131,11 +131,11 @@ ui/
 | `capture.ts` | Recording, and the WAV that leaves the webview | Anything about how audio is captured |
 | `voice.ts` | What is worth speaking (D15), health labels | Changing spoken output |
 | `sprite.ts` | The amplitude envelope — **how open** a mouth is | Anything about how far a character's mouth opens |
-| `viseme.ts` | Formant analysis — **which vowel** is sounding, per bucket (D29) | Anything about lip-sync accuracy, or swapping in another producer of the track |
-| `tuning.ts` | Every tunable lip-sync number, its default, its slider range, and which clock it acts on (BETA, D30) | Changing a default, adding a dial, or deciding whether a change needs the envelope re-derived |
+| `viseme.ts` | Formant analysis — **which vowel** is sounding, per bucket (D30) | Anything about lip-sync accuracy, or swapping in another producer of the track |
+| `tuning.ts` | Every tunable lip-sync number, its default, its slider range, and which clock it acts on (BETA, D31) | Changing a default, adding a dial, or deciding whether a change needs the envelope re-derived |
 | `character.ts` | Resolving a project's pointer to a library profile (D26), its accent and its voice | Anything about which character a project gets |
 | `vrm.ts` | Which `.vrma` plays in which state, shape × strength → VRM expression weights, where the camera stands, and what a model that cannot move its mouth or has no clip to play is told | Anything about how a `vrm` character moves or is framed |
-| `vrma.ts` | The clip generator's numbers and the arithmetic that turns them into looping keyframes (D31) | Changing what a generated clip does, or adding a dial to the GENERATE panel |
+| `vrma.ts` | The clip generator's numbers and the arithmetic that turns them into looping keyframes (D32) | Changing what a generated clip does, or adding a dial to the GENERATE panel |
 | `glb.ts` | The `.vrma` container writer, the reference skeleton, `REST_HIPS_Y`, and how an expression weight rides on a node's `translation.x` | Anything about the bytes a generated clip is made of |
 | `webgl.ts` | Whether a WebGL context can be had here at all | Before offering or drawing anything 3D |
 | `motion.ts` | Springs, blink scheduling, breathing, the five state poses | Anything about how a character *moves* |

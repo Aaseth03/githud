@@ -1,4 +1,4 @@
-//! The shared `.vrma` animation library (D28).
+//! The shared `.vrma` animation library (D29).
 //!
 //! `~/.local/share/githud/vrm-animations/<id>.vrma` — one flat folder, shared
 //! by **every** `vrm` character rather than copied into each one.

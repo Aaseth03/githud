@@ -171,7 +171,7 @@ describe("the track lines up with the envelope", () => {
 
   it("rides on the envelope so every other kind can ignore it", () => {
     // A third contract input would have made `vrm` a second design rather than
-    // a variant (D29). It travels on the object the contract already carries.
+    // a variant (D30). It travels on the object the contract already carries.
     const envelope = envelopeOfPcm(vowel(730, 1090, 0.2));
     expect(envelope.bucketSeconds).toBe(BUCKET);
     expect(envelope.levels.length).toBeGreaterThan(0);

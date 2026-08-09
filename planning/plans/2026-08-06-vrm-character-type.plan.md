@@ -207,7 +207,7 @@ registry table, the M10 checkbox, and the `CONTEXT.md` edits below.
 | `src/ui/components/CharactersView.tsx` | changed | third create button, suite routing |
 | `src/ui/components/CharacterCard.tsx` | changed | version note, EDIT ungated |
 | `src/package.json` | changed | three, three-vrm, three-vrm-animation |
-| `planning/decisions/2026-08-06-D28-vrm-is-the-3d-character-type.md` | new | commits the 3D candidate |
+| `planning/decisions/2026-08-06-D29-vrm-is-the-3d-character-type.md` | new | commits the 3D candidate |
 | `planning/plans/2026-08-06-vrm-character-type.plan.md` | new | this plan, in repo form |
 | `planning/specs/character-renderers_spec.md` | changed | registry row |
 | `planning/milestones.md` | changed | M10 checkbox |

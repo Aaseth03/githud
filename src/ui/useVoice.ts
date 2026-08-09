@@ -442,7 +442,7 @@ export function useVoice() {
       try {
         const engine =
           settings.current.voices.find((v) => v.id === chosen)?.engine ?? null;
-        // The character's mouth tuning travels with the item (D30), not with
+        // The character's mouth tuning travels with the item (D31), not with
         // the hook: the queue can hold replies from two characters at once, and
         // the envelope this produces is what the mouth is driven from.
         const tuning = item.tuning ?? DEFAULT_TUNING;

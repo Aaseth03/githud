@@ -1,8 +1,8 @@
-# D30 — The lip-sync numbers are tunable per character, for now
+# D31 — The lip-sync numbers are tunable per character, for now
 
 **Date:** 2026-08-07 · **Status:** Accepted, **time-boxed** · **Supersedes:**
-nothing · **Related:** [D29](2026-08-06-D29-phoneme-lip-sync-from-formants.md),
-[D28](2026-08-06-D28-vrm-is-the-3d-character-type.md)
+nothing · **Related:** [D30](2026-08-06-D30-phoneme-lip-sync-from-formants.md),
+[D29](2026-08-06-D29-vrm-is-the-3d-character-type.md)
 
 ## What was decided
 
@@ -10,7 +10,7 @@ The twelve constants that decide how a `vrm` character's mouth moves become
 per-character values in `character.toml`, edited through an **ADVANCED** tab in
 the VRM suite with a live preview, and reset individually.
 
-This is a **workbench, not a feature**. It exists because the values in D29 were
+This is a **workbench, not a feature**. It exists because the values in D30 were
 chosen against one 2.5-second fixture of one Voicebox voice, and there is no way
 to know whether they are right for other voices and other rigs without moving
 them and watching. When good defaults are known, this panel is removed and the
@@ -57,7 +57,7 @@ which reads as the mouth being janky.
 
 | Option | Verdict |
 |---|---|
-| Leave the constants alone | Rejected — they were fitted to one voice and one fixture, and D29 says so in as many words. No way to improve them without a way to see them. |
+| Leave the constants alone | Rejected — they were fitted to one voice and one fixture, and D30 says so in as many words. No way to improve them without a way to see them. |
 | A global settings page | Rejected — the vowel gains are rig properties. Tuning them once app-wide is wrong for the second character imported. |
 | Per-character, nullable, in the profile | **Chosen.** |
 | Rebuild the whole envelope on every slider change | Rejected — a re-analysis per dragged frame is a stutter the user reads as the mouth's own fault. Only the analysis half needs it. |

@@ -77,7 +77,7 @@ export interface Spoken {
    */
   voice?: string | null;
   /**
-   * The character's mouth tuning, already resolved (BETA, D30).
+   * The character's mouth tuning, already resolved (BETA, D31).
    *
    * Carried on the item for exactly the reason `voice` is: the queue can hold
    * replies from two projects at once, and by the time the second is spoken the

@@ -1,8 +1,8 @@
-# D31 — Generated `.vrma` clips are an authoring tool, not a second motion model
+# D32 — Generated `.vrma` clips are an authoring tool, not a second motion model
 
 **Date:** 2026-08-07 · **Status:** Accepted · **Supersedes:** nothing ·
-**Related:** [D28](2026-08-06-D28-vrm-is-the-3d-character-type.md),
-[D30](2026-08-07-D30-lip-sync-numbers-are-tunable-per-character.md)
+**Related:** [D29](2026-08-06-D29-vrm-is-the-3d-character-type.md),
+[D31](2026-08-07-D31-lip-sync-numbers-are-tunable-per-character.md)
 
 ## What was decided
 
@@ -17,9 +17,9 @@ out and opened in Blender or VRoid Hub. **Nothing downstream can tell a
 generated clip from a downloaded one**, and that is the property this record
 exists to protect.
 
-## The tension with D28, stated rather than discovered later
+## The tension with D29, stated rather than discovered later
 
-D28 says VRM motion is *authored clips, not springs*, and that reusing
+D29 says VRM motion is *authored clips, not springs*, and that reusing
 `motion.ts` here would produce "a 3D model moving like a 2D one". A breathing
 loop built from sines is, on its face, springs wearing a coat.
 
@@ -31,9 +31,9 @@ The distinction that survives, and the line to hold:
 `motion.ts` would have meant a `vrm` character integrating spring state inside
 the animation frame, per frame, forever. What happens instead is that arithmetic
 runs *once*, at author time, and its output is keyframes on disk. The render
-loop plays keyframes, exactly as D28 requires, and has no idea where they came
+loop plays keyframes, exactly as D29 requires, and has no idea where they came
 from. If this file did not exist, someone would eventually read `vrma.ts`, see
-sines, and conclude that D28 had quietly lapsed.
+sines, and conclude that D29 had quietly lapsed.
 
 The one place the arithmetic does run live is the suite's preview, which builds
 the same tracks in memory so a slider can be judged. That is authoring UI, and
@@ -92,11 +92,11 @@ clip for every character already naming it.
 | Option | Verdict |
 |---|---|
 | Blender only | Rejected as the *only* path — correct for gestures, and still recommended for them, but it makes the ambient loops (the ones every character needs on day one) the hardest thing to produce. |
-| Procedural clips built at runtime, never written to disk | Rejected. Cheapest to build and the worst fit: it needs a parallel "built-in clip" concept in `vrm.ts`, the library, the suite and the profile, and it puts generated motion inside the render loop, which is the thing D28 forbids. |
+| Procedural clips built at runtime, never written to disk | Rejected. Cheapest to build and the worst fit: it needs a parallel "built-in clip" concept in `vrm.ts`, the library, the suite and the profile, and it puts generated motion inside the render loop, which is the thing D29 forbids. |
 | Generate `.vrma` files from a tunable spec | **Chosen.** Zero new concepts downstream; the output is portable. |
 | A CLI script, no UI | Rejected. Editing a file and re-running to judge a breath cycle is a feedback loop bad enough that the numbers would not actually get tuned — which is the entire point of exposing them. |
 | Sidecar `.json` of parameters | Rejected — see above. `asset.extras` carries them inside the file. |
-| Reuse `motion.ts`'s springs | Rejected by D28, and still rejected. Springs would have to run per frame. |
+| Reuse `motion.ts`'s springs | Rejected by D29, and still rejected. Springs would have to run per frame. |
 
 ## Consequences
 

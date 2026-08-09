@@ -31,7 +31,7 @@ characters/
 ├─ frames/
 │  └─ CONTEXT.md               sprite.kind = "frames" — baked full-frame mouth/blink/gaze cycles
 ├─ vrm/
-│  └─ CONTEXT.md               sprite.kind = "vrm" — a VRoid model, posed by shared .vrma clips (D28)
+│  └─ CONTEXT.md               sprite.kind = "vrm" — a VRoid model, posed by shared .vrma clips (D29)
 └─ lessons/                    cross-cutting only — read one, not three
    ├─ theming.md               what a profile may paint vs. what stays the app's own
    └─ governance.md            what ships, what's provenanced, tooling-only Python, no AI in render

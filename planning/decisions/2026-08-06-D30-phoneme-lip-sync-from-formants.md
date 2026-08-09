@@ -1,11 +1,11 @@
-# D29 — Lip-sync reads vowels out of the audio, in our own code
+# D30 — Lip-sync reads vowels out of the audio, in our own code
 
 **Date:** 2026-08-06 · **Status:** Accepted · **Supersedes:** nothing ·
-**Amends:** [D28](2026-08-06-D28-vrm-is-the-3d-character-type.md)
+**Amends:** [D29](2026-08-06-D29-vrm-is-the-3d-character-type.md)
 
 ## Context
 
-D28 gave the `vrm` type a mouth driven by the amplitude envelope every other
+D29 gave the `vrm` type a mouth driven by the amplitude envelope every other
 character kind uses: one loudness number per 25 ms bucket. That is the right
 input for a mouth drawn as one ellipse, and it is the wrong input for a rig with
 five vowel morphs.

@@ -35,7 +35,7 @@ interface Props {
    * no preference, which is not the same as silence.
    */
   roomVoice?: string | null;
-  /** The character's resolved mouth tuning (BETA, D30). */
+  /** The character's resolved mouth tuning (BETA, D31). */
   roomTuning?: ResolvedTuning | null;
   /**
    * Push-to-talk is held.

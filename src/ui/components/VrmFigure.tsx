@@ -109,7 +109,7 @@ function clipFromTracks(clip: GeneratedClip, vrm: VRM): THREE.AnimationClip {
 }
 
 /**
- * A VRoid model, moving to authored clips and speaking with the app (D28).
+ * A VRoid model, moving to authored clips and speaking with the app (D29).
  *
  * **The only file in the UI that touches `three`**, the same way `Terminal.tsx`
  * is the only one that touches xterm. Every rule it applies lives in

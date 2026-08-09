@@ -1,7 +1,7 @@
 # Characters — `vrm`
 
 `sprite.kind = "vrm"` — a VRoid `.vrm` model, posed by `.vrma` clips
-([D28](../../planning/decisions/2026-08-06-D28-vrm-is-the-3d-character-type.md)).
+([D29](../../planning/decisions/2026-08-06-D29-vrm-is-the-3d-character-type.md)).
 The only 3D type, and the only one that does not use `motion.ts`.
 
 **Nothing lives in this folder.** Like every other type since
@@ -31,7 +31,7 @@ frame = { height = 1.35, distance = 0.9 } # metres, from the model's feet
 idle      = "idle-breathing"
 speaking  = "talk-gesture"
 
-[sprite.tuning]                           # BETA (D30) — absent on an untuned character
+[sprite.tuning]                           # BETA (D31) — absent on an untuned character
 floor     = 0.45                          # only the fields actually moved appear
 gain_ih   = 1.1
 ```
@@ -46,10 +46,10 @@ gain_ih   = 1.1
 - **The mouth needs which vowel, not only how loud.** This is the one type with
   per-vowel morphs, and driving all five from an amplitude number makes them
   cancel — `ou` purses exactly what `aa` opens, so the face reads as chewing.
-  The shape comes from the viseme track (`../../src/ui/viseme.ts`, D29) and the
+  The shape comes from the viseme track (`../../src/ui/viseme.ts`, D30) and the
   strength from the envelope; never more than two vowels at weight in one
   frame.
-- **`[sprite.tuning]` is a workbench and is scheduled for deletion** (D30). It
+- **`[sprite.tuning]` is a workbench and is scheduled for deletion** (D31). It
   is sparse on purpose — a field nobody moved is absent, not written out at
   today's default — so improving a default in `../../src/ui/tuning.ts` still
   reaches a character that never disagreed with it. Do not add a serde default
@@ -73,10 +73,10 @@ gain_ih   = 1.1
   GLB header and requires `VRMC_vrm` or `VRM` to actually be present before
   anything is stored. The same walk yields `spec`.
 - **A generated clip is an ordinary clip.** The GENERATE panel is an *authoring
-  tool whose product is a file* (D31): the arithmetic runs once, at author time,
+  tool whose product is a file* (D32): the arithmetic runs once, at author time,
   and what lands in the library is keyframes on disk that play through the same
   mixer as a downloaded one. Nothing procedural reaches the render loop, which
-  is the line that keeps D28 true. Oscillators and constant offsets belong in
+  is the line that keeps D29 true. Oscillators and constant offsets belong in
   the generator; authored keyframes are Blender's job.
 - **A VRM 1.0 avatar faces `+Z`, which puts `+X` on its left.** Load-bearing for
   anything authoring a rotation: get the facing backwards and only the `Y`
@@ -117,7 +117,7 @@ rotated.
 
 | Want | Use |
 |---|---|
-| An ambient loop — breathing, sway, a thinking tilt | **Characters → EDIT → GENERATE.** Sliders, live preview on your own model, saves a real `.vrma` into the shared library ([D31](../../planning/decisions/2026-08-07-D31-generated-vrma-clips-are-an-authoring-tool.md)). |
+| An ambient loop — breathing, sway, a thinking tilt | **Characters → EDIT → GENERATE.** Sliders, live preview on your own model, saves a real `.vrma` into the shared library ([D32](../../planning/decisions/2026-08-07-D32-generated-vrma-clips-are-an-authoring-tool.md)). |
 | A gesture — a wave, a bow, a peace sign | Import one. VRoid publishes [seven free `.vrma`](https://vroid.com/en/news/6HozzBIV0KkcKf9dc1fZGW); BOOTH has a 3D Motion category. |
 | Something specific that does not exist | Blender, with the [VRM add-on](https://vrm-addon-for-blender.info/en-us/ui/export_scene.vrma/) — the only free tool that exports `.vrma` directly. Animate the humanoid bones, then Export → VRM Animation. |
 
@@ -132,7 +132,7 @@ on every character.
 | Validation, spec detection, model storage | `../../src/src-tauri/src/character/vrm.rs` |
 | The shared clip library | `../../src/src-tauri/src/character/vrma.rs` |
 | The rules — clip choice, mouth weights, framing | `../../src/ui/vrm.ts` |
-| The clip generator's numbers and arithmetic (D31) | `../../src/ui/vrma.ts` |
+| The clip generator's numbers and arithmetic (D32) | `../../src/ui/vrma.ts` |
 | The `.vrma` writer — container, reference skeleton, `REST_HIPS_Y` | `../../src/ui/glb.ts` |
 | Lip-sync accuracy — which vowel is heard, or another producer of the track | `../../src/ui/viseme.ts` |
 | The tunable numbers, their defaults and their ranges (BETA) | `../../src/ui/tuning.ts` |

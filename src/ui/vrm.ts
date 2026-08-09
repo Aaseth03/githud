@@ -2,7 +2,7 @@
  * The `vrm` character type's own rules — which clip plays, what the mouth
  * does, and where the camera stands.
  *
- * **This type does not share `motion.ts`, on purpose (D28).** Every other kind
+ * **This type does not share `motion.ts`, on purpose (D29).** Every other kind
  * is the same springs applied to different art; a VRM is authored `.vrma`
  * clips retargeted onto a humanoid rig, which is a different experience rather
  * than the same character in three dimensions. Reusing the springs here would
@@ -16,7 +16,7 @@
  * The viseme track this type's mouth actually moves to (`viseme.ts`) is not a
  * third input — it rides *on* the envelope, computed from the same samples in
  * the same pass, and every other kind simply ignores it. That is what kept
- * phoneme lip-sync from becoming a second contract (D29).
+ * phoneme lip-sync from becoming a second contract (D30).
  *
  * Pure — no `three`, no React. `VrmFigure.tsx` is the only file that touches
  * the renderer, the same way `Terminal.tsx` is the only one that touches

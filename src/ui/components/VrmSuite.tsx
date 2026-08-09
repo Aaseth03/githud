@@ -44,7 +44,7 @@ const SAMPLE_LINE = "Ready when you are.";
 
 
 /**
- * The `vrm` type's own suite (D28) — import a model, frame it, and say which
+ * The `vrm` type's own suite (D29) — import a model, frame it, and say which
  * shared animation plays in which state.
  *
  * **Two different write disciplines, on purpose.** Importing a model and
@@ -896,7 +896,7 @@ function toBase64(bytes: Uint8Array): string {
 }
 
 /**
- * The clip generator (D28) — ambient motion as numbers, baked into a real file.
+ * The clip generator (D29) — ambient motion as numbers, baked into a real file.
  *
  * **What it is for, and what it is not.** Looping ambient motion is painful to
  * hand-key and trivial to state as arithmetic; gestures are the reverse. This

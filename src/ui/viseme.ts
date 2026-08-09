@@ -37,7 +37,7 @@
  * and a process spawn that has to *finish before the first syllable plays*,
  * which puts a stall in front of every spoken reply in a conversational HUD.
  * The seam for it exists deliberately: a `VisemeTrack` is just codes over time,
- * and Rhubarb would be a different producer of the same array. See D29.
+ * and Rhubarb would be a different producer of the same array. See D30.
  *
  * Pure — no DOM, no `AudioContext`, no `three`. The whole point is that a mouth
  * shape can be proved right in a test rather than by watching it.

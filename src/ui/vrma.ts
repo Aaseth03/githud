@@ -6,7 +6,7 @@
  * `.vrma` file in the shared library. Nothing here runs in the render loop:
  * `VrmFigure` plays a *baked* clip through the same `AnimationMixer` and the
  * same crossfades as one downloaded from BOOTH or exported from Blender. That
- * is what keeps D28 intact — VRM motion is still authored clips, and this is
+ * is what keeps D29 intact — VRM motion is still authored clips, and this is
  * one more way to author one.
  *
  * **Why generate at all, when Blender exists.** The five states this app needs

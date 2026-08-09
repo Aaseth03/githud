@@ -6,7 +6,7 @@
  * point of exposing them is to find better ones against real voices and real
  * rigs — not to make every character carry a dozen dials forever. When good
  * values are known they become the defaults here and this panel goes away; the
- * decision to keep or drop it is D30's to record.
+ * decision to keep or drop it is D31's to record.
  *
  * **Every field is nullable, and null means "the default".** That is what makes
  * the numbers live in exactly one place — this file — rather than being

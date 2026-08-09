@@ -953,7 +953,7 @@ fn character_library_parts(id: String, dir: String) -> Result<Vec<character::Par
     character::load_layers(&character::library::entry_dir(&characters_library_dir()?, &id), &dir)
 }
 
-// ── The vrm type (D28) ──────────────────────────────────────────────────────
+// ── The vrm type (D29) ──────────────────────────────────────────────────────
 //
 // A `.vrm` and a `.vrma` arrive as a *path* from the file dialog, never as
 // bytes: a VRoid model is routinely tens of megabytes, and base64-ing that

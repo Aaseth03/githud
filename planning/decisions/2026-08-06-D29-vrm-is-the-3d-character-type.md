@@ -1,4 +1,4 @@
-# D28 — `vrm` is the 3D character type, and it brings its own motion model
+# D29 — `vrm` is the 3D character type, and it brings its own motion model
 
 **Date:** 2026-08-06 · **Status:** Accepted · **Supersedes:** nothing.
 Commits the "3D" candidate M10 left open.

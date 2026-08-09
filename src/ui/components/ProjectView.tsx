@@ -83,7 +83,7 @@ export function ProjectView({
   // Two projects with two characters is two voices — which is half of what M7
   // validates on.
   const roomVoice = voiceFor(character.profile, voice.voices, voice.voice);
-  // A reply is analysed with the tuning of the character that says it (D30) —
+  // A reply is analysed with the tuning of the character that says it (D31) —
   // carried alongside the voice for the same reason the voice is carried at
   // all: the queue can hold replies from two projects at once.
   const roomTuning = useMemo(
