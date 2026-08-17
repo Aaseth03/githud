@@ -1,3 +1,44 @@
+> **Work in progress.** This project is under active, largely incomplete
+> development. Interfaces, behavior, and structure are expected to change
+> without notice. See [Status](#status) below for where it currently stands.
+
+# AI Disclosure
+
+This project is developed with substantial involvement from AI systems
+(Claude Code and related large language model agents). AI has been used to
+draft and modify source code, author planning and architecture documents
+(see [`planning/decisions/`](planning/decisions/) and
+[`planning/plans/`](planning/plans/)), and, consistent with this project's
+own operating principles, to act with reduced or no per-action human
+approval within defined guardrails. AI-generated output is subject to human
+review before being
+merged, but the degree of review varies by change, and no representation is
+made that any specific line of code, decision, or document in this
+repository was independently verified by a human prior to inclusion.
+
+## No Warranty
+
+THIS SOFTWARE IS PROVIDED "AS IS," WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE, TITLE, AND NON-INFRINGEMENT. THE AUTHOR
+MAKES NO REPRESENTATION OR WARRANTY THAT THIS SOFTWARE IS SECURE, FREE OF
+DEFECTS OR VULNERABILITIES, RELIABLE, OR FIT FOR USE IN ANY PRODUCTION,
+COMMERCIAL, OR SECURITY-SENSITIVE ENVIRONMENT. THIS SOFTWARE EXECUTES
+AI-GENERATED CODE AND GRANTS AGENTS FILESYSTEM, PROCESS, AND SHELL ACCESS ON
+THE HOST MACHINE. NO AUDIT, PENETRATION TEST, OR FORMAL SECURITY REVIEW HAS
+BEEN PERFORMED ON THIS SOFTWARE, AND NONE IS REPRESENTED TO HAVE OCCURRED.
+
+## Limitation of Liability
+
+USE OF THIS SOFTWARE IS ENTIRELY AT YOUR OWN RISK. TO THE MAXIMUM EXTENT
+PERMITTED BY APPLICABLE LAW, THE AUTHOR SHALL NOT BE LIABLE FOR ANY CLAIM,
+DAMAGES, DATA LOSS, SYSTEM COMPROMISE, OR OTHER LIABILITY, WHETHER ARISING
+IN CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH
+THIS SOFTWARE OR THE USE OR OTHER DEALINGS IN THIS SOFTWARE, EVEN IF ADVISED
+OF THE POSSIBILITY OF SUCH DAMAGES. BY DOWNLOADING, CLONING, RUNNING, OR
+OTHERWISE USING THIS SOFTWARE, YOU ACKNOWLEDGE AND ACCEPT THESE TERMS AND
+AGREE THAT YOU DO SO ON YOUR OWN TERMS AND AT YOUR OWN RISK.
+
 # GIT HUD
 
 A private desktop app that **replaces the terminal workflow** for AI-assisted
@@ -29,7 +70,7 @@ binary; the target project's own ICM context files do all the instructing.
 ## Stack
 
 Tauri (Rust core) · React + Vite + TypeScript + Tailwind · xterm.js · Voicebox
-for TTS and Whisper STT (v2). No Python.
+for TTS and Whisper STT (v2).
 
 ## Status
 
@@ -49,4 +90,11 @@ Read [`AGENTS.md`](AGENTS.md), then [`CONTEXT.md`](CONTEXT.md), then the
 
 ## License
 
-Private. Not for distribution.
+All rights reserved. This repository is public for viewing purposes only
+(e.g., portfolio review by prospective employers and collaborators). Public
+visibility does not constitute a license grant: no permission is given to
+use, copy, modify, merge, publish, distribute, sublicense, or sell copies of
+this software, in whole or in part, without the author's prior written
+consent. This restriction governs use, modification, and distribution of the
+code itself; it does not expand or limit whatever forking or viewing
+mechanics GitHub's own Terms of Service grant to users of the platform.
